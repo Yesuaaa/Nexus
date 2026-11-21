@@ -7,6 +7,8 @@ import { PageHeaderButton } from "@/components/layout/page-header"
 import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { SearchField } from "@/components/ui/search-field"
 import { DateInput } from "@/components/ui/date-input"
+import { Alert } from "@/components/ui/alert"
+import { ApiError } from "@/features/auth/api/auth-api"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import {
   canAccessPersonalAttendance,
@@ -78,9 +80,9 @@ export function LeaveRequestsPage({linkedId}:{linkedId?:string} = {}) {
     },
   )
   const data = list.error && !searchPending ? undefined : list.data
-  const current = data?.requests.find(
-    (request) => request.id === selection?.request.id,
-  )
+  const current = list.loading
+    ? undefined
+    : data?.requests.find((request) => request.id === selection?.request.id)
   const selectedRequest = current ?? selection?.request ?? (linkedOpen && linkedId && !list.error && !list.loading ? data?.requests[0]:undefined)
   const selectedAction = selection?.action
   const availableAction =
@@ -115,6 +117,25 @@ export function LeaveRequestsPage({linkedId}:{linkedId?:string} = {}) {
       return true
     } catch (failure) {
       setActionError(errorMessage(failure, "Couldn't update leave request."))
+      if (
+        failure instanceof ApiError &&
+        failure.status === 409 &&
+        failure.message === "Leave request changed; refresh and try again"
+      ) {
+        try {
+          const { request } = await leaveDetail(selectedRequest.id)
+          setSelection({ ...selection, request, action: null })
+          if (linkedId) {
+            list.setData((value) => value && { ...value, requests: [request] })
+          } else {
+            list.retry()
+          }
+        } catch {
+          setSelection(null)
+          setLinkedOpen(false)
+          list.retry()
+        }
+      }
       return false
     } finally {
       setPending(false)
@@ -225,6 +246,7 @@ export function LeaveRequestsPage({linkedId}:{linkedId?:string} = {}) {
         Department Heads verify requests before HR approval. Approved whole-day
         leave reduces attendance requirements for the covered working dates.
       </p>
+      {!selectedRequest && actionError && <Alert>{actionError}</Alert>}
       <LeaveRequestTable
         items={data?.requests ?? []}
         loading={list.loading || searchPending}
@@ -258,7 +280,11 @@ export function LeaveRequestsPage({linkedId}:{linkedId?:string} = {}) {
           action={availableAction}
           pending={pending}
           error={actionError}
-          onClose={() => {setSelection(null);setLinkedOpen(false)}}
+          onClose={() => {
+            setSelection(null)
+            setLinkedOpen(false)
+            setActionError("")
+          }}
           onSubmit={submitAction}
         />
       )}

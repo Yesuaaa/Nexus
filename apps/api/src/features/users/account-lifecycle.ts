@@ -15,9 +15,10 @@ import type { Prisma, Role, User } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { isForeignKeyViolation } from "../../lib/errors.js"
 import { HttpError } from "../../shared/http-error.js"
+import { notifyPendingLeaveAfterHeadChange } from "../leave/leave.repository.js"
 import { canChangeAccountStatus } from "./users.policy.js"
 
-import { lockRowsReturning } from "../../shared/db/locks.js"
+import { lockRows, lockRowsReturning } from "../../shared/db/locks.js"
 import { setAttendanceAuditContext } from "../workforce-compliance-logs/write-context.js"
 type Db = Prisma.TransactionClient
 
@@ -86,6 +87,14 @@ export async function setAccountActive(
   guard: Prisma.UserWhereInput,
   actorId:string,
 ) {
+  const headedDepartment =
+    guard.role === "STAFF" && guard.isActive !== isActive
+      ? await db.department.findUnique({
+          where: { headId: userId },
+          select: { id: true },
+        })
+      : null
+  await lockRows(db, "Department", headedDepartment?.id)
   const employees=!isActive ? await lockRowsReturning(db,"Employee",userId,"update","userId") : []
   const { count } = await db.user.updateMany({
     where: { ...guard, id: userId },
@@ -98,6 +107,8 @@ export async function setAccountActive(
     }
     await revokeSessions(db, userId)
   }
+  if (count && headedDepartment)
+    await notifyPendingLeaveAfterHeadChange(db, headedDepartment.id)
   return count > 0
 }
 

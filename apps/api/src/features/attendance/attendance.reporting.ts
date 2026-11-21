@@ -15,7 +15,7 @@ const employeeSelect = {
   employeeId: true,
   departmentId: true,
   department: { select: { name: true } },
-  user: { select: { fullName: true } },
+  user: { select: { id: true, fullName: true } },
 } satisfies Prisma.EmployeeSelect
 
 // Merge employee dates before counting, ordering or paging. A recorded workday

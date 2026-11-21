@@ -229,6 +229,8 @@ test(
         assert.equal(end.workday!.excessMinutes, 60)
         assert.equal(end.workday!.excessRequiresReview, true)
         assert.equal(end.workday!.isComplete, true)
+        const current = await state(staff, "/me/current")
+        assert.equal(current.continuation?.id, overnightDayId)
         at("2026-11-14T20:00:00+08:00")
         const next = await state(staff, "/me/clock-in", {}, 201)
         assert.equal(next.workday!.workDate, "2026-11-14")
@@ -686,6 +688,62 @@ test(
           (await request(admin, "/employees/missing/history")).status,
           404,
         )
+      },
+    )
+
+    await t.test(
+      "Records only offers reconciliation for another employee's suspended shift",
+      async () => {
+        const employeeId = admin.employee!.id
+        const session = await prisma.attendanceWorkSession.create({
+          data: {
+            employeeId,
+            startedAt: new Date("2026-11-21T09:00:00+08:00"),
+            suspendedAt: new Date("2026-11-21T11:00:00+08:00"),
+          },
+        })
+        at("2026-11-21T12:00:00+08:00")
+        const url = `/records?from=2026-11-21&to=2026-11-21&employeeId=${employeeId}`
+        async function canReconcile(reviewer: Actor) {
+          const result = await request(reviewer, url)
+          assert.equal(result.status, 200)
+          const { workdays } = (await result.json()) as {
+            workdays: { canReconcile: boolean; employee: object }[]
+          }
+          assert.ok(!("user" in workdays[0].employee))
+          return workdays[0].canReconcile
+        }
+        assert.equal(await canReconcile(admin), false)
+        assert.equal(await canReconcile(superadmin), true)
+
+        const route = `/employees/${employeeId}/sessions/${session.id}/reconcile`
+        const end = "2026-11-21T10:00:00+08:00"
+        const note = "Verified the clock-out with the employee"
+        assert.equal(
+          (await request(admin, route, { endedAt: end, note })).status,
+          403,
+        )
+        assert.equal(
+          (await request(superadmin, route, { endedAt: end, note: "   " }))
+            .status,
+          400,
+        )
+        assert.deepEqual(
+          await prisma.attendanceWorkSession.findUnique({
+            where: { id: session.id },
+          }),
+          session,
+        )
+        assert.equal(
+          (await request(superadmin, route, { endedAt: end, note })).status,
+          200,
+        )
+        assert.equal(await canReconcile(superadmin), false)
+        const audit = await prisma.attendanceAudit.findFirstOrThrow({
+          where: { entityId: session.id, action: "UPDATE" },
+        })
+        assert.equal(audit.actorId, superadmin.user.id)
+        assert.equal(audit.reason, note)
       },
     )
   },

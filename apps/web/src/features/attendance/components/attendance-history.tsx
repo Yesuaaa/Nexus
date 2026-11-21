@@ -29,6 +29,7 @@ import {
   attendanceStatusTones,
   duration,
   isOvernight,
+  isSuspendedSession,
 } from "../model/attendance"
 import { AttendanceTableEmpty } from "./attendance-shared"
 import { AttendanceHistoryDetailsPanel } from "./attendance-history-details-panel"
@@ -39,6 +40,7 @@ const historyGrid =
 export function AttendanceHistoryTable({
   days,
   onCorrect,
+  onReconcile,
   asOf,
   loading = false,
   error = "",
@@ -47,11 +49,15 @@ export function AttendanceHistoryTable({
   days: AttendanceWorkday[]
   asOf: number
   onCorrect?: (session: AttendanceSession, day: AttendanceWorkday) => void
+  onReconcile?: (session: AttendanceSession, day: AttendanceWorkday) => void
   loading?: boolean
   error?: string
   onRetry?: () => void
 }) {
   const [detailsDay, setDetailsDay] = useState<AttendanceWorkday | null>(null)
+  const currentDetails = detailsDay?.id
+    ? (days.find((day) => day.id === detailsDay.id) ?? detailsDay)
+    : detailsDay
 
   return (
     <>
@@ -124,7 +130,7 @@ export function AttendanceHistoryTable({
               const overnight = day.sessions.some((session) =>
                 isOvernight(
                   session.startedAt,
-                  session.endedAt,
+                  session.endedAt ?? session.suspendedAt ?? null,
                   day.timeZone,
                   asOf,
                 ),
@@ -159,7 +165,9 @@ export function AttendanceHistoryTable({
                     {lastSession?.endedAt
                       ? attendanceDate(lastSession.endedAt, day.timeZone)
                       : lastSession
-                        ? "Still clocked in"
+                        ? isSuspendedSession(lastSession)
+                          ? "Shift suspended"
+                          : "Still clocked in"
                         : hasLeave
                           ? "—"
                           : "No clock-out recorded"}
@@ -209,12 +217,13 @@ export function AttendanceHistoryTable({
           )}
         </ResponsiveDataTableBody>
       </ResponsiveDataTable>
-      {detailsDay && (
+      {currentDetails && (
         <AttendanceHistoryDetailsPanel
-          day={detailsDay}
+          day={currentDetails}
           asOf={asOf}
-          actionId={`attendance-history-actions-${detailsDay.id ?? `${detailsDay.employeeId}-${detailsDay.workDate}`}`}
+          actionId={`attendance-history-actions-${currentDetails.id ?? `${currentDetails.employeeId}-${currentDetails.workDate}`}`}
           onCorrect={onCorrect}
+          onReconcile={onReconcile}
           onClose={() => setDetailsDay(null)}
         />
       )}

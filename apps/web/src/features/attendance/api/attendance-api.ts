@@ -14,6 +14,7 @@ export type AttendanceSession = {
   breaks: AttendanceBreak[]
 }
 export type AttendanceWorkday = {
+  canReconcile?: boolean
   employee?: AttendanceEmployee & { department?: { name: string } | null }
   pendingCorrections: number
   id: string | null

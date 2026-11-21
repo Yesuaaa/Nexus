@@ -81,14 +81,35 @@ function serverTime(clock: Clock): Date {
 }
 
 type LatestSession = Awaited<ReturnType<typeof repository.latestSession>>
-function overnightContinuation(latest: LatestSession, now: Date) {
+async function overnightContinuation(
+  tx: Prisma.TransactionClient,
+  latest: LatestSession,
+  now: Date,
+) {
   if (!latest?.endedAt) return null
   const day = latest.workday
   const today = attendanceWorkDate(now, day.timeZone)
   const yesterday = new Date(today)
   yesterday.setUTCDate(yesterday.getUTCDate() - 1)
-  if (day.workDate.getTime() !== yesterday.getTime() || attendanceWorkDate(latest.endedAt, day.timeZone) !== today) return null
-  return { id: day.id, workDate: day.workDate.toISOString().slice(0, 10) }
+  if (
+    day.workDate.getTime() !== yesterday.getTime() ||
+    attendanceWorkDate(latest.endedAt, day.timeZone) !== today
+  )
+    return null
+  const workDate = day.workDate.toISOString().slice(0, 10)
+  // A handoff can attribute punches made wholly after midnight to yesterday.
+  // Preserve continuation after later split sessions if an earlier one crossed midnight.
+  const sessions = await tx.attendanceWorkSession.findMany({
+    where: { workdayId: day.id },
+    select: { startedAt: true, endedAt: true },
+  })
+  const crossedMidnight = sessions.some(
+    ({ startedAt, endedAt }) =>
+      endedAt &&
+      attendanceWorkDate(startedAt, day.timeZone) === workDate &&
+      attendanceWorkDate(endedAt, day.timeZone) === today,
+  )
+  return crossedMidnight ? { id: day.id, workDate } : null
 }
 
 async function clockInBlock(tx: Prisma.TransactionClient, employee: { id: string; status: string }, latest: LatestSession, now: Date, workDate: string | undefined) {
@@ -231,7 +252,8 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
           await setAttendanceAuditContext(tx, userId, `Employee ${action}`)
           if (action === "clock-in") {
             const latest = await repository.latestSession(tx, employee.id)
-            let selectedWorkDate: string | undefined
+            const policy = await policyAt(tx, employee.id, now)
+            let selectedWorkDate = policy?.workDate
             if (input.workdayId) {
               const selected = await repository.workday(
                 tx,
@@ -239,16 +261,19 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
                 input.workdayId,
               )
               if (!selected) fail(404, "Attendance workday not found")
-              const today = attendanceWorkDate(now, selected.timeZone)
               selectedWorkDate = selected.workDate.toISOString().slice(0, 10)
-              if (selectedWorkDate !== today && overnightContinuation(latest, now)?.id !== selected.id)
+              const isEffectiveWorkday =
+                selectedWorkDate === policy?.workDate &&
+                selected.assignmentId === policy?.assignment.id
+              if (
+                !isEffectiveWorkday &&
+                (await overnightContinuation(tx, latest, now))?.id !==
+                  selected.id
+              )
                 fail(
                   409,
                   "Choose today's workday or your latest overnight continuation",
                 )
-            } else {
-              const policy = await policyAt(tx, employee.id, now)
-              selectedWorkDate = policy?.workDate
             }
             const blocked = await clockInBlock(tx, employee, latest, now, selectedWorkDate)
             if (blocked) fail(blocked.status, blocked.reason)
@@ -326,7 +351,7 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
             return { ...await workdayResponse(tx, employee.id, latest.workdayId, now), clockInBlockedReason: "You already have an active attendance session", continuation: null }
           const policy = await policyAt(tx, employee.id, now)
           const blocked = await clockInBlock(tx, employee, latest, now, policy?.workDate)
-          const previous = overnightContinuation(latest, now)
+          const previous = await overnightContinuation(tx, latest, now)
           const continuation = previous && previous.workDate !== policy?.workDate && !await clockInBlock(tx, employee, latest, now, previous.workDate) ? previous : null
           const eligibility = { clockInBlockedReason: blocked?.reason ?? null, continuation }
           if (!policy)

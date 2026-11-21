@@ -12,8 +12,12 @@ import { parseQueryString } from "../../shared/query-helpers.js"
 import { hasPermission, Permission } from "../auth/auth.permissions.js"
 import { selfEmployee } from "../attendance/attendance.service.js"
 import {
-  leaveAdminVisibility,
+  isLeaveSubject,
   leaveDayOverlapsInterval,
+  leaveReviewHead,
+  leaveReviewHeadSelect,
+  notifySubmittedLeave,
+  submittedLeaveFallbackScope,
 } from "./leave.repository.js"
 import { workforceLogContext } from "../workforce-compliance-logs/write-context.js"
 import {
@@ -47,14 +51,7 @@ const requestInclude = {
           id: true,
           name: true,
           headId: true,
-          head: {
-            select: {
-              id: true,
-              role: true,
-              isActive: true,
-              accountDeletedAt: true,
-            },
-          },
+          head: { select: leaveReviewHeadSelect },
         },
       },
     },
@@ -167,24 +164,14 @@ async function calculateDays(
   return days
 }
 
-function eligibleHead(
-  request: Prisma.LeaveRequestGetPayload<{ include: typeof requestInclude }>,
-) {
-  const head = request.employee.department?.head
-  return head?.role === "STAFF" && head.isActive && !head.accountDeletedAt
-    ? head
-    : null
-}
-
 function capabilities(
   request: Prisma.LeaveRequestGetPayload<{ include: typeof requestInclude }>,
   user: Awaited<ReturnType<typeof actor>>,
 ) {
-  const own =
-    request.requestedById === user.id || request.employee.userId === user.id
-  const head = eligibleHead(request)
-  const fallback = !head || head.id === request.employee.userId
-  const departmentHead = user.role === "STAFF" && head?.id === user.id && !own
+  const own = isLeaveSubject(request, user.id)
+  const head = leaveReviewHead(request)
+  const fallback = !head
+  const departmentHead = user.role === "STAFF" && head?.id === user.id
   const organization = user.role === "ADMIN" || user.role === "SUPERADMIN"
   const reviewer = organization && !own
   const requiresReverification =
@@ -230,8 +217,11 @@ function serialize(
   return { ...request, employee, capabilities: capabilities(request, user) }
 }
 
-async function scopeWhere(tx: Tx, userId: string, scope: unknown) {
-  const user = await actor(tx, userId)
+async function scopeWhere(
+  tx: Tx,
+  user: Awaited<ReturnType<typeof actor>>,
+  scope: unknown,
+) {
   if (scope !== "mine" && scope !== "team")
     fail(400, "Choose a valid leave request scope")
   if (scope === "mine") {
@@ -258,65 +248,55 @@ async function scopeWhere(tx: Tx, userId: string, scope: unknown) {
     user,
     where:
       user.role === "ADMIN"
-        ? leaveAdminVisibility
+        ? ({
+            OR: [
+              { status: { not: "SUBMITTED" } },
+              await submittedLeaveFallbackScope(tx, user.id),
+            ],
+          } satisfies Prisma.LeaveRequestWhereInput)
         : ({} satisfies Prisma.LeaveRequestWhereInput),
   }
 }
 
-async function notify(tx: Tx, requestId: string, stage: LeaveStatusInput) {
-  const request = await tx.leaveRequest.findUniqueOrThrow({
-    where: { id: requestId },
-    include: {
-      employee: {
-        include: {
-          department: {
-            include: {
-              head: {
-                select: {
-                  id: true,
-                  role: true,
-                  isActive: true,
-                  accountDeletedAt: true,
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  })
-  const head = request.employee.department?.head
-  const headEligible =
-    head?.role === "STAFF" &&
-    head.isActive &&
-    !head.accountDeletedAt &&
-    head.id !== request.requestedById
+async function requestReadWhere(
+  tx: Tx,
+  user: Awaited<ReturnType<typeof actor>>,
+  requestId: string,
+): Promise<Prisma.LeaveRequestWhereInput> {
+  const { where } = await scopeWhere(
+    tx,
+    user,
+    user.role === "STAFF" && !user.headOf ? "mine" : "team",
+  )
+  if (user.role === "SUPERADMIN") return { id: requestId }
+  return {
+    id: requestId,
+    OR: [where, { requestedById: user.id }],
+  }
+}
+
+async function notify(
+  tx: Tx,
+  request: { id: string; requestedById: string; version: number },
+  stage: Exclude<LeaveStatusInput, "SUBMITTED">,
+) {
   const recipients =
-    stage === "SUBMITTED"
+    stage === "VERIFIED"
       ? await tx.user.findMany({
           where: {
             ...activeAccount,
             OR: [
-              ...(headEligible
-                ? [{ id: head.id }]
-                : [{ role: "ADMIN" as const }]),
-              { role: "SUPERADMIN" },
+              { id: request.requestedById },
+              { role: { in: ["ADMIN", "SUPERADMIN"] } },
             ],
           },
           select: { id: true },
         })
-      : stage === "VERIFIED"
-        ? await tx.user.findMany({
-            where: { ...activeAccount, OR:[{id:request.requestedById},{role: { in: ["ADMIN", "SUPERADMIN"] }}] },
-            select: { id: true },
-          })
-        : [{ id: request.requestedById }]
+      : [{ id: request.requestedById }]
   const message =
-    stage === "SUBMITTED"
-      ? "A leave request is awaiting review."
-      : stage === "VERIFIED"
-        ? "A leave request was verified and awaits HR approval."
-        : `Your leave request was ${stage.toLowerCase()}.`
+    stage === "VERIFIED"
+      ? "A leave request was verified and awaits HR approval."
+      : `Your leave request was ${stage.toLowerCase()}.`
   await tx.workflowNotification.createMany({
     data: recipients.map(({ id }) => ({
       userId: id,
@@ -332,9 +312,25 @@ async function notify(tx: Tx, requestId: string, stage: LeaveStatusInput) {
 async function assertApprovalConflicts(
   tx: Tx,
   request: Prisma.LeaveRequestGetPayload<{ include: typeof requestInclude }>,
+  asOf: Date,
 ) {
   if (request.employee.status === "INACTIVE")
     fail(409, "Leave approval is blocked because the employee is inactive.")
+
+  const requester = await tx.user.findUnique({
+    where: {
+      id: request.requestedById,
+      ...activeAccount,
+      role: { in: ["STAFF", "ADMIN"] },
+      employee: { id: request.employeeId },
+    },
+    select: { id: true },
+  })
+  if (!requester)
+    fail(
+      409,
+      "Leave approval requires an active linked Staff or Admin account for the requester.",
+    )
 
   const recalculated = await calculateDays(
     tx,
@@ -369,17 +365,19 @@ async function assertApprovalConflicts(
     select: {
       startedAt: true,
       endedAt: true,
+      suspendedAt: true,
       workday: { select: { workDate: true } },
     },
   })
-  if (sessions.some((session) => !session.endedAt))
-    fail(409, "Close active attendance sessions before approving leave")
   if (
-    sessions.some(
-      ({ startedAt, endedAt, workday }) =>
+    sessions.some(({ startedAt, endedAt, suspendedAt, workday }) => {
+      const end =
+        endedAt ?? (suspendedAt && suspendedAt < asOf ? suspendedAt : asOf)
+      return (
         coveredWorkDates.has(workday.workDate.getTime()) ||
-        (endedAt !== null && overlapsCoveredDay(startedAt, endedAt)),
-    )
+        (startedAt < end && overlapsCoveredDay(startedAt, end))
+      )
+    })
   )
     fail(409, "Resolve recorded attendance before approving this leave request")
 
@@ -435,6 +433,11 @@ export function createLeaveService(clock: Clock = () => new Date()) {
       const range = leaveRange(input.startDate, input.endDate)
       return getPrisma()!.$transaction(
         async (tx) => {
+          const placement = await tx.employee.findUnique({
+            where: { userId },
+            select: { departmentId: true },
+          })
+          await lockRows(tx, "Department", placement?.departmentId, "share")
           const employee = await selfEmployee(tx, userId, true)
           if (employee.status === "INACTIVE")
             fail(403, "Inactive employees cannot submit leave requests")
@@ -478,16 +481,19 @@ export function createLeaveService(clock: Clock = () => new Date()) {
           )
           const identity = await tx.employee.findUniqueOrThrow({
             where: { id: employee.id },
-            include: { department: { include: { head: true } } },
+            include: {
+              department: {
+                include: { head: { select: leaveReviewHeadSelect } },
+              },
+            },
           })
-          const head = identity.department?.head
-          const routeDepartmentId =
-            head?.role === "STAFF" &&
-            head.isActive &&
-            !head.accountDeletedAt &&
-            head.id !== userId
-              ? identity.departmentId
-              : null
+          if (identity.departmentId !== (placement?.departmentId ?? null))
+            fail(409, "Employee placement changed; refresh and try again")
+          const head = leaveReviewHead({
+            employee: identity,
+            requestedById: userId,
+          })
+          const routeDepartmentId = head ? identity.departmentId : null
           const created = await tx.leaveRequest.create({
             data: {
               requestKey,
@@ -512,7 +518,7 @@ export function createLeaveService(clock: Clock = () => new Date()) {
             },
             include: requestInclude,
           })
-          await notify(tx, created.id, "SUBMITTED")
+          await notifySubmittedLeave(tx, [created], true)
           return { request: serialize(created, currentUser) }
         },
         { isolationLevel: "ReadCommitted" },
@@ -542,7 +548,11 @@ export function createLeaveService(clock: Clock = () => new Date()) {
         fail(400, "Invalid leave request filters")
       return getPrisma()!.$transaction(
         async (tx) => {
-          const scoped = await scopeWhere(tx, userId, input.scope)
+          const scoped = await scopeWhere(
+            tx,
+            await actor(tx, userId),
+            input.scope,
+          )
           const where: Prisma.LeaveRequestWhereInput = {
             AND: [scoped.where],
             ...(range
@@ -584,30 +594,29 @@ export function createLeaveService(clock: Clock = () => new Date()) {
     },
 
     async detail(userId: string, requestId: string) {
-      return getPrisma()!.$transaction(async (tx) => {
-        const user = await actor(tx, userId)
-        const scope = await scopeWhere(
-          tx,
-          userId,
-          user.role === "STAFF" && !user.headOf ? "mine" : "team",
-        )
-        const request = await tx.leaveRequest.findFirst({
-          where: {
-            id: requestId,
-            OR: [scope.where, { requestedById: userId }],
-          },
-          include: requestInclude,
-        })
-        if (!request) fail(404, "Leave request not found")
-        return { request: serialize(request, user) }
-      })
+      return getPrisma()!.$transaction(
+        async (tx) => {
+          const user = await actor(tx, userId)
+          const request = await tx.leaveRequest.findFirst({
+            where: await requestReadWhere(tx, user, requestId),
+            include: requestInclude,
+          })
+          if (!request) fail(404, "Leave request not found")
+          return { request: serialize(request, user) }
+        },
+        { isolationLevel: "RepeatableRead" },
+      )
     },
 
     async overview(userId: string, query: Record<string, unknown>) {
       const input = leaveObject(query, ["scope"])
       return getPrisma()!.$transaction(
         async (tx) => {
-          const scoped = await scopeWhere(tx, userId, input.scope)
+          const scoped = await scopeWhere(
+            tx,
+            await actor(tx, userId),
+            input.scope,
+          )
           const groups = await tx.leaveRequest.groupBy({
             by: ["status", "type"],
             where: scoped.where,
@@ -640,6 +649,16 @@ export function createLeaveService(clock: Clock = () => new Date()) {
             ? null
             : leaveText(input.note, "cancellation note")
           : leaveText(input.note, "decision note")
+      const nextStatus =
+        action === "VERIFY"
+          ? "VERIFIED"
+          : action === "APPROVE"
+            ? "APPROVED"
+            : action === "REJECT"
+              ? "REJECTED"
+              : action === "CANCEL"
+                ? "CANCELLED"
+                : "REVERSED"
       return getPrisma()!.$transaction(
         async (tx) => {
           const snapshot = await tx.leaveRequest.findUnique({
@@ -654,7 +673,12 @@ export function createLeaveService(clock: Clock = () => new Date()) {
             "share",
           )
           await lockRows(tx, "Employee", snapshot.employeeId)
-          await lockRows(tx, "User", userId, "share")
+          await lockRows(
+            tx,
+            "User",
+            action === "APPROVE" ? [userId, snapshot.requestedById] : userId,
+            "share",
+          )
           await lockRows(tx, "LeaveRequest", requestId)
           const replay = await tx.leaveDecision.findUnique({
             where: {
@@ -667,22 +691,22 @@ export function createLeaveService(clock: Clock = () => new Date()) {
           })
           const user = await actor(tx, userId)
           if (replay) {
-            const replayAction =
-              action === "VERIFY"
-                ? "VERIFIED"
-                : action === "APPROVE"
-                  ? "APPROVED"
-                  : action === "REJECT"
-                    ? "REJECTED"
-                    : action === "CANCEL"
-                      ? "CANCELLED"
-                      : "REVERSED"
-            if (replay.action !== replayAction)
-              fail(409, "Action ID has already been used")
-            const current = await tx.leaveRequest.findUniqueOrThrow({
-              where: { id: requestId },
+            const current = await tx.leaveRequest.findFirst({
+              where: await requestReadWhere(tx, user, requestId),
               include: requestInclude,
             })
+            if (!current) fail(404, "Leave request not found")
+            if (
+              current.employee.departmentId !== snapshot.employee.departmentId
+            )
+              fail(409, "Employee placement changed; refresh and try again")
+            // The receipt stores the version after the decision increment.
+            if (
+              replay.action !== nextStatus ||
+              expectedVersion !== replay.version - 1 ||
+              replay.note !== note
+            )
+              fail(409, "Action ID has already been used")
             return { request: serialize(current, user) }
           }
           const current = await tx.leaveRequest.findUniqueOrThrow({
@@ -710,17 +734,8 @@ export function createLeaveService(clock: Clock = () => new Date()) {
           if (!allowed) fail(403, "You cannot perform this leave action")
           if (current.employee.departmentId !== snapshot.employee.departmentId)
             fail(409, "Employee placement changed; refresh and try again")
-          if (action === "APPROVE") await assertApprovalConflicts(tx, current)
-          const nextStatus =
-            action === "VERIFY"
-              ? "VERIFIED"
-              : action === "APPROVE"
-                ? "APPROVED"
-                : action === "REJECT"
-                  ? "REJECTED"
-                  : action === "CANCEL"
-                    ? "CANCELLED"
-                    : "REVERSED"
+          if (action === "APPROVE")
+            await assertApprovalConflicts(tx, current, clock())
           const nextVersion = current.version + 1
           await tx.leaveDecision.create({
             data: {
@@ -750,7 +765,7 @@ export function createLeaveService(clock: Clock = () => new Date()) {
             },
             include: requestInclude,
           })
-          await notify(tx, requestId, nextStatus)
+          await notify(tx, updated, nextStatus)
           return { request: serialize(updated, user) }
         },
         { isolationLevel: "ReadCommitted" },

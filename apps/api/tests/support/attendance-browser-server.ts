@@ -4,6 +4,7 @@ import { createServer } from "node:http"
 import { randomUUID } from "node:crypto"
 import { startPgliteApp } from "./pglite-app.js"
 import { issueSession } from "../../src/features/auth/auth.service.js"
+import { hashPassword } from "../../src/features/auth/auth.password.js"
 import type { Role } from "../../src/generated/prisma/client.js"
 
 test("attendance browser API fixture", { timeout: 1800000 }, async (t) => {
@@ -38,12 +39,16 @@ test("attendance browser API fixture", { timeout: 1800000 }, async (t) => {
     ["admin", "ADMIN"],
     ["client", "USER"],
     ["superadmin", "SUPERADMIN"],
+    ["recovery", "STAFF"],
   ] as const) {
     const user = await prisma.user.create({
       data: {
         email: `${name}@attendance-browser.test`,
         fullName: `Attendance ${name}`,
-        passwordHash: "test-only",
+        passwordHash:
+          name === "recovery"
+            ? await hashPassword("AttendanceFixture-42!")
+            : "test-only",
         role: role as Role,
         departmentId: department.id,
       },

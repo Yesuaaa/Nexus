@@ -5,7 +5,7 @@ import {
   activeDepartmentHead,
 } from "../../shared/query/accounts.js"
 import { fail } from "./workflow.validation.js"
-import { leaveAdminVisibility } from "../leave/leave.repository.js"
+import { submittedLeaveFallbackScope } from "../leave/leave.repository.js"
 
 import { hrAdjustmentScope } from "../attendance/attendance.overtime.js"
 
@@ -30,7 +30,16 @@ async function notificationScope(
       {
         leaveRequestId: { not: null },
         user: { ...activeAccount, role: "ADMIN" },
-        leaveRequest: leaveAdminVisibility,
+        OR: [
+          {
+            type: "LEAVE_SUBMITTED",
+            leaveRequest: await submittedLeaveFallbackScope(tx, userId),
+          },
+          {
+            type: { not: "LEAVE_SUBMITTED" },
+            leaveRequest: { status: { not: "SUBMITTED" } },
+          },
+        ],
       },
       {
         leaveRequestId: { not: null },

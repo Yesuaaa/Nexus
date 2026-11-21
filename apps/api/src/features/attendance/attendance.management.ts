@@ -40,6 +40,21 @@ import {
   approvedLeaveOverlappingInterval,
 } from "../leave/leave.repository.js"
 
+type PolicyAssignmentStatus = "SCHEDULED" | "ENDED" | "CURRENT" | "CANCELLED"
+
+function policyAssignmentStatusAt(asOf: Date, timeZone: string) {
+  const instant = Prisma.sql`${asOf.toISOString()}::timestamptz`
+  // Match attendance_policy_at and the cancellation trigger at ambiguous midnight.
+  return Prisma.sql`CASE
+    WHEN "cancelledAt" IS NOT NULL THEN 'CANCELLED'
+    WHEN ${instant} < ("effectiveFrom"::timestamp AT TIME ZONE ${timeZone})
+      THEN 'SCHEDULED'
+    WHEN ${instant} >= attendance_assignment_end_at("employeeId", "effectiveUntil", ${timeZone})
+      THEN 'ENDED'
+    ELSE 'CURRENT'
+  END`
+}
+
 function attendanceEmployeeIdentity<
   T extends {
     fullName: string
@@ -532,12 +547,31 @@ export function createAttendanceManagement(clock: () => Date) {
             { employeeId, departmentId },
             now,
           )
+          const suspendedRows = rows.filter(({ day }) =>
+            day.sessions.some(
+              (session) => !session.endedAt && session.suspendedAt,
+            ),
+          )
+          const canManageReconciliation =
+            suspendedRows.length > 0 &&
+            hasPermission(
+              (await actor(tx, userId)).role,
+              Permission.EMPLOYEES_MANAGE,
+            )
+          const reconcilableWorkdays = new Set(
+            canManageReconciliation
+              ? suspendedRows
+                  .filter(({ employee }) => employee.user?.id !== userId)
+                  .map(({ day }) => day.id)
+              : [],
+          )
           return {
             asOf: now,
             ...paging,
             workdays: rows.map(({ day, employee }) => ({
               ...day,
               employee: attendanceEmployeeIdentity(employee),
+              canReconcile: reconcilableWorkdays.has(day.id),
             })),
           }
         },
@@ -954,22 +988,12 @@ export function createAttendanceManagement(clock: () => Date) {
             },
             { tx },
           )
-          const asOf = clock().toISOString()
+          const asOf = clock()
           const statuses = rows.length
             ? await tx.$queryRaw<
-                {
-                  id: string
-                  status: "SCHEDULED" | "ENDED" | "CURRENT" | "CANCELLED"
-                }[]
+                { id: string; status: PolicyAssignmentStatus }[]
               >`
-                SELECT id, CASE
-                  WHEN "cancelledAt" IS NOT NULL THEN 'CANCELLED'
-                  WHEN ${asOf}::timestamptz < ("effectiveFrom"::timestamp AT TIME ZONE ${policy.timeZone})
-                    THEN 'SCHEDULED'
-                  WHEN ${asOf}::timestamptz >= attendance_assignment_end_at("employeeId", "effectiveUntil", ${policy.timeZone})
-                    THEN 'ENDED'
-                  ELSE 'CURRENT'
-                END AS status
+                SELECT id, ${policyAssignmentStatusAt(asOf, policy.timeZone)} AS status
                 FROM "AttendancePolicyAssignment"
                 WHERE id IN (${Prisma.join(rows.map(({ id }) => id))})
               `
@@ -1003,6 +1027,14 @@ export function createAttendanceManagement(clock: () => Date) {
           })
         if (assignment.cancelledAt) return { unassigned: true }
         const now = clock()
+        const [{ status }] = await tx.$queryRaw<
+          { status: PolicyAssignmentStatus }[]
+        >`
+          SELECT ${policyAssignmentStatusAt(now, assignment.policy.timeZone)} AS status
+          FROM "AttendancePolicyAssignment"
+          WHERE id = ${assignmentId}
+        `
+        const scheduled = status === "SCHEDULED"
         const today = attendanceWorkDate(now, assignment.policy.timeZone)
         const tomorrow = new Date(today)
         tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
@@ -1010,7 +1042,7 @@ export function createAttendanceManagement(clock: () => Date) {
           await tx.leaveRequestDay.findFirst({
             where: {
               assignmentId,
-              workDate: { gte: tomorrow },
+              ...(scheduled ? {} : { workDate: { gte: tomorrow } }),
               request: {
                 status: { in: ["SUBMITTED", "VERIFIED", "APPROVED"] },
               },
@@ -1021,10 +1053,15 @@ export function createAttendanceManagement(clock: () => Date) {
             409,
             "Resolve future leave requests before ending this assignment",
           )
-        if (assignment.effectiveUntil && assignment.effectiveUntil <= tomorrow)
+        if (
+          status === "ENDED" ||
+          (!scheduled &&
+            assignment.effectiveUntil &&
+            assignment.effectiveUntil <= tomorrow)
+        )
           fail(409, "This assignment has already ended or is already ending")
         await context(tx, userId, "Unassigned attendance policy")
-        if (assignment.effectiveFrom.toISOString().slice(0, 10) > today) {
+        if (scheduled) {
           if (await tx.attendanceWorkday.findFirst({ where: { assignmentId } }))
             fail(
               409,
@@ -1105,6 +1142,7 @@ export function createAttendanceManagement(clock: () => Date) {
         { from: input.effectiveFrom, to: input.effectiveFrom },
         clock(),
       ).from
+      const effectiveDate = from.toISOString().slice(0, 10)
       return getPrisma()!.$transaction(
         async (tx) => {
           await managementScope(tx, userId, true)
@@ -1123,10 +1161,7 @@ export function createAttendanceManagement(clock: () => Date) {
             fail(404, "Employee or policy not found")
           if (policy.days.length !== 7)
             fail(409, "Configure all seven weekdays before assignment")
-          if (
-            from.toISOString().slice(0, 10) <
-            attendanceWorkDate(clock(), policy.timeZone)
-          )
+          if (effectiveDate < attendanceWorkDate(clock(), policy.timeZone))
             fail(400, "Policy assignments must start today or later")
           const overlapping = await tx.attendancePolicyAssignment.findMany({
             where: {
@@ -1156,6 +1191,25 @@ export function createAttendanceManagement(clock: () => Date) {
             })
           )
             fail(409, "Choose a date after existing attendance records")
+          // The new policy supplies the cutoff even for a period already ending on this date.
+          const [{ conflict }] = await tx.$queryRaw<{ conflict: boolean }[]>`
+            SELECT EXISTS (
+              SELECT 1
+              FROM "AttendancePolicyAssignment" previous
+              JOIN "AttendancePolicy" outgoing ON outgoing.id = previous."policyId"
+              WHERE previous."employeeId" = ${employeeId}
+                AND previous."cancelledAt" IS NULL
+                AND previous."effectiveFrom" < ${effectiveDate}::date
+                AND (previous."effectiveUntil" IS NULL OR previous."effectiveUntil" >= ${effectiveDate}::date)
+                AND (previous."effectiveFrom"::timestamp AT TIME ZONE outgoing."timeZone")
+                  >= (${effectiveDate}::date::timestamp AT TIME ZONE ${policy.timeZone})
+            ) AS conflict
+          `
+          if (conflict)
+            fail(
+              409,
+              "Choose an effective date whose midnight is after the previous assignment starts",
+            )
           await context(tx, userId, "Assigned attendance policy version")
           for (const item of overlapping)
             await tx.attendancePolicyAssignment.update({

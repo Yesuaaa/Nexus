@@ -13,11 +13,14 @@ import {
   AttendancePagination,
 } from "../components/attendance-shared"
 import { AttendanceHistoryTable } from "../components/attendance-history"
+import { AttendanceReconciliationDialog } from "../components/attendance-reconciliation-dialog"
 import {
   attendanceMonitoring,
   attendanceDepartments,
   attendanceEmployees,
   type AttendanceEmployee,
+  type AttendanceSession,
+  type AttendanceWorkday,
 } from "../api/attendance-api"
 import { EmployeeTable } from "@/features/employees/components/employee-table"
 import { SearchField } from "@/components/ui/search-field"
@@ -42,6 +45,10 @@ export function AttendanceRecordsPage() {
   const [range, setRange] = useState(defaultRange)
   const [page, setPage] = useState(1)
   const [departmentId, setDepartmentId] = useState("")
+  const [reconciliation, setReconciliation] = useState<{
+    session: AttendanceSession
+    day: AttendanceWorkday
+  } | null>(null)
   const departments = useAsyncResource(attendanceDepartments, [], {
     fallbackError: "Couldn't load departments.",
   })
@@ -278,6 +285,7 @@ export function AttendanceRecordsPage() {
             loading={history.loading}
             error={history.error}
             onRetry={history.retry}
+            onReconcile={(session, day) => setReconciliation({ session, day })}
           />
           {matching && (
             <AttendancePagination
@@ -287,6 +295,13 @@ export function AttendanceRecordsPage() {
             />
           )}
         </>
+      )}
+      {reconciliation && (
+        <AttendanceReconciliationDialog
+          {...reconciliation}
+          onClose={() => setReconciliation(null)}
+          onSaved={history.retry}
+        />
       )}
     </AttendanceShell>
   )

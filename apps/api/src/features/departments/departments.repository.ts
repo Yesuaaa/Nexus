@@ -20,6 +20,7 @@ import { readTransaction } from "../../lib/database-read.js"
 import { lockRows } from "../../shared/db/locks.js"
 import { paginate } from "../../shared/query/pagination.js"
 import { departmentSummarySelect } from "../../shared/query/selects.js"
+import { notifyPendingLeaveAfterHeadChange } from "../leave/leave.repository.js"
 import {
   employeeInclude,
   clearFormerDepartmentHeadTitle,
@@ -432,6 +433,7 @@ export const departmentsRepository = {
       }
 
       await recordDepartmentChanges(tx, operation, current, saved)
+      if (headChanged) await notifyPendingLeaveAfterHeadChange(tx, id)
 
       return tx.department.findUniqueOrThrow({
         where: { id: saved.id },

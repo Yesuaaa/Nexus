@@ -35,6 +35,7 @@ import {
   defaultRange,
   duration,
   elapsedWork,
+  isSuspendedSession,
 } from "../model/attendance"
 
 export function MyAttendancePage() {
@@ -51,15 +52,16 @@ export function MyAttendancePage() {
   const [correction, setCorrection] = useState<{
     session: AttendanceSession | null
   } | null>(null)
+  const day = clock.state?.workday
+  const suspended = day?.sessions.some(isSuspendedSession) ?? false
   const history = useAsyncResource(
     (signal) => attendanceHistory(range.from, range.to, page, signal),
-    [range.from, range.to, page, revision],
+    [range.from, range.to, page, revision, suspended],
     {
       enabled: Boolean(range.from && range.to),
       fallbackError: "Couldn't load your attendance history.",
     },
   )
-  const day = clock.state?.workday
   const worked = day
     ? elapsedWork(day, clock.now || Date.parse(clock.state!.asOf))
     : 0
@@ -108,7 +110,15 @@ export function MyAttendancePage() {
             your working days and required hours before clocking in.
           </Alert>
         )}
-        {!active && clockInReason && !clock.state?.needsPolicy && <Alert>{clockInReason}</Alert>}
+        {!active &&
+          !clock.state?.needsPolicy &&
+          (suspended || clockInReason) && (
+            <Alert>
+              {suspended
+                ? "Ask HR to reconcile the suspended shift in Time Logs before you clock in again."
+                : clockInReason}
+            </Alert>
+          )}
               {continuation && (
                 <div className="mt-4 rounded-lg border border-[#dfe6eb] p-3">
                   <p className="mt-0 text-xs leading-5">
@@ -150,7 +160,7 @@ export function MyAttendancePage() {
                 </div>
                 <Pill
                   tone={
-                    paused
+                    suspended || paused
                       ? "warning"
                       : active
                         ? "info"
@@ -159,7 +169,9 @@ export function MyAttendancePage() {
                           : "neutral"
                   }
                 >
-                  {paused
+                  {suspended
+                    ? "Shift suspended"
+                    : paused
                     ? "On unpaid break"
                     : active
                       ? "Clocked in"
@@ -172,7 +184,7 @@ export function MyAttendancePage() {
                 {!active ? (
                   <Button
                     variant="brand"
-                    disabled={blocked || clockInReason !== null}
+                    disabled={blocked || suspended || clockInReason !== null}
                     onClick={() =>
                       propose(
                         { action: "clock-in" },

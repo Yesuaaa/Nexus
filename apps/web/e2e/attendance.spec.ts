@@ -57,7 +57,10 @@ test.beforeAll(async () => {
     })
   })
 })
-async function routeAttendanceApi(page: Page) {
+async function routeAttendanceApi(
+  page: Page,
+  { realNotifications = false } = {},
+) {
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url())
     if (
@@ -76,7 +79,10 @@ async function routeAttendanceApi(page: Page) {
         json: { conversations: [], nextCursor: null, unreadCount: 0 },
       })
     }
-    if (url.pathname === "/api/request-workflows/notifications")
+    if (
+      !realNotifications &&
+      url.pathname === "/api/request-workflows/notifications"
+    )
       return route.fulfill({ json: { notifications: [], unreadCount: 0 } })
     const response = await route.fetch({
       url: `${api}${url.pathname}${url.search}`,
@@ -1561,3 +1567,458 @@ function requestGate() {
   })
   return { started, pending, start, release: () => release() }
 }
+
+test("a reactivated employee can clock in after a manager reconciles a suspended shift", async ({
+  page,
+}) => {
+  const start = Math.floor(Date.now() / 60000) * 60000 - 120 * 60000
+  const actor = fixture.actors.recovery
+  const punch = async (action: string, token: string, body: object) =>
+    fetch(`${api}/api/attendance/me/${action}`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    })
+  await clock(new Date(start).toISOString())
+  const opened = await punch("clock-in", actor.token, {})
+  expect(opened.status).toBe(201)
+  const { workday } = (await opened.json()) as {
+    workday: { activeSessionId: string; workDate: string }
+  }
+  const sessionId = workday.activeSessionId
+  await clock(new Date(start + 30 * 60000).toISOString())
+  expect((await punch("breaks/start", actor.token, { sessionId })).status).toBe(
+    200,
+  )
+  const setActive = (isActive: boolean) =>
+    fetch(`${api}/api/users/${actor.userId}/status`, {
+      method: "PATCH",
+      headers: {
+        authorization: `Bearer ${fixture.actors.superadmin.token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ isActive }),
+    })
+  expect((await setActive(false)).status).toBe(200)
+  expect((await punch("clock-out", actor.token, { sessionId })).status).toBe(
+    401,
+  )
+  expect((await setActive(true)).status).toBe(200)
+  const login = await fetch(`${api}/api/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email: "recovery@attendance-browser.test",
+      password: "AttendanceFixture-42!",
+    }),
+  })
+  expect(login.status).toBe(200)
+  const renewed = (await login.json()) as {
+    token: string
+    refreshToken: string
+  }
+  Object.assign(actor, renewed)
+  await clock(new Date().toISOString())
+  await signIn(page, "recovery")
+  await page.goto("/attendance/check-ins")
+  await expect(
+    page.getByText("Shift suspended", { exact: true }).first(),
+  ).toBeVisible()
+  await expect(page.getByText("Clocked out", { exact: true })).toHaveCount(0)
+  await expect(
+    page.getByRole("button", { name: "Clock in", exact: true }),
+  ).toBeDisabled()
+
+  const path = `/api/attendance/employees/${actor.employeeId}/sessions/${sessionId}/reconcile`
+  const endedAt = new Date(start + 45 * 60000).toISOString()
+  const note = "Confirmed the end of the suspended shift with the employee"
+  const reconcileAs = (token: string) =>
+    fetch(`${api}${path}`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ endedAt, note }),
+    })
+  expect((await reconcileAs(renewed.token)).status).toBe(403)
+  expect((await reconcileAs(fixture.actors.head.token)).status).toBe(403)
+
+  async function openDetails(role: string) {
+    const reviewer = await page.context().newPage()
+    await routeAttendanceApi(reviewer)
+    await signIn(reviewer, role)
+    await reviewer.goto("/attendance/time-logs/records")
+    await reviewer
+      .getByRole("button", { name: "View logs for Attendance recovery" })
+      .click()
+    await reviewer
+      .getByRole("button", { name: `Actions for ${workday.workDate}` })
+      .click()
+    await reviewer.getByRole("menuitem", { name: "View details" }).click()
+    await expect(
+      reviewer
+        .getByRole("dialog")
+        .getByText("Shift suspended", { exact: true }),
+    ).toBeVisible()
+    return reviewer
+  }
+  const head = await openDetails("head")
+  await expect(
+    head.getByRole("button", { name: "Reconcile shift" }),
+  ).toHaveCount(0)
+  await head.unrouteAll({ behavior: "wait" })
+  await head.close()
+  const owner = await openDetails("superadmin")
+  await expect(
+    owner.getByRole("button", { name: "Reconcile shift" }),
+  ).toBeVisible()
+  await owner.unrouteAll({ behavior: "wait" })
+  await owner.close()
+
+  const manager = await openDetails("admin")
+  await manager.getByRole("button", { name: "Reconcile shift" }).click()
+  const dialog = manager.getByRole("dialog", {
+    name: "Reconcile suspended shift",
+  })
+  const end = dialog.getByLabel("Confirmed clock-out")
+  await expect(end).toHaveValue("")
+  const local = (instant: number) =>
+    manager.evaluate((value) => {
+      const date = new Date(value)
+      return new Date(value - date.getTimezoneOffset() * 60000)
+        .toISOString()
+        .slice(0, 16)
+    }, instant)
+  const submit = dialog.getByRole("button", { name: "Reconcile shift" })
+  await expect(submit).toBeDisabled()
+  await end.fill(await local(start))
+  await dialog.getByLabel("Reason").fill("    ")
+  await expect(submit).toBeDisabled()
+  await dialog.getByLabel("Reason").fill(note)
+  const failed = manager.waitForResponse(
+    (response) => new URL(response.url()).pathname === path,
+  )
+  await submit.click()
+  expect((await failed).status()).toBe(409)
+  await expect(
+    dialog.getByText("Clock-out must follow the session and its breaks"),
+  ).toBeVisible()
+  await expect(dialog.getByLabel("Reason")).toHaveValue(note)
+  await end.fill(await local(Date.parse(endedAt)))
+  const gate = requestGate()
+  let submissions = 0
+  await manager.route(
+    (url) => url.pathname === path,
+    async (route) => {
+      submissions++
+      gate.start()
+      await gate.pending
+      await route.fallback()
+    },
+  )
+  const saved = manager.waitForResponse(
+    (response) => new URL(response.url()).pathname === path,
+  )
+  try {
+    await submit.click()
+    await gate.started
+    await expect(
+      dialog.getByRole("button", { name: "Reconciling…" }),
+    ).toBeDisabled()
+    await expect(dialog.getByRole("button", { name: "Cancel" })).toBeDisabled()
+  } finally {
+    gate.release()
+  }
+  expect((await saved).status()).toBe(200)
+  expect(submissions).toBe(1)
+  await expect(dialog).toHaveCount(0)
+  const table = manager.getByRole("table", { name: "Attendance history" })
+  await expect(
+    table.getByRole("button", { name: `Actions for ${workday.workDate}` }),
+  ).toBeVisible()
+  await expect(table.getByText("Shift suspended", { exact: true })).toHaveCount(
+    0,
+  )
+  expect((await reconcileAs(fixture.actors.admin.token)).status).toBe(409)
+
+  const persisted = await fetch(
+    `${api}/api/attendance/me/history?from=${workday.workDate}&to=${workday.workDate}`,
+    {
+      headers: { authorization: `Bearer ${renewed.token}` },
+    },
+  )
+  expect(persisted.status).toBe(200)
+  const { workdays } = await persisted.json()
+  expect(workdays[0].sessions[0]).toMatchObject({
+    id: sessionId,
+    endedAt,
+    breaks: [{ endedAt }],
+  })
+  await manager.unrouteAll({ behavior: "wait" })
+  await manager.close()
+  await page.bringToFront()
+  await expect(
+    page.getByRole("button", { name: "Clock in", exact: true }),
+  ).toBeEnabled({ timeout: 10000 })
+  await confirm(page, "Clock in")
+  await expect(
+    page.getByRole("button", { name: "Clock out", exact: true }),
+  ).toBeEnabled()
+})
+
+test("Superadmin opens organization leave by direct URL and notification", async ({
+  page,
+}) => {
+  await page.unroute("**/api/**")
+  await routeAttendanceApi(page, { realNotifications: true })
+  await clock("2026-11-13T20:00:00+08:00")
+  const reason = "Private reason for the leave navigation fixture"
+  const response = await fetch(`${api}/api/leave/requests`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${fixture.actors.staff.token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      requestKey: randomUUID(),
+      type: "ANNUAL",
+      reason,
+      startDate: "2026-11-18",
+      endDate: "2026-11-18",
+    }),
+  })
+  expect(response.status).toBe(201)
+  const { request } = (await response.json()) as { request: { id: string } }
+  const link = `/attendance/requests/leave?request=${request.id}`
+
+  await signIn(page, "superadmin")
+  await page.goto(link)
+  const detail = page.getByRole("dialog", { name: "Leave request" })
+  await expect(detail.getByText(reason, { exact: true })).toBeVisible()
+
+  await page.goto("/attendance/requests/leave")
+  await page
+    .getByRole("button", { name: /^Notifications, \d+ unread$/ })
+    .click()
+  const notice = page
+    .getByRole("menuitem", {
+      name: /A leave request is awaiting review/,
+    })
+    .and(page.locator(`[href="${link}"]`))
+  await notice.click()
+  await expect(page).toHaveURL(
+    (url) => url.searchParams.get("request") === request.id,
+  )
+  await expect(detail.getByText(reason, { exact: true })).toBeVisible()
+})
+
+async function leaveFixtureCall(actor: string, suffix: string, body?: unknown) {
+  return fetch(`${api}/api${suffix}`, {
+    method: body === undefined ? "GET" : "POST",
+    headers: {
+      authorization: `Bearer ${fixture.actors[actor].token}`,
+      "content-type": "application/json",
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+}
+
+async function seedLeaveReview(date: string, verify = true) {
+  const result = await leaveFixtureCall("staff", "/leave/requests", {
+    requestKey: randomUUID(),
+    type: "ANNUAL",
+    reason: `Private leave fixture for ${date}`,
+    startDate: date,
+    endDate: date,
+  })
+  expect(result.status).toBe(201)
+  const { request } = (await result.json()) as { request: { id: string } }
+  const path = `/leave/requests/${request.id}`
+  if (!verify) return path
+  const verified = await leaveFixtureCall("head", `${path}/verify`, {
+    actionId: randomUUID(),
+    expectedVersion: 1,
+    note: "Verified by the Department Head",
+  })
+  expect(verified.status).toBe(200)
+  return path
+}
+
+test("stale HR approval refreshes leave after Superadmin rejection", async ({
+  page,
+  browser,
+}) => {
+  const path = await seedLeaveReview("2026-12-15")
+  const portal = "/attendance/requests/leave"
+  const rowMenu = page.locator(`[id="leave-actions-${path.split("/").at(-1)}"]`)
+  await signIn(page, "admin")
+  await page.goto(portal)
+  await rowMenu.click()
+  await page.getByRole("menuitem", { name: "Approve request" }).click()
+  const approval = page.getByRole("dialog", { name: "Approve request" })
+  const note = approval.getByLabel("Decision note")
+  const approve = approval.getByRole("button", { name: "Approve request" })
+  await note.fill("  abc")
+  await approve.click()
+  await expect(
+    approval.getByText("Provide a valid decision note"),
+  ).toBeVisible()
+  await expect(note).toHaveValue("  abc")
+  await expect(note).toBeEditable()
+  await note.fill("HR approval prepared earlier")
+
+  await page.route(
+    `**/api${path}/approve`,
+    (route) =>
+      route.fulfill({
+        status: 409,
+        json: { error: "Action ID has already been used" },
+      }),
+    { times: 1 },
+  )
+  await approve.click()
+  await expect(
+    approval.getByText("Action ID has already been used"),
+  ).toBeVisible()
+  await expect(note).toHaveValue("HR approval prepared earlier")
+  await expect(note).toBeEditable()
+
+  const winner = await browser.newContext()
+  try {
+    const supervisor = await winner.newPage()
+    await routeAttendanceApi(supervisor)
+    await signIn(supervisor, "superadmin")
+    await supervisor.goto(`${new URL(page.url()).origin}${portal}`)
+    await supervisor
+      .locator(`[id="leave-actions-${path.split("/").at(-1)}"]`)
+      .click()
+    await supervisor.getByRole("menuitem", { name: "Reject request" }).click()
+    const rejection = supervisor.getByRole("dialog", { name: "Reject request" })
+    await rejection
+      .getByLabel("Decision note")
+      .fill("Superadmin rejected this request")
+    const committed = supervisor.waitForResponse(
+      (response) => new URL(response.url()).pathname === `/api${path}/reject`,
+    )
+    await rejection.getByRole("button", { name: "Reject request" }).click()
+    expect((await committed).status()).toBe(200)
+  } finally {
+    await winner.close()
+  }
+
+  const conflict = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === `/api${path}/approve`,
+  )
+  await approve.click()
+  expect((await conflict).status()).toBe(409)
+  await expect(
+    page.getByText("Leave request changed; refresh and try again", {
+      exact: true,
+    }),
+  ).toBeVisible()
+  const detail = page.getByRole("dialog", { name: "Leave request" })
+  await expect(detail.getByText("Rejected", { exact: true })).toBeVisible()
+  await expect(
+    detail.getByText("Superadmin rejected this request"),
+  ).toBeVisible()
+  await expect(
+    detail.getByRole("button", { name: "Approve request" }),
+  ).toHaveCount(0)
+  await detail.getByRole("button", { name: "Close leave request" }).click()
+  await expect(page.getByRole("row").filter({ has: rowMenu })).toContainText(
+    "Rejected",
+  )
+  await rowMenu.click()
+  await expect(
+    page.getByRole("menuitem", { name: "Approve request" }),
+  ).toHaveCount(0)
+  await page.getByRole("menuitem", { name: "View details" }).click()
+  await expect(detail.getByText("Rejected", { exact: true })).toBeVisible()
+
+  const saved = await leaveFixtureCall("admin", path)
+  const { request } = (await saved.json()) as {
+    request: { decisions: { action: string }[] }
+  }
+  expect(request.decisions.map(({ action }) => action)).toEqual([
+    "SUBMITTED",
+    "VERIFIED",
+    "REJECTED",
+  ])
+  const inbox = await leaveFixtureCall(
+    "staff",
+    "/request-workflows/notifications",
+  )
+  const { notifications } = (await inbox.json()) as {
+    notifications: { leaveRequestId: string; type: string }[]
+  }
+  expect(
+    notifications
+      .filter(({ leaveRequestId }) => path.endsWith(`/${leaveRequestId}`))
+      .map(({ type }) => type)
+      .sort(),
+  ).toEqual(["LEAVE_REJECTED", "LEAVE_VERIFIED"])
+})
+
+test("stale leave refresh clears details when Head access is revoked", async ({
+  page,
+}) => {
+  const path = await seedLeaveReview("2026-12-16", false)
+  const authorized = await leaveFixtureCall("head", path)
+  expect(authorized.status).toBe(200)
+  const { request } = (await authorized.json()) as {
+    request: { employee: { departmentId: string }; reason: string }
+  }
+  await signIn(page, "head")
+  await page.goto("/attendance/requests/leave")
+  const rowMenu = page.locator(`[id="leave-actions-${path.split("/").at(-1)}"]`)
+  await rowMenu.click()
+  await page.getByRole("menuitem", { name: "Verify request" }).click()
+  const panel = page.getByRole("dialog", { name: "Verify request" })
+  await expect(panel.getByText(request.reason)).toBeVisible()
+  await panel.getByLabel("Decision note").fill("Verification prepared earlier")
+
+  const rejected = await leaveFixtureCall("superadmin", `${path}/reject`, {
+    actionId: randomUUID(),
+    expectedVersion: 1,
+    note: "Superadmin rejected before verification",
+  })
+  expect(rejected.status).toBe(200)
+  await page.route(
+    `**/api${path}`,
+    async (route) => {
+      const response = await fetch(
+        `${api}/api/departments/${request.employee.departmentId}`,
+        {
+          method: "PUT",
+          headers: {
+            authorization: `Bearer ${fixture.actors.admin.token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ headId: null }),
+        },
+      )
+      expect(response.status).toBe(200)
+      await route.fallback()
+    },
+    { times: 1 },
+  )
+  const detail = page.waitForResponse(
+    (response) =>
+      response.request().method() === "GET" &&
+      new URL(response.url()).pathname === `/api${path}`,
+  )
+  await panel.getByRole("button", { name: "Verify request" }).click()
+  expect((await detail).status()).toBe(404)
+  await expect(
+    page.getByText("Leave request changed; refresh and try again", {
+      exact: true,
+    }),
+  ).toBeVisible()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(page.getByText(request.reason)).toHaveCount(0)
+  await expect(rowMenu).toHaveCount(0)
+})

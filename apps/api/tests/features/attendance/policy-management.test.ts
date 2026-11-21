@@ -368,11 +368,13 @@ test(
             name: string,
             timeZone: string,
             effectiveFrom: string,
+            requiredMinutes = 480,
           ) {
             const created = await request("/policies", "POST", {
               ...input,
               name,
               timeZone,
+              days: input.days.map((day) => ({ ...day, requiredMinutes })),
             })
             assert.equal(created.status, 201, await created.clone().text())
             const { policy } = (await created.json()) as {
@@ -396,6 +398,7 @@ test(
             "Incoming policy",
             transition.incomingZone,
             "2026-11-24",
+            360,
           )
 
           async function expectAssignmentStatus(
@@ -433,7 +436,31 @@ test(
             return workday.activeSessionId
           }
 
-          now = new Date(transition.before)
+          const justBefore = new Date(transition.before).getTime()
+          now = new Date(justBefore - 2)
+          const firstSession = await expectWorkday(
+            await request("/me/clock-in", "POST", {}, token),
+            201,
+            outgoing,
+            "2026-11-23",
+          )
+          const { workdayId } =
+            await prisma.attendanceWorkSession.findUniqueOrThrow({
+              where: { id: firstSession },
+            })
+          now = new Date(justBefore - 1)
+          await expectWorkday(
+            await request(
+              "/me/clock-out",
+              "POST",
+              { sessionId: firstSession },
+              token,
+            ),
+            200,
+            outgoing,
+            "2026-11-23",
+          )
+          now = new Date(justBefore)
           await expectAssignmentStatus(outgoing, "CURRENT")
           await expectAssignmentStatus(incoming, "SCHEDULED")
           await expectWorkday(
@@ -443,7 +470,7 @@ test(
             "2026-11-23",
           )
           const sessionId = await expectWorkday(
-            await request("/me/clock-in", "POST", {}, token),
+            await request("/me/clock-in", "POST", { workdayId }, token),
             201,
             outgoing,
             "2026-11-23",
@@ -458,18 +485,88 @@ test(
             outgoing,
             "2026-11-23",
           )
-          await expectWorkday(
-            await request("/me/current", "GET", undefined, token),
-            200,
-            incoming,
-            "2026-11-24",
+          const current = await request("/me/current", "GET", undefined, token)
+          await expectWorkday(current.clone(), 200, incoming, "2026-11-24")
+          const readWrites = async () => ({
+            sessions: await prisma.attendanceWorkSession.findMany({
+              where: { employeeId: profile.id },
+              orderBy: { id: "asc" },
+            }),
+            audit: await prisma.attendanceAudit.findMany({
+              where: { employeeId: profile.id },
+              orderBy: { id: "asc" },
+            }),
+          })
+          const before = await readWrites()
+          const stale = await request(
+            "/me/clock-in",
+            "POST",
+            { workdayId },
+            token,
           )
-          await expectWorkday(
+          assert.equal(stale.status, 409, await stale.clone().text())
+          assert.deepEqual(await readWrites(), before)
+          const { continuation } = (await current.json()) as {
+            continuation: unknown
+          }
+          assert.equal(continuation, null)
+
+          const incomingSession = await expectWorkday(
             await request("/me/clock-in", "POST", {}, token),
             201,
             incoming,
             "2026-11-24",
           )
+          now = new Date(new Date(transition.cutoff).getTime() + 7 * 3600000)
+          await expectWorkday(
+            await request(
+              "/me/clock-out",
+              "POST",
+              { sessionId: incomingSession },
+              token,
+            ),
+            200,
+            incoming,
+            "2026-11-24",
+          )
+          const history = await request(
+            "/me/history?from=2026-11-23&to=2026-11-24",
+            "GET",
+            undefined,
+            token,
+          )
+          assert.equal(history.status, 200)
+          const { workdays } = (await history.json()) as {
+            workdays: {
+              workDate: string
+              policy: { id: string }
+              requiredMinutes: number
+              sessions: { id: string }[]
+            }[]
+          }
+          assert.deepEqual(
+            workdays.map((day) => [
+              day.workDate,
+              day.policy.id,
+              day.requiredMinutes,
+              day.sessions.map(({ id }) => id),
+            ]),
+            [
+              ["2026-11-24", incoming, 360, [incomingSession]],
+              ["2026-11-23", outgoing, 480, [firstSession, sessionId]],
+            ],
+          )
+          const overtime = await prisma.attendanceAdjustment.findMany({
+            where: { employeeId: profile.id },
+            select: { sessionId: true, type: true, overtimeMinutes: true },
+          })
+          assert.deepEqual(overtime, [
+            {
+              sessionId: incomingSession,
+              type: "OVERTIME",
+              overtimeMinutes: 60,
+            },
+          ])
         },
       )
     }

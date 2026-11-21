@@ -1,4 +1,4 @@
-import type { AttendanceWorkday } from "../api/attendance-api"
+import type { AttendanceSession, AttendanceWorkday } from "../api/attendance-api"
 import type { PillTone } from "@/components/ui/pill"
 export { formatDateTime as attendanceDate } from "../../../lib/format.ts"
 
@@ -42,6 +42,10 @@ export function attendanceStatusLabel(day: AttendanceWorkday) {
   return status === "NOT_REQUIRED" && (day.approvedLeaveMinutes ?? 0) > 0
     ? "Approved leave"
     : attendanceStatusLabels[status]
+}
+
+export function isSuspendedSession(session: AttendanceSession) {
+  return !session.endedAt && Boolean(session.suspendedAt)
 }
 
 export function elapsedWork(day: AttendanceWorkday, asOf: number): number {

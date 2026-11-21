@@ -12,6 +12,7 @@ import {
   leadershipCandidateWhere,
 } from "../departments/leadership.policy.js"
 import { lockRows, lockRowsReturning } from "../../shared/db/locks.js"
+import { notifyPendingLeaveAfterHeadChange } from "../leave/leave.repository.js"
 import { getPrisma } from "../../lib/db.js"
 import {
   assertNotSelf,
@@ -731,6 +732,13 @@ async function writeEmployee(
       ownTitleCleared,
     )
   }
+  const changedHeadDepartment = isDepartmentHeadLeaving
+    ? currentDepartment
+    : restoreOriginal
+      ? returningDepartment
+      : null
+  if (changedHeadDepartment)
+    await notifyPendingLeaveAfterHeadChange(tx, changedHeadDepartment.id)
   return employee
 }
 

@@ -352,16 +352,31 @@ test(
       (await listWorkflowNotifications(head.user.id)).notifications.length,
       0,
     )
+    const requesterInbox = await listWorkflowNotifications(automatic.user.id)
+    assert.deepEqual(
+      requesterInbox.notifications
+        .map(({ type, entityId, readAt }) => [type, entityId, readAt])
+        .sort(),
+      [
+        ["ATTENDANCE_OVERTIME_APPROVED", auto.id, null],
+        ["ATTENDANCE_OVERTIME_APPROVED", pending.id, null],
+        ["ATTENDANCE_OVERTIME_REJECTED", overnightRequest.id, null],
+        ["ATTENDANCE_OVERTIME_VERIFIED", auto.id, null],
+      ].sort(),
+    )
     assert.equal(
-      (await listWorkflowNotifications(automatic.user.id)).unreadCount,
-      0,
+      requesterInbox.unreadCount,
+      requesterInbox.notifications.length,
     )
     now = new Date("2026-11-15T09:00:00+08:00")
     const short = await service.act(outsider.user.id, "clock-in", {})
     now = new Date("2026-11-15T10:00:00+08:00")
-    await service.act(outsider.user.id, "clock-out", {
+    const closedShort = await service.act(outsider.user.id, "clock-out", {
       sessionId: short.workday!.activeSessionId!,
     })
+    assert.equal(closedShort.workday?.workedMinutes, 60)
+    assert.equal(closedShort.workday?.requiredMinutes, 480)
+    assert.equal(closedShort.workday?.excessMinutes, 0)
     assert.equal(
       await prisma.attendanceAdjustment.count({
         where: { employeeId: outsider.employee.id },
