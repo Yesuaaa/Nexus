@@ -673,7 +673,8 @@ export function createAttendanceManagement(clock: () => Date) {
             statusBreakdown[status] += 1
           }
           const sessions = recorded.flatMap(({ day }) => day.sessions)
-          const open = sessions.filter((session) => !session.endedAt && !session.suspendedAt)
+          const unfinished = sessions.filter((session) => !session.endedAt)
+          const open = unfinished.filter((session) => !session.suspendedAt)
           const onBreak = open.filter((session) =>
             session.breaks.some((pause) => !pause.endedAt && !pause.isPaid),
           ).length
@@ -729,7 +730,8 @@ export function createAttendanceManagement(clock: () => Date) {
                   .map(({ day }) => day.employeeId),
               ).size,
               total: sessions.length,
-              closed: sessions.filter(session=>session.endedAt).length,
+              closed: sessions.length - unfinished.length,
+              suspended: unfinished.length - open.length,
               working: open.length - onBreak,
               onBreak,
               recentActivity,

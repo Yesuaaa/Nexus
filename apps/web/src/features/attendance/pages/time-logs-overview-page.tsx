@@ -47,6 +47,7 @@ export function TimeLogsOverviewPage() {
       label: "On unpaid break",
       value: sessions?.onBreak ?? 0,
     },
+    { id: "suspended", label: "Suspended", value: sessions?.suspended ?? 0 },
     { id: "closed", label: "Clocked out", value: sessions?.closed ?? 0 },
   ]
   const unavailable = Boolean(result.error)
@@ -119,7 +120,7 @@ export function TimeLogsOverviewPage() {
 
       <Section title="Recorded session status" className="mt-7">
         {result.loading ? (
-          <RowsSkeleton rows={3} />
+          <RowsSkeleton rows={sessionStatuses.length} />
         ) : result.error ? (
           <p className="m-0 text-xs leading-5 text-[#65718a]">
             Record summaries unavailable.

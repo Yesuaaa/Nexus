@@ -16,6 +16,9 @@ test("attendance browser API fixture", { timeout: 1800000 }, async (t) => {
   const department = await prisma.department.create({
     data: { name: "Attendance browser department" },
   })
+  const requestsDepartment = await prisma.department.create({
+    data: { name: "WC06 request summaries" },
+  })
   const policy = await prisma.attendancePolicy.create({
     data: {
       name: "Browser flexible policy",
@@ -33,7 +36,7 @@ test("attendance browser API fixture", { timeout: 1800000 }, async (t) => {
     string,
     { token: string; refreshToken: string; employeeId: string; userId: string }
   > = {}
-  for (const [name, role] of [
+  for (const [name, role, placement = department] of [
     ["staff", "STAFF"],
     ["head", "STAFF"],
     ["admin", "ADMIN"],
@@ -42,6 +45,8 @@ test("attendance browser API fixture", { timeout: 1800000 }, async (t) => {
     ["recovery", "STAFF"],
     ["correction-dst", "STAFF"],
     ["overtime-staff", "STAFF"],
+    ["wc06-head", "STAFF", requestsDepartment],
+    ["wc06-requester", "STAFF", requestsDepartment],
   ] as const) {
     const user = await prisma.user.create({
       data: {
@@ -52,7 +57,7 @@ test("attendance browser API fixture", { timeout: 1800000 }, async (t) => {
             ? await hashPassword("AttendanceFixture-42!")
             : "test-only",
         role: role as Role,
-        departmentId: department.id,
+        departmentId: placement.id,
       },
     })
     const employee = await prisma.employee.create({
@@ -60,7 +65,7 @@ test("attendance browser API fixture", { timeout: 1800000 }, async (t) => {
         employeeId: `BROWSER-${name}`,
         fullName: `Attendance ${name}`,
         userId: user.id,
-        departmentId: department.id,
+        departmentId: placement.id,
       },
     })
     await prisma.attendancePolicyAssignment.create({
@@ -75,11 +80,63 @@ test("attendance browser API fixture", { timeout: 1800000 }, async (t) => {
       employeeId: employee.id,
       userId: user.id,
     }
-    if (name === "head")
+    if (name === "head" || name === "wc06-head")
       await prisma.department.update({
-        where: { id: department.id },
+        where: { id: placement.id },
         data: { headId: user.id },
       })
+  }
+  const reportingDepartment = await prisma.department.create({
+    data: { name: "WC06 reporting" },
+  })
+  for (const [name, departmentId, startedAt, endedAt, suspendedAt] of [
+    ["Working", department.id, "2026-09-18T22:00:00+08:00", null, null],
+    ["Break", department.id, "2026-09-18T21:00:00+08:00", null, null],
+    [
+      "Overnight",
+      department.id,
+      "2026-09-18T20:00:00+08:00",
+      "2026-09-19T02:00:00+08:00",
+      null,
+    ],
+    [
+      "Suspended",
+      reportingDepartment.id,
+      "2026-09-18T23:00:00+08:00",
+      null,
+      "2026-09-19T00:00:00+08:00",
+    ],
+  ] as const) {
+    const employee = await prisma.employee.create({
+      data: {
+        employeeId: `BROWSER-WC06-${name}`,
+        fullName: `WC06 ${name}`,
+        departmentId,
+      },
+    })
+    await prisma.attendancePolicyAssignment.create({
+      data: {
+        employeeId: employee.id,
+        policyId: policy.id,
+        effectiveFrom: new Date("2026-01-01"),
+      },
+    })
+    const session = await prisma.attendanceWorkSession.create({
+      data: {
+        employeeId: employee.id,
+        startedAt: new Date(startedAt),
+        endedAt: endedAt ? new Date(endedAt) : null,
+        suspendedAt: suspendedAt ? new Date(suspendedAt) : null,
+      },
+    })
+    if (name === "Break") {
+      await prisma.attendanceBreak.create({
+        data: {
+          sessionId: session.id,
+          startedAt: new Date("2026-09-18T22:00:00+08:00"),
+        },
+      })
+    }
   }
   const proxy = createServer(async (req, res) => {
     try {

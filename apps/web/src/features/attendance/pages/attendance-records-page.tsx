@@ -25,13 +25,21 @@ import {
 import { EmployeeTable } from "@/features/employees/components/employee-table"
 import { SearchField } from "@/components/ui/search-field"
 import { Button } from "@/components/ui/button"
-import { defaultRange } from "../model/attendance"
+import { defaultRange, isSuspendedSession } from "../model/attendance"
 
 function matchesAttendanceEmployee(item: AttendanceEmployee, query: string) {
   const needle = query.trim().toLocaleLowerCase()
   return [item.fullName, item.employeeId].some((value) =>
     value.toLocaleLowerCase().includes(needle),
   )
+}
+
+function exportSessionStatus(session: AttendanceSession) {
+  if (session.endedAt) return "Closed"
+  if (isSuspendedSession(session)) return "Suspended"
+  return session.breaks.some((pause) => !pause.endedAt && !pause.isPaid)
+    ? "On unpaid break"
+    : "Open"
 }
 
 export function AttendanceRecordsPage() {
@@ -97,6 +105,8 @@ export function AttendanceRecordsPage() {
         "Required hours",
         "Review excess",
         "Approved leave hours",
+        "Suspension timestamps",
+        "Session statuses",
       ],
       ...matching.workdays.map((day) => [
         day.workDate,
@@ -104,11 +114,13 @@ export function AttendanceRecordsPage() {
         day.employee?.department?.name ?? "",
         day.timeZone,
         day.sessions.map((session) => session.startedAt).join("; "),
-        day.sessions.map((session) => session.endedAt ?? "Open").join("; "),
+        day.sessions.map((session) => session.endedAt ?? "").join("; "),
         String(day.workedHours),
         String(day.requiredMinutes / 60),
         String(day.excessRequiresReview),
         String((day.approvedLeaveMinutes ?? 0) / 60),
+        day.sessions.map((session) => session.suspendedAt ?? "").join("; "),
+        day.sessions.map(exportSessionStatus).join("; "),
       ]),
     ]
     const blob = new Blob(

@@ -33,6 +33,10 @@ Time Logs Overview summarizes the selected historical workday period, using the 
 
 Requests Overview uses `GET /api/attendance/adjustments/overview?scope=mine|team` to aggregate all authorized rows by type and status. It does not total only the displayed page. Overtime and Corrections share the existing request table, review panel, pagination, and scope toggle; the existing list endpoint additionally accepts a validated `status` filter. Overtime remains automatic at clock-out with department verification before HR approval. Corrections reuse the existing submission dialog and approval validation.
 
+Requests Overview loads attendance adjustments and Leave (`GET /api/leave/overview?scope=mine|team`) for the selected view. Changing views starts fresh reads. The combined figures, status shares, and attention totals appear after both current-scope responses succeed. During a temporary failure the successful source remains visible in its own section, and Retry reloads the failed source. An authorization denial from either endpoint hides all counts for that view until access is confirmed by fresh responses.
+
+The combined status table counts every request in its total. Submitted Leave contributes to Pending there. Verified, Approved, and Rejected combine the matching statuses across request types. Cancelled and Reversed appear separately. The Leave section keeps the original status names and adds counts across categories. Needs attention groups pending and verified requests by type and stage. Shares use the combined total and round individually to whole percentages.
+
 Policies Overview uses full-inventory counts returned alongside `GET /api/attendance/policies`. Assignment-period totals include current, scheduled, and ended history and do not claim employee coverage. The existing recent-policy directory remains limited to 200 entries, explicitly labeled in the inventory. Policy Management opens policy details in a side panel, where current, scheduled, and ended assignments use the assigned-people view with server-calculated statuses and pagination. Assignment creation reuses the existing form, confirmation, effective-date validation, and archived-policy restrictions.
 
 Implementation proceeded through navigation/access unit checks; existing clocking/foundation checks; records/audit scope checks; request summary/status and overtime tests; policy inventory/lifecycle tests; then integrated browser and responsive regression checks. Backend tests use isolated PGlite without live data or schema changes.
@@ -125,7 +129,9 @@ These complement the [self-service attendance API](attendance-backend.md):
 | POST       | `/api/attendance/policies/:policyId/restore`           | Restore an archived policy; Admin only.                               |
 | DELETE     | `/api/attendance/policies/:policyId`                   | Permanently delete an archived, unassigned policy; Admin only.        |
 
-Overview queries are limited to 10,000 records and policy listings to the latest 200 versions. Time Logs exports the currently displayed page as CSV, with daily totals included once per workday and actual session instants retained.
+Overview queries are limited to 10,000 records and policy listings to the latest 200 versions. Time Logs Overview groups sessions as clocked in, on unpaid break, suspended, or clocked out. Once reconciled, a session with a confirmed end is clocked out.
+
+Time Logs exports the currently displayed page as CSV with daily totals once per workday. The export includes session statuses and separate clock-in, suspension, and confirmed clock-out timestamps in session order. A missing timestamp leaves its position empty. A reconciled session keeps its recorded suspension timestamp alongside its confirmed clock-out.
 
 Attendance history and Time Logs Records include approved leave on working dates, even when the employee has no clock records. Leave and recorded work share the same filters and pagination. Leave rows use the saved policy snapshot for the date, and the CSV includes approved leave hours. Personal and management overviews count approved leave days separately from recorded workdays and check-ins. Only current approvals contribute leave hours, so reversals remove the projected leave from the next report.
 

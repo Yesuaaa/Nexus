@@ -331,6 +331,7 @@ const overview: AttendanceOverview = {
     employees: 2,
     total: 2,
     closed: 2,
+    suspended: 0,
     working: 0,
     onBreak: 0,
     recentActivity: [

@@ -112,6 +112,7 @@ export type AttendanceOverview = {
     closed: number
     working: number
     onBreak: number
+    suspended: number
     recentActivity: {
       id: string
       action: "CLOCK_IN" | "CLOCK_OUT" | "BREAK_START" | "BREAK_END"
