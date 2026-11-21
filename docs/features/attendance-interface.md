@@ -71,6 +71,10 @@ History is grouped by attendance workday and shows complete actual clock-in/out 
 
 Employees can request a correction from a recorded session or submit a missing closed session. The form explicitly labels its device timezone and sends complete offset-derived instants. It requires a reason, ordered timestamps, and an end no later than server time.
 
+During a daylight-saving gap, the form flags the entered local time and asks for a different time. During a repeated hour, it shows a UTC-offset choice for each ambiguous field. Existing sessions preselect the recorded offset and keep the full recorded instant while that field is unchanged. The form checks that clock-out follows clock-in by instant. The attendance policy still determines the credited workday.
+
+Pending correction notices follow the employee's current independent, active Department Head or the active HR fallback reviewers. Head replacement, removal, temporary handoff, restoration and account status changes update delivery in the same transaction. Returning reviewers keep their original notice and read timestamp for the same pending stage. A verified correction reopened by an employee transfer starts a new review cycle and renews its pending notice for the receiving reviewers. Apply migration `20261121190000_correction_pending_notifications` before deploying the API. It fills notice gaps for corrections already pending.
+
 Requests are separate records until reviewed. Approval updates the existing session or creates the missing session atomically with the decision and audit trail. Rejection records a note without changing attendance. The service prevents:
 
 - Access to another employee's request as an ordinary Staff member.
@@ -152,6 +156,8 @@ Future work includes break-time corrections, cross-workday reassignment, approve
 OT & Agreements retains `/attendance/adjustments` for route compatibility. Corrections and overtime share the existing search field, type filter, management scope toggle, responsive table, pills, ellipsis menu, and review side panel. Staff use the existing correction modal for missing or incorrect attendance.
 
 Clock-out automatically creates a Pending overtime request for whole excess worked minutes, excluding unpaid breaks. The request and punch are saved atomically. Split sessions submit only additional excess; rejected time is not resubmitted. Active sessions do not submit overtime. Pending corrections defer automatic submission until attendance is resolved. Approved corrections also submit newly recorded excess.
+
+The overtime dependency follows the employee's attendance workday. Existing sessions keep their recorded workday, including overnight and split sessions. Missing-session corrections use the effective policy at the proposed start, as the database does when creating the session. Pending and verified corrections defer automatic overtime and block manual requests for that workday. Verification and final approval recheck the conflict in both workflows. A correction decision rechecks recorded excess for automatic submission.
 
 Automatic overtime skips intervals that overlap approved leave. Manual submission, Head verification, and final approval also check for overlap. Overtime may end exactly when leave begins. Clock-out recovery records the shift and alerts HR when it crosses approved leave.
 

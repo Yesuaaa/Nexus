@@ -28,9 +28,11 @@ import {
   attendanceReportPage,
 } from "./attendance.reporting.js"
 import { summarizeAttendance } from "./attendance.summary.js"
+import { notifyPendingCorrection } from "./attendance.correction-notifications.js"
 import {
   notifyOvertime,
   hrAdjustmentScope,
+  hasPendingWorkdayCorrection,
   submitRecordedOvertime,
 } from "./attendance.overtime.js"
 import { parseAttendanceHistory } from "./attendance.schema.js"
@@ -187,31 +189,33 @@ async function validateCorrection(
     ? await attendanceRepository.session(tx, employeeId, sessionId)
     : null
   if (sessionId && !session) fail(404, "Attendance session not found")
-  if (session) {
-    if (
-      await tx.attendanceAdjustment.findFirst({
-        where: {
-          type: "OVERTIME",
-          status: { in: ["PENDING", "VERIFIED", "APPROVED"] },
-          session: { workdayId: session.workdayId },
-        },
+  const day = session
+    ? await tx.attendanceWorkday.findUniqueOrThrow({
+        where: { id: session.workdayId },
       })
-    )
-      fail(
-        409,
-        "Resolve overtime requests for this workday before correcting attendance",
-      )
-    const day = await tx.attendanceWorkday.findUniqueOrThrow({
-      where: { id: session.workdayId },
+    : null
+  const workDate = day
+    ? day.workDate.toISOString().slice(0, 10)
+    : (await policyAt(tx, employeeId, start))?.workDate
+  if (!workDate)
+    fail(409, "No policy is assigned for the missing session's starting date")
+  if (
+    await tx.attendanceAdjustment.findFirst({
+      where: {
+        type: "OVERTIME",
+        status: { in: ["PENDING", "VERIFIED", "APPROVED"] },
+        session: { workday: { employeeId, workDate: new Date(workDate) } },
+      },
+      select: { id: true },
     })
-    if (
-      await approvedLeaveForDate(
-        tx,
-        employeeId,
-        day.workDate.toISOString().slice(0, 10),
-      )
+  )
+    fail(
+      409,
+      "Resolve overtime requests for this workday before correcting attendance",
     )
-      fail(409, "Approved leave covers this attendance workday")
+  if (await approvedLeaveForDate(tx, employeeId, workDate))
+    fail(409, "Approved leave covers this attendance workday")
+  if (session && day) {
     if (
       attendanceWorkDate(start, day.timeZone) !==
       attendanceWorkDate(session.startedAt, day.timeZone)
@@ -227,12 +231,6 @@ async function validateCorrection(
         409,
         "The proposed session must contain its recorded breaks; end any open break first",
       )
-  } else {
-    const policy = await policyAt(tx, employeeId, start)
-    if (!policy)
-      fail(409, "No policy is assigned for the missing session's starting date")
-    if (await approvedLeaveForDate(tx, employeeId, policy.workDate))
-      fail(409, "Approved leave covers this attendance workday")
   }
   if (
     await tx.attendanceWorkSession.findFirst({
@@ -317,16 +315,7 @@ async function validateOvertime(
     Math.floor(summarizeAttendance(day, now).excessMinutes)
   )
     fail(409, "Requested overtime exceeds the workday's unclaimed excess hours")
-  if (
-    await tx.attendanceAdjustment.findFirst({
-      where: {
-        employeeId,
-        type: "CORRECTION",
-        status: { in: ["PENDING", "VERIFIED"] },
-        session: { workdayId: day.id! },
-      },
-    })
-  )
+  if (await hasPendingWorkdayCorrection(tx, day))
     fail(
       409,
       "Resolve pending attendance corrections before requesting overtime",
@@ -1384,7 +1373,22 @@ export function createAttendanceManagement(clock: () => Date) {
       const reason = text(input.reason, 5)
       return getPrisma()!.$transaction(
         async (tx) => {
+          const placement =
+            type === "CORRECTION"
+              ? await tx.employee.findUnique({
+                  where: { userId },
+                  select: { id: true, departmentId: true },
+                })
+              : null
+          // Head changes lock the department before changing review authority.
+          await lockRows(tx, "Department", placement?.departmentId, "share")
           const employee = await selfEmployee(tx, userId, true)
+          if (
+            type === "CORRECTION" &&
+            (placement?.id !== employee.id ||
+              placement.departmentId !== employee.departmentId)
+          )
+            fail(409, "Employee placement changed; refresh and try again")
           const existing = await tx.attendanceAdjustment.findUnique({
             where: { requestKey },
           })
@@ -1449,7 +1453,9 @@ export function createAttendanceManagement(clock: () => Date) {
               requestedById: userId,
             },
           })
-          await notifyOvertime(tx, adjustment.id, "PENDING")
+          if (type === "CORRECTION")
+            await notifyPendingCorrection(tx, adjustment.id)
+          else await notifyOvertime(tx, adjustment.id, "PENDING")
           return { adjustment }
         },
         { isolationLevel: "ReadCommitted" },
@@ -1620,20 +1626,22 @@ export function createAttendanceManagement(clock: () => Date) {
             include: adjustmentInclude,
           })
           if (!overtime && currentEmployee.userId) {
-            const session = await tx.attendanceWorkSession.findFirst({
-              where: {
-                employeeId: request.employeeId,
-                ...(request.sessionId
-                  ? { id: request.sessionId }
-                  : {
-                      startedAt: request.proposedStartedAt,
-                      endedAt: request.proposedEndedAt,
-                    }),
-              },
-            })
-            if (session) {
+            const policy = request.sessionId
+              ? null
+              : await policyAt(
+                  tx,
+                  request.employeeId,
+                  request.proposedStartedAt,
+                )
+            const workday = request.sessionId
+              ? { sessions: { some: { id: request.sessionId } } }
+              : policy
+                ? { workDate: new Date(policy.workDate) }
+                : null
+            if (workday) {
               const sessions = await tx.attendanceWorkSession.findMany({
-                where: { workdayId: session.workdayId },
+                where: { employeeId: request.employeeId, workday },
+                select: { id: true },
                 orderBy: { startedAt: "asc" },
               })
               for (const item of sessions)

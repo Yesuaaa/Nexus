@@ -16,6 +16,7 @@ import { getPrisma } from "../../lib/db.js"
 import { isForeignKeyViolation } from "../../lib/errors.js"
 import { HttpError } from "../../shared/http-error.js"
 import { notifyPendingLeaveAfterHeadChange } from "../leave/leave.repository.js"
+import { notifyPendingCorrectionsAfterHeadChange } from "../attendance/attendance.correction-notifications.js"
 import { canChangeAccountStatus } from "./users.policy.js"
 
 import { lockRows, lockRowsReturning } from "../../shared/db/locks.js"
@@ -87,13 +88,14 @@ export async function setAccountActive(
   guard: Prisma.UserWhereInput,
   actorId:string,
 ) {
-  const headedDepartment =
+  const headEligibilityChanged =
     guard.role === "STAFF" && guard.isActive !== isActive
-      ? await db.department.findUnique({
-          where: { headId: userId },
-          select: { id: true },
-        })
-      : null
+  const headedDepartment = headEligibilityChanged
+    ? await db.department.findUnique({
+        where: { headId: userId },
+        select: { id: true },
+      })
+    : null
   await lockRows(db, "Department", headedDepartment?.id)
   const employees=!isActive ? await lockRowsReturning(db,"Employee",userId,"update","userId") : []
   const { count } = await db.user.updateMany({
@@ -107,8 +109,22 @@ export async function setAccountActive(
     }
     await revokeSessions(db, userId)
   }
-  if (count && headedDepartment)
-    await notifyPendingLeaveAfterHeadChange(db, headedDepartment.id)
+  if (count && headEligibilityChanged) {
+    const currentDepartment = await db.department.findUnique({
+      where: { headId: userId },
+      select: { id: true },
+    })
+    // A concurrent appointment can commit before the account write locks User.
+    if (currentDepartment?.id !== headedDepartment?.id)
+      throw new HttpError(
+        409,
+        "Department leadership changed; refresh and retry",
+      )
+    if (currentDepartment) {
+      await notifyPendingLeaveAfterHeadChange(db, currentDepartment.id)
+      await notifyPendingCorrectionsAfterHeadChange(db, currentDepartment.id)
+    }
+  }
   return count > 0
 }
 

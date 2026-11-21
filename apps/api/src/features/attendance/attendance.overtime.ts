@@ -1,7 +1,10 @@
 import type { Prisma } from "../../generated/prisma/client.js"
 import { activeAccount, activeStaff } from "../../shared/query/accounts.js"
 import { approvedLeaveOverlappingInterval } from "../leave/leave.repository.js"
-import { attendanceRepository } from "./attendance.repository.js"
+import {
+  attendanceRepository,
+  type AttendanceWorkdayRecord,
+} from "./attendance.repository.js"
 import { summarizeAttendance } from "./attendance.summary.js"
 
 /** HR can review exceptions when the employee has no independent, active Head. */
@@ -68,6 +71,32 @@ export async function notifyOvertime(
   })
 }
 
+/** Missing sessions use the same policy attribution as the session insert trigger. */
+export async function hasPendingWorkdayCorrection(
+  tx: Prisma.TransactionClient,
+  day: Pick<AttendanceWorkdayRecord, "id" | "employeeId" | "workDate">,
+) {
+  const workDate = day.workDate.toISOString().slice(0, 10)
+  const [result] = await tx.$queryRaw<{ pending: boolean }[]>`
+    SELECT EXISTS (
+      SELECT 1 FROM "AttendanceAdjustment" a
+      LEFT JOIN "AttendanceWorkSession" s ON s.id = a."sessionId"
+      WHERE a."employeeId" = ${day.employeeId}
+        AND a.type = 'CORRECTION'
+        AND a.status IN ('PENDING', 'VERIFIED')
+        AND (
+          s."workdayId" = ${day.id}
+          OR (a."sessionId" IS NULL AND EXISTS (
+            SELECT 1
+            FROM attendance_policy_at(a."employeeId", a."proposedStartedAt") p
+            WHERE p."workDate" = ${workDate}::date
+          ))
+        )
+    ) AS pending
+  `
+  return result.pending
+}
+
 /** Called inside the serialized punch transaction; clock-out and request are atomic. */
 export async function submitRecordedOvertime(
   tx: Prisma.TransactionClient,
@@ -84,17 +113,7 @@ export async function submitRecordedOvertime(
     session.workdayId,
   )
   if (!day || day.sessions.some((item) => !item.endedAt)) return
-  if (
-    await tx.attendanceAdjustment.findFirst({
-      where: {
-        employeeId,
-        type: "CORRECTION",
-        status: { in: ["PENDING", "VERIFIED"] },
-        session: { workdayId: session.workdayId },
-      },
-    })
-  )
-    return
+  if (await hasPendingWorkdayCorrection(tx, day)) return
   const existing = await tx.attendanceAdjustment.findMany({
     where: {
       employeeId,

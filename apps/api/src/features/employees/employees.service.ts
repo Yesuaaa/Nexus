@@ -13,6 +13,7 @@ import {
 } from "../departments/leadership.policy.js"
 import { lockRows, lockRowsReturning } from "../../shared/db/locks.js"
 import { notifyPendingLeaveAfterHeadChange } from "../leave/leave.repository.js"
+import { notifyPendingCorrectionsAfterHeadChange } from "../attendance/attendance.correction-notifications.js"
 import { getPrisma } from "../../lib/db.js"
 import {
   assertNotSelf,
@@ -737,8 +738,10 @@ async function writeEmployee(
     : restoreOriginal
       ? returningDepartment
       : null
-  if (changedHeadDepartment)
+  if (changedHeadDepartment) {
     await notifyPendingLeaveAfterHeadChange(tx, changedHeadDepartment.id)
+    await notifyPendingCorrectionsAfterHeadChange(tx, changedHeadDepartment.id)
+  }
   return employee
 }
 

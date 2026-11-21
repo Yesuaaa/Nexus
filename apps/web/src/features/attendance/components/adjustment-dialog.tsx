@@ -17,7 +17,86 @@ import {
   requestAttendanceAdjustment,
   type AttendanceSession,
 } from "../api/attendance-api"
-import { deviceDateTime } from "../model/attendance"
+import { deviceDateTime, deviceDateTimeOccurrences } from "../model/attendance"
+
+type AdjustmentTime = { local: string; instant?: string }
+
+function initialTime(instant?: string | null): AdjustmentTime {
+  return instant ? { local: deviceDateTime(instant), instant } : { local: "" }
+}
+
+function resolveTime({ local, instant }: AdjustmentTime) {
+  const occurrences = deviceDateTimeOccurrences(local)
+  const stored = Date.parse(instant ?? "")
+  const selected = instant
+    ? occurrences.find((choice) => {
+        // Prefills display minutes while the stored instant can include seconds.
+        const elapsed = stored - choice.getTime()
+        return elapsed >= 0 && elapsed < 60000
+      })
+    : occurrences.length === 1
+      ? occurrences[0]
+      : undefined
+  return {
+    occurrences,
+    selected: selected?.toISOString() ?? "",
+    instant: selected && (instant ? new Date(stored) : selected),
+  }
+}
+
+function AdjustmentTimeInput({
+  label,
+  field,
+  time,
+  onChange,
+}: {
+  label: string
+  field: AdjustmentTime
+  time: ReturnType<typeof resolveTime>
+  onChange: (field: AdjustmentTime) => void
+}) {
+  const showOccurrences = time.occurrences.length > 1
+  const offsetFormat = showOccurrences
+    ? new Intl.DateTimeFormat("en", { timeZoneName: "longOffset" })
+    : undefined
+  return (
+    <div className="grid gap-2">
+      <label className="grid gap-2 text-xs">
+        {label}
+        <DateInput
+          type="datetime-local"
+          required
+          value={field.local}
+          aria-invalid={Boolean(field.local && !time.occurrences.length)}
+          onChange={(event) => {
+            const local = event.currentTarget.value
+            if (local !== field.local) onChange({ local })
+          }}
+        />
+      </label>
+      {offsetFormat && (
+        <div className="grid gap-2 text-xs">
+          <span>{label} occurrence</span>
+          <FilterSelect
+            label={`${label} occurrence`}
+            placeholder="Choose a UTC offset"
+            triggerClassName="w-full"
+            value={time.selected}
+            options={time.occurrences.map((instant) => ({
+              value: instant.toISOString(),
+              label:
+                offsetFormat
+                  .formatToParts(instant)
+                  .find((part) => part.type === "timeZoneName")
+                  ?.value.replace("GMT", "UTC") ?? instant.toISOString(),
+            }))}
+            onChange={(instant) => onChange({ local: field.local, instant })}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
 
 export function AdjustmentDialog({
   session,
@@ -30,12 +109,8 @@ export function AdjustmentDialog({
   onSaved: () => void
   allowOvertime?: boolean
 }) {
-  const [start, setStart] = useState(
-    session ? deviceDateTime(session.startedAt) : "",
-  )
-  const [end, setEnd] = useState(
-    session?.endedAt ? deviceDateTime(session.endedAt) : "",
-  )
+  const [start, setStart] = useState(() => initialTime(session?.startedAt))
+  const [end, setEnd] = useState(() => initialTime(session?.endedAt))
   const [reason, setReason] = useState("")
   const [type, setType] = useState<"CORRECTION" | "OVERTIME">("CORRECTION")
   const overtime = type === "OVERTIME"
@@ -43,6 +118,10 @@ export function AdjustmentDialog({
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const startTime = resolveTime(start)
+  const endTime = resolveTime(end)
+  const startLabel = overtime ? "Overtime start" : "Actual clock-in"
+  const endLabel = overtime ? "Overtime end" : "Actual clock-out"
   return (
     <Modal size="md" busy={pending} onClose={onClose}>
       <ModalHeader
@@ -63,6 +142,21 @@ export function AdjustmentDialog({
         onSubmit={async (event) => {
           event.preventDefault()
           if (pending) return
+          if (!startTime.instant || !endTime.instant) {
+            const { label, time } = !startTime.instant
+              ? { label: startLabel, time: startTime }
+              : { label: endLabel, time: endTime }
+            setError(
+              time.occurrences.length
+                ? `Choose a UTC offset for ${label.toLowerCase()}.`
+                : `${label} is not a valid local time in ${zone}. Choose another time.`,
+            )
+            return
+          }
+          if (endTime.instant <= startTime.instant) {
+            setError(`${endLabel} must be after ${startLabel.toLowerCase()}.`)
+            return
+          }
           setPending(true)
           setError("")
           try {
@@ -70,8 +164,8 @@ export function AdjustmentDialog({
               type,
               requestKey,
               ...(session ? { sessionId: session.id } : {}),
-              startedAt: new Date(start).toISOString(),
-              endedAt: new Date(end).toISOString(),
+              startedAt: startTime.instant.toISOString(),
+              endedAt: endTime.instant.toISOString(),
               reason,
             })
             sileo.success({
@@ -101,25 +195,24 @@ export function AdjustmentDialog({
                 }
               />
             )}
-            <label className="grid gap-2 text-xs">
-              {overtime ? "Overtime start" : "Actual clock-in"}
-              <DateInput
-                type="datetime-local"
-                required
-                value={start}
-                onChange={(event) => setStart(event.target.value)}
-              />
-            </label>
-            <label className="grid gap-2 text-xs">
-              {overtime ? "Overtime end" : "Actual clock-out"}
-              <DateInput
-                type="datetime-local"
-                required
-                min={start}
-                value={end}
-                onChange={(event) => setEnd(event.target.value)}
-              />
-            </label>
+            <AdjustmentTimeInput
+              label={startLabel}
+              field={start}
+              time={startTime}
+              onChange={(field) => {
+                setStart(field)
+                setError("")
+              }}
+            />
+            <AdjustmentTimeInput
+              label={endLabel}
+              field={end}
+              time={endTime}
+              onChange={(field) => {
+                setEnd(field)
+                setError("")
+              }}
+            />
             <label className="grid gap-2 text-xs">
               Reason
               <FormTextarea

@@ -50,7 +50,7 @@ export async function selfEmployee(
     fail(403, "Employee attendance access is required")
   const employee = await tx.employee.findUnique({
     where: { userId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, departmentId: true },
   })
   if (!employee)
     fail(409, "Complete your employee profile before using attendance")

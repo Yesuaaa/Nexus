@@ -91,9 +91,45 @@ export function defaultRange() {
     to: new Date(today.getTime() + 86400000).toISOString().slice(0, 10),
   }
 }
+function localClockAsUtc(instant: Date) {
+  const wallTime = new Date(0)
+  wallTime.setUTCFullYear(
+    instant.getFullYear(),
+    instant.getMonth(),
+    instant.getDate(),
+  )
+  wallTime.setUTCHours(
+    instant.getHours(),
+    instant.getMinutes(),
+    instant.getSeconds(),
+    instant.getMilliseconds(),
+  )
+  return wallTime
+}
+
 export function deviceDateTime(value: string) {
-  const date = new Date(value)
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, 16)
+  return localClockAsUtc(new Date(value)).toISOString().slice(0, 16)
+}
+
+/** Find the device-zone instants that round-trip to the entered wall time. */
+export function deviceDateTimeOccurrences(value: string) {
+  if (!value) return []
+  const wallTime = new Date(`${value}Z`)
+  const timestamp = wallTime.getTime()
+  if (!Number.isFinite(timestamp) || !wallTime.toISOString().startsWith(value))
+    return []
+
+  const anchor = new Date(value).getTime()
+  const day = 24 * 60 * 60 * 1000
+  // Sample both sides of the local date so changes of any offset size are considered.
+  const offsets = new Set(
+    [-day, 0, day].map((delta) => {
+      const sample = new Date(anchor + delta)
+      return localClockAsUtc(sample).getTime() - sample.getTime()
+    }),
+  )
+  return [...offsets]
+    .map((offset) => new Date(timestamp - offset))
+    .filter((instant) => localClockAsUtc(instant).getTime() === timestamp)
+    .sort((first, second) => first.getTime() - second.getTime())
 }
