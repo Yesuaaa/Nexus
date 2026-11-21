@@ -22,20 +22,21 @@ import {
   attendanceTimeZone,
   attendanceWorkDate,
 } from "./attendance.validation.js"
+import { attendanceRepository } from "./attendance.repository.js"
 import {
-  attendanceRepository,
-  attendanceWorkdayInclude,
-} from "./attendance.repository.js"
+  attendanceReportOverview,
+  attendanceReportPage,
+} from "./attendance.reporting.js"
 import { summarizeAttendance } from "./attendance.summary.js"
 import {
   notifyOvertime,
+  hrAdjustmentScope,
   submitRecordedOvertime,
 } from "./attendance.overtime.js"
 import { parseAttendanceHistory } from "./attendance.schema.js"
 import { setAttendanceAuditContext as context } from "../workforce-compliance-logs/write-context.js"
 import {
   approvedLeaveForDate,
-  approvedLeaveMinutesByDate,
   approvedLeaveOverlappingInterval,
 } from "../leave/leave.repository.js"
 
@@ -242,6 +243,13 @@ async function validateOvertime(
 ) {
   if (end <= start || end > now)
     fail(400, "Overtime must be recorded work in the past")
+  if (
+    (await approvedLeaveOverlappingInterval(tx, employeeId, start, end)).length
+  )
+    fail(
+      409,
+      "Overtime overlaps approved leave. Ask HR to reconcile the leave first.",
+    )
   const session = await tx.attendanceWorkSession.findFirst({
     where: {
       employeeId,
@@ -332,7 +340,7 @@ async function adjustmentScope(
   const user = await actor(tx, userId)
   return {
     employee: { departmentId },
-    ...(user.role === "ADMIN" ? { status: { not: "PENDING" as const } } : {}),
+    ...(user.role === "ADMIN" ? await hrAdjustmentScope(tx) : {}),
   }
 }
 
@@ -349,24 +357,26 @@ function adjustmentReviewAccess(
   organization: boolean,
   management = true,
   superadmin = false,
+  exception = false,
 ) {
   const own =
     request.requestedById === userId || request.employeeId === ownEmployeeId
   const reviewable =
     request.status === "PENDING" || request.status === "VERIFIED"
+  const finalReview = request.status === "VERIFIED" || exception
   const allowed = management && !own && reviewable
   return {
     own,
     reviewable,
     approve:
       allowed &&
-      (superadmin || (organization && request.status === "VERIFIED")),
+      (superadmin || (organization && finalReview)),
     verify: allowed && !organization && request.status === "PENDING",
     reject:
       allowed &&
       (superadmin ||
         (organization
-          ? request.status === "VERIFIED"
+          ? finalReview
           : request.status === "PENDING")),
   }
 }
@@ -516,57 +526,18 @@ export function createAttendanceManagement(clock: () => Date) {
               })),
             }
           }
-          const where: Prisma.AttendanceWorkdayWhereInput = {
-            workDate: { gte: range.from, lte: range.to },
-            employee: { is: employee },
-          }
-          const { rows, ...paging } = await paginate(
-            range.page,
-            {
-              rows: (db, window) =>
-                db.attendanceWorkday.findMany({
-                  where,
-                  include: {
-                    ...attendanceWorkdayInclude,
-                    employee: {
-                      select: {
-                        id: true,
-                        fullName: true,
-                        employeeId: true,
-                        departmentId: true,
-                        department: { select: { name: true } },
-                        user: { select: { fullName: true } },
-                      },
-                    },
-                  },
-                  orderBy: [{ workDate: "desc" }, { id: "desc" }],
-                  ...window,
-                }),
-              count: (db) => db.attendanceWorkday.count({ where }),
-            },
-            { tx },
-          )
-          const leaveByDate = await approvedLeaveMinutesByDate(
+          const { rows, ...paging } = await attendanceReportPage(
             tx,
-            [...new Set(rows.map((day) => day.employeeId))],
-            range.from,
-            range.to,
+            range,
+            { employeeId, departmentId },
+            now,
           )
           return {
             asOf: now,
             ...paging,
-            workdays: rows.map((day) => ({
-              ...summarizeAttendance(
-                {
-                  ...day,
-                  approvedLeaveMinutes:
-                    leaveByDate.get(
-                      `${day.employeeId}:${day.workDate.toISOString().slice(0, 10)}`,
-                    ) ?? 0,
-                },
-                now,
-              ),
-              employee: attendanceEmployeeIdentity(day.employee),
+            workdays: rows.map(({ day, employee }) => ({
+              ...day,
+              employee: attendanceEmployeeIdentity(employee),
             })),
           }
         },
@@ -655,40 +626,16 @@ export function createAttendanceManagement(clock: () => Date) {
           )
             fail(404, "Department not found")
           const now = clock()
-          const rows = await tx.attendanceWorkday.findMany({
-            where: {
-              workDate: { gte: range.from, lte: range.to },
-              ...(employee ? { employeeId: employee.id } : {}),
-              ...(departmentId ? { employee: { departmentId } } : {}),
-            },
-            include: {
-              ...attendanceWorkdayInclude,
-              employee: { select: { fullName: true } },
-            },
-            take: 10001,
-          })
-          if (rows.length > 10000)
-            fail(
-              400,
-              "Narrow the overview date range to at most 10,000 records",
-            )
-          const leaveByDate = await approvedLeaveMinutesByDate(
+          const rows = await attendanceReportOverview(
             tx,
-            [...new Set(rows.map((day) => day.employeeId))],
-            range.from,
-            range.to,
+            range,
+            { employeeId: employee?.id, departmentId },
+            now,
           )
-          const days = rows.map((day) =>
-            summarizeAttendance(
-              {
-                ...day,
-                approvedLeaveMinutes:
-                  leaveByDate.get(
-                    `${day.employeeId}:${day.workDate.toISOString().slice(0, 10)}`,
-                  ) ?? 0,
-              },
-              now,
-            ),
+          const days = rows.map(({ day }) => day)
+          const recorded = rows.filter(({ day }) => day.id !== null)
+          const approvedLeave = days.filter(
+            (day) => day.approvedLeaveMinutes > 0,
           )
           const statusBreakdown = {
             NOT_STARTED: 0,
@@ -702,19 +649,19 @@ export function createAttendanceManagement(clock: () => Date) {
             const status = day.status as keyof typeof statusBreakdown
             statusBreakdown[status] += 1
           }
-          const sessions = rows.flatMap((day) => day.sessions)
-          const open = sessions.filter((session) => !session.endedAt)
+          const sessions = recorded.flatMap(({ day }) => day.sessions)
+          const open = sessions.filter((session) => !session.endedAt && !session.suspendedAt)
           const onBreak = open.filter((session) =>
             session.breaks.some((pause) => !pause.endedAt && !pause.isPaid),
           ).length
-          const recentActivity = rows
-            .flatMap((day) =>
+          const recentActivity = recorded
+            .flatMap(({ day, employee }) =>
               day.sessions.flatMap((session) => [
                 {
                   id: session.id + ":in",
                   action: "CLOCK_IN" as const,
                   at: session.startedAt,
-                  employeeName: day.employee.fullName,
+                  employeeName: employee.fullName,
                 },
                 ...(session.endedAt
                   ? [
@@ -722,7 +669,7 @@ export function createAttendanceManagement(clock: () => Date) {
                         id: session.id + ":out",
                         action: "CLOCK_OUT" as const,
                         at: session.endedAt,
-                        employeeName: day.employee.fullName,
+                        employeeName: employee.fullName,
                       },
                     ]
                   : []),
@@ -731,7 +678,7 @@ export function createAttendanceManagement(clock: () => Date) {
                     id: pause.id + ":start",
                     action: "BREAK_START" as const,
                     at: pause.startedAt,
-                    employeeName: day.employee.fullName,
+                    employeeName: employee.fullName,
                   },
                   ...(pause.endedAt
                     ? [
@@ -739,7 +686,7 @@ export function createAttendanceManagement(clock: () => Date) {
                           id: pause.id + ":end",
                           action: "BREAK_END" as const,
                           at: pause.endedAt,
-                          employeeName: day.employee.fullName,
+                          employeeName: employee.fullName,
                         },
                       ]
                     : []),
@@ -754,12 +701,12 @@ export function createAttendanceManagement(clock: () => Date) {
           return {
             checkIns: {
               employees: new Set(
-                rows
-                  .filter((day) => day.sessions.length)
-                  .map((day) => day.employeeId),
+                recorded
+                  .filter(({ day }) => day.sessions.length)
+                  .map(({ day }) => day.employeeId),
               ).size,
               total: sessions.length,
-              closed: sessions.length - open.length,
+              closed: sessions.filter(session=>session.endedAt).length,
               working: open.length - onBreak,
               onBreak,
               recentActivity,
@@ -770,8 +717,14 @@ export function createAttendanceManagement(clock: () => Date) {
               : departmentId
                 ? "DEPARTMENT"
                 : "ORGANIZATION",
-            recordedDays: days.length,
-            employees: new Set(days.map((day) => day.employeeId)).size,
+            recordedDays: recorded.length,
+            employees: new Set(recorded.map(({ day }) => day.employeeId)).size,
+            approvedLeaveDays: approvedLeave.length,
+            approvedLeaveHours:
+              approvedLeave.reduce(
+                (sum, day) => sum + day.approvedLeaveMinutes,
+                0,
+              ) / 60,
             workedHours: days.reduce((sum, day) => sum + day.workedHours, 0),
             requiredHours: days.reduce(
               (sum, day) => sum + day.requiredHours,
@@ -794,16 +747,32 @@ export function createAttendanceManagement(clock: () => Date) {
         { isolationLevel: "RepeatableRead" },
       )
     },
-    async policies(userId: string) {
+    async policies(userId: string, query: Record<string, unknown> = {}) {
+      object(query, ["page", "search", "status", "size"])
+      const page = parsePage(query.page)
+      const search = parseQueryString(query.search)
+      if (page === null || search === null || search.length > 100 ||
+          (query.size !== undefined && query.size !== "10" && query.size !== "200") ||
+          (query.status !== undefined && query.status !== "active" && query.status !== "archived"))
+        fail(400, "Invalid policy directory filters")
+      const pageSize = query.size === "10" ? 10 : 200
+      const where: Prisma.AttendancePolicyWhereInput = {
+        ...(query.status === "active" ? { archivedAt: null } : query.status === "archived" ? { archivedAt: { not: null } } : {}),
+        ...insensitive<Prisma.AttendancePolicyWhereInput>(search, ["name", "timeZone"]),
+      }
       return getPrisma()!.$transaction(async (tx) => {
         await managementScope(tx, userId, true)
         const [totalPolicies, activePolicies, assignmentPeriods] =
           await Promise.all([
             tx.attendancePolicy.count(),
             tx.attendancePolicy.count({ where: { archivedAt: null } }),
-            tx.attendancePolicyAssignment.count(),
+            tx.attendancePolicyAssignment.count({
+              where: { cancelledAt: null },
+            }),
           ])
         return {
+          page, pageSize,
+          total: search || query.status ? await tx.attendancePolicy.count({where}) : totalPolicies,
           summary: {
             totalPolicies,
             activePolicies,
@@ -816,10 +785,12 @@ export function createAttendanceManagement(clock: () => Date) {
               _count: { select: { assignments: true } },
             },
             orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-            take: 200,
+            where,
+            skip: (page - 1) * pageSize,
+            take: pageSize,
           }),
         }
-      })
+      }, {isolationLevel: "RepeatableRead"})
     },
     async createPolicy(userId: string, body: unknown) {
       const { days, ...input } = policyInput(body)
@@ -983,19 +954,34 @@ export function createAttendanceManagement(clock: () => Date) {
             },
             { tx },
           )
-          const today = attendanceWorkDate(clock(), policy.timeZone)
+          const asOf = clock().toISOString()
+          const statuses = rows.length
+            ? await tx.$queryRaw<
+                {
+                  id: string
+                  status: "SCHEDULED" | "ENDED" | "CURRENT" | "CANCELLED"
+                }[]
+              >`
+                SELECT id, CASE
+                  WHEN "cancelledAt" IS NOT NULL THEN 'CANCELLED'
+                  WHEN ${asOf}::timestamptz < ("effectiveFrom"::timestamp AT TIME ZONE ${policy.timeZone})
+                    THEN 'SCHEDULED'
+                  WHEN ${asOf}::timestamptz >= attendance_assignment_end_at("employeeId", "effectiveUntil", ${policy.timeZone})
+                    THEN 'ENDED'
+                  ELSE 'CURRENT'
+                END AS status
+                FROM "AttendancePolicyAssignment"
+                WHERE id IN (${Prisma.join(rows.map(({ id }) => id))})
+              `
+            : []
+          const statusById = new Map(
+            statuses.map(({ id, status }) => [id, status]),
+          )
           return {
             ...paging,
             assignments: rows.map((assignment) => ({
               ...assignment,
-              status:
-                assignment.effectiveFrom.toISOString().slice(0, 10) > today
-                  ? "SCHEDULED"
-                  : assignment.effectiveUntil &&
-                      assignment.effectiveUntil.toISOString().slice(0, 10) <=
-                        today
-                    ? "ENDED"
-                    : "CURRENT",
+              status: statusById.get(assignment.id)!,
             })),
           }
         },
@@ -1015,7 +1001,9 @@ export function createAttendanceManagement(clock: () => Date) {
             where: { id: assignmentId },
             include: { policy: true },
           })
-        const today = attendanceWorkDate(clock(), assignment.policy.timeZone)
+        if (assignment.cancelledAt) return { unassigned: true }
+        const now = clock()
+        const today = attendanceWorkDate(now, assignment.policy.timeZone)
         const tomorrow = new Date(today)
         tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
         if (
@@ -1042,9 +1030,55 @@ export function createAttendanceManagement(clock: () => Date) {
               409,
               "This assignment has recorded attendance and cannot be cancelled",
             )
-          await tx.attendancePolicyAssignment.delete({
-            where: { id: assignmentId },
+          const leaveHistory = await tx.leaveRequestDay.findFirst({
+            where: { assignmentId },
+            select: { id: true },
           })
+          if (leaveHistory) {
+            await tx.attendancePolicyAssignment.update({
+              where: { id: assignmentId },
+              data: { cancelledAt: now },
+            })
+          } else {
+            await tx.attendancePolicyAssignment.delete({
+              where: { id: assignmentId },
+            })
+          }
+          const next = await tx.attendancePolicyAssignment.findFirst({
+            where: {
+              employeeId: assignment.employeeId,
+              cancelledAt: null,
+              effectiveFrom: { gt: assignment.effectiveFrom },
+            },
+            orderBy: { effectiveFrom: "asc" },
+          })
+          let restoredId: string | null = null
+          let restoredUntil = assignment.replacedUntil
+          if (assignment.replacedAssignmentId) {
+            if (next && (!restoredUntil || next.effectiveFrom < restoredUntil))
+              restoredUntil = next.effectiveFrom
+            const restored = await tx.attendancePolicyAssignment.updateMany({
+              where: {
+                id: assignment.replacedAssignmentId,
+                employeeId: assignment.employeeId,
+                cancelledAt: null,
+                effectiveUntil: assignment.effectiveFrom,
+              },
+              data: { effectiveUntil: restoredUntil },
+            })
+            if (restored.count) restoredId = assignment.replacedAssignmentId
+          }
+          if (next?.replacedAssignmentId === assignment.id) {
+            const continues = restoredUntil?.getTime() === next.effectiveFrom.getTime()
+              && assignment.replacedUntil?.getTime() !== next.effectiveFrom.getTime()
+            await tx.attendancePolicyAssignment.update({
+              where: { id: next.id },
+              data: {
+                replacedAssignmentId: continues ? restoredId : null,
+                replacedUntil: continues && restoredId ? assignment.replacedUntil : null,
+              },
+            })
+          }
         } else {
           if (
             await tx.attendanceWorkday.findFirst({
@@ -1097,6 +1131,7 @@ export function createAttendanceManagement(clock: () => Date) {
           const overlapping = await tx.attendancePolicyAssignment.findMany({
             where: {
               employeeId,
+              cancelledAt: null,
               OR: [{ effectiveUntil: null }, { effectiveUntil: { gt: from } }],
             },
           })
@@ -1129,18 +1164,40 @@ export function createAttendanceManagement(clock: () => Date) {
             })
           return {
             assignment: await tx.attendancePolicyAssignment.create({
-              data: { employeeId, policyId, effectiveFrom: from },
+              data: {
+                employeeId, policyId, effectiveFrom: from,
+                replacedAssignmentId: overlapping[0]?.id,
+                replacedUntil: overlapping[0]?.effectiveUntil,
+              },
             }),
           }
         },
         { isolationLevel: "ReadCommitted" },
       )
     },
+    async adjustmentDetail(userId:string, adjustmentId:string) {
+      return getPrisma()!.$transaction(async tx=>{
+        const user=await actor(tx,userId)
+        if(user.role==="USER") fail(403,"Workforce access required")
+        const employee=await tx.employee.findUnique({where:{userId},select:{id:true}})
+        const head=user.role==="STAFF" ? await tx.department.findUnique({where:{headId:userId},select:{id:true}}) : null
+        const organization=hasPermission(user.role,Permission.EMPLOYEES_READ)
+        const scope: Prisma.AttendanceAdjustmentWhereInput[]=[{requestedById:userId}]
+        if(employee) scope.push({employeeId:employee.id})
+        if(head) scope.push({employee:{departmentId:head.id}})
+        if(user.role==="ADMIN" && organization) scope.push(await hrAdjustmentScope(tx))
+        const row=await tx.attendanceAdjustment.findFirst({where:{id:adjustmentId,...(user.role==="SUPERADMIN" && organization?{}:{OR:scope})},include:adjustmentInclude})
+        if(!row) fail(404,"Attendance request not found")
+        const {approve,verify,reject}=adjustmentReviewAccess(row,userId,employee?.id,organization,organization || head?.id===row.employee.departmentId,user.role==="SUPERADMIN",user.role==="ADMIN" && organization)
+        return {adjustment:{...row,capabilities:{approve,verify,reject}}}
+      },{isolationLevel:"RepeatableRead"})
+    },
     async adjustmentOverview(userId: string, query: Record<string, unknown>) {
       object(query, ["scope"])
       return getPrisma()!.$transaction(
         async (tx) => {
           const where = await adjustmentScope(tx, userId, query.scope)
+          const exceptions = await tx.attendanceAdjustment.groupBy({by:["type"],where:{AND:[where, await hrAdjustmentScope(tx)],status:"PENDING"},_count:{_all:true}})
           const rows = await tx.attendanceAdjustment.groupBy({
             by: ["type", "status"],
             where,
@@ -1153,6 +1210,7 @@ export function createAttendanceManagement(clock: () => Date) {
               status: row.status,
               count: row._count._all,
               overtimeMinutes: row._sum.overtimeMinutes ?? 0,
+              awaitingHrPending: row.status === "PENDING" ? exceptions.find(item=>item.type===row.type)?._count._all ?? 0 : 0,
             })),
           }
         },
@@ -1230,6 +1288,7 @@ export function createAttendanceManagement(clock: () => Date) {
                 hasPermission(user.role, Permission.EMPLOYEES_READ),
                 query.scope === "team",
                 user.role === "SUPERADMIN",
+                user.role === "ADMIN" && query.scope === "team",
               )
               return { ...row, capabilities: { approve, verify, reject } }
             }),
@@ -1381,6 +1440,11 @@ export function createAttendanceManagement(clock: () => Date) {
             where: { id: adjustmentId },
           })
           const reviewer = await actor(tx, userId)
+          if(currentEmployee.departmentId !== snapshot.employee.departmentId)
+            fail(409,"Employee placement changed; refresh and try again")
+          const exception = reviewer.role === "ADMIN" && request.status === "PENDING" && Boolean(await tx.attendanceAdjustment.findFirst({
+            where:{id:request.id,...await hrAdjustmentScope(tx)},select:{id:true}
+          }))
           const access = adjustmentReviewAccess(
             request,
             userId,
@@ -1388,13 +1452,14 @@ export function createAttendanceManagement(clock: () => Date) {
             !currentScope,
             true,
             reviewer.role === "SUPERADMIN",
+            exception,
           )
           if (access.own)
             fail(403, "You cannot review your own attendance request")
           const overtime = request.type === "OVERTIME"
           if (!access.reviewable)
             fail(409, "This request has already been reviewed")
-          if (reviewer.role === "ADMIN" && request.status === "PENDING")
+          if (reviewer.role === "ADMIN" && request.status === "PENDING" && !exception)
             fail(
               403,
               "Department Head verification is required before HR review",

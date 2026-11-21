@@ -38,6 +38,7 @@ export type WorkloadPlanning = {
   approvedLeaveHours?: number
   confirmedAvailableSlots: null
   commitments: {
+    overlapsLeave?: boolean
     id: string
     title: string
     startsAt: string

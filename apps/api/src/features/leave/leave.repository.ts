@@ -13,7 +13,20 @@ export const leaveAdminVisibility = {
   ],
 } satisfies Prisma.LeaveRequestWhereInput
 
-/** Interval ends are exclusive, so a punch ending at midnight does not cover the next date. */
+/** An interval ending at midnight stops before the next date. */
+export function leaveDayOverlapsInterval(
+  day: { workDate: Date; timeZone: string },
+  start: Date,
+  end: Date,
+) {
+  const label = day.workDate.toISOString().slice(0, 10)
+  const lastInstant = new Date(Math.max(start.getTime(), end.getTime() - 1))
+  return (
+    attendanceWorkDate(start, day.timeZone) <= label &&
+    attendanceWorkDate(lastInstant, day.timeZone) >= label
+  )
+}
+
 export async function approvedLeaveOverlappingInterval(
   tx: Prisma.TransactionClient,
   employeeId: string,
@@ -28,16 +41,7 @@ export async function approvedLeaveOverlappingInterval(
     },
     select: { workDate: true, timeZone: true, requestId: true },
   })
-  return days.filter((day) => {
-    const label = day.workDate.toISOString().slice(0, 10)
-    return (
-      attendanceWorkDate(start, day.timeZone) <= label &&
-      attendanceWorkDate(
-        new Date(Math.max(start.getTime(), end.getTime() - 1)),
-        day.timeZone,
-      ) >= label
-    )
-  })
+  return days.filter((day) => leaveDayOverlapsInterval(day, start, end))
 }
 
 export async function approvedLeaveForDate(
@@ -54,27 +58,4 @@ export async function approvedLeaveForDate(
     },
     select: { leaveMinutes: true, requestId: true },
   })
-}
-
-export async function approvedLeaveMinutesByDate(
-  tx: Prisma.TransactionClient,
-  employeeIds: readonly string[],
-  from: Date,
-  to: Date,
-) {
-  if (!employeeIds.length) return new Map<string, number>()
-  const days = await tx.leaveRequestDay.findMany({
-    where: {
-      employeeId: { in: [...employeeIds] },
-      workDate: { gte: from, lte: to },
-      request: { status: "APPROVED" },
-    },
-    select: { employeeId: true, workDate: true, leaveMinutes: true },
-  })
-  return new Map(
-    days.map((day) => [
-      `${day.employeeId}:${day.workDate.toISOString().slice(0, 10)}`,
-      day.leaveMinutes,
-    ]),
-  )
 }

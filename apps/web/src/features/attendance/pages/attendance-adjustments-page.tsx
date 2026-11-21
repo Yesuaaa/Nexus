@@ -18,6 +18,7 @@ import {
 import { AdjustmentDialog } from "../components/adjustment-dialog"
 import {
   attendanceAdjustments,
+  attendanceAdjustmentDetail,
   reviewAttendanceAdjustment,
   type AttendanceAdjustment,
 } from "../api/attendance-api"
@@ -29,9 +30,12 @@ import { AttendanceAdjustmentReviewPanel } from "../components/attendance-adjust
 
 export function AttendanceAdjustmentsPage({
   requestType,
+  linkedId,
 }: {
+ linkedId?:string
   requestType?: "CORRECTION" | "OVERTIME"
 }) {
+  const [linkedOpen,setLinkedOpen]=useState(true)
   const account = usePortalAccount(),
     manager = canManageAttendance(account)
   const selfService = canAccessPersonalAttendance(account)
@@ -57,7 +61,7 @@ export function AttendanceAdjustmentsPage({
   const [error, setError] = useState("")
   const list = useAsyncResource(
     (signal) =>
-      attendanceAdjustments(
+      linkedId ? attendanceAdjustmentDetail(linkedId,signal).then(({adjustment})=>({adjustments:[adjustment],total:1,page:1,pageSize:1,capabilities:{requestCorrection:false}})) : attendanceAdjustments(
         manager && (!selfService || scope === "team") ? "team" : "mine",
         page,
         settledSearch,
@@ -66,6 +70,7 @@ export function AttendanceAdjustmentsPage({
         status,
       ),
     [
+      linkedId,
       scope,
       page,
       manager,
@@ -82,6 +87,8 @@ export function AttendanceAdjustmentsPage({
   )
   const data = list.error && !searchPending ? undefined : list.data
   const listLoading = list.loading || searchPending
+  const linkedRequest= linkedId && linkedOpen && !list.loading && !list.error ? data?.adjustments[0] : undefined
+  const visibleReview=review ?? (linkedRequest?{request:linkedRequest,decision:null,readOnly:true}:null)
   const currentReview = data?.adjustments.find(
     (item) => item.id === review?.request.id,
   )
@@ -256,19 +263,19 @@ export function AttendanceAdjustmentsPage({
           onSaved={list.retry}
         />
       )}
-      {review && data && (
+      {visibleReview && data && (
         <AttendanceAdjustmentReviewPanel
-          request={currentReview ?? review.request}
-          decision={review.decision}
-          readOnly={review.readOnly || !reviewAllowed}
+          request={currentReview ?? visibleReview.request}
+          decision={visibleReview.decision}
+          readOnly={visibleReview.readOnly || !reviewAllowed}
           verifying={
             Boolean(currentReview?.capabilities?.verify) &&
-            review.decision === "APPROVED"
+            visibleReview.decision === "APPROVED"
           }
           zone={zone}
           pending={pending}
           error={error}
-          onClose={() => setReview(null)}
+          onClose={() => {setReview(null);setLinkedOpen(false)}}
           onSubmit={submitReview}
         />
       )}

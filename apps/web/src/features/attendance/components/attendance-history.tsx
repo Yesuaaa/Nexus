@@ -25,7 +25,7 @@ import type {
 import {
   attendanceDate,
   attendanceStatus,
-  attendanceStatusLabels,
+  attendanceStatusLabel,
   attendanceStatusTones,
   duration,
   isOvernight,
@@ -111,14 +111,16 @@ export function AttendanceHistoryTable({
           ) : !days.length ? (
             <AttendanceTableEmpty
               colSpan={6}
-              message="No attendance records. Recorded workdays will appear here. Try another date range."
+              message="No attendance records or approved leave in this date range."
             />
           ) : (
             days.map((day) => {
               const status = attendanceStatus(day)
               const firstSession = day.sessions[0]
               const lastSession = day.sessions.at(-1)
-              const actionId = `attendance-history-actions-${day.id ?? `${day.employeeId}-${day.workDate}`}`
+              const key = day.id ?? `${day.employeeId}-${day.workDate}`
+              const actionId = `attendance-history-actions-${key}`
+              const hasLeave = (day.approvedLeaveMinutes ?? 0) > 0
               const overnight = day.sessions.some((session) =>
                 isOvernight(
                   session.startedAt,
@@ -129,7 +131,7 @@ export function AttendanceHistoryTable({
               )
               return (
                 <ResponsiveDataTableRow
-                  key={day.id ?? day.workDate}
+                  key={key}
                   className={`${historyGrid} min-h-[68px] min-w-0 border-b border-[#eceef1] px-4 py-3 text-xs last:border-0 @max-[820px]:grid-cols-1 @max-[820px]:gap-y-3.5`}
                 >
                   <ResponsiveDataTableCell className="min-w-0">
@@ -142,18 +144,25 @@ export function AttendanceHistoryTable({
                     {!day.employee && (
                       <span className="text-xs font-medium">My attendance</span>
                     )}
+                    {!firstSession && (
+                      <div className="mt-1 text-[#65718a]">{day.workDate}</div>
+                    )}
                   </ResponsiveDataTableCell>
                   <ResponsiveDataTableCell className="min-w-0 text-xs leading-5 text-[#65718a]">
                     {firstSession
                       ? attendanceDate(firstSession.startedAt, day.timeZone)
-                      : "No clock-in recorded"}
+                      : hasLeave
+                        ? "—"
+                        : "No clock-in recorded"}
                   </ResponsiveDataTableCell>
                   <ResponsiveDataTableCell className="min-w-0 text-xs leading-5 text-[#65718a]">
                     {lastSession?.endedAt
                       ? attendanceDate(lastSession.endedAt, day.timeZone)
                       : lastSession
                         ? "Still clocked in"
-                        : "No clock-out recorded"}
+                        : hasLeave
+                          ? "—"
+                          : "No clock-out recorded"}
                   </ResponsiveDataTableCell>
                   <ResponsiveDataTableCell className="text-xs">
                     <span className="font-semibold tabular-nums">
@@ -163,7 +172,7 @@ export function AttendanceHistoryTable({
                   </ResponsiveDataTableCell>
                   <ResponsiveDataTableCell className="min-w-0">
                     <Pill tone={attendanceStatusTones[status]}>
-                      {attendanceStatusLabels[status]}
+                      {attendanceStatusLabel(day)}
                     </Pill>
                     {day.pendingCorrections > 0 && (
                       <div className="mt-1">

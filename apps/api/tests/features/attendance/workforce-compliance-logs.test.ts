@@ -6,6 +6,7 @@ import type { Role } from "../../../src/generated/prisma/client.js"
 import { startPgliteApp } from "../../support/pglite-app.js"
 
 type Log = {
+  id: string
   operationId?: string
   message: string
   summaryDetail: string | null
@@ -70,6 +71,8 @@ test(
         total: number
         page: number
         pageSize: number
+        snapshot: string
+        asOf: string
       }
     }
 
@@ -82,6 +85,10 @@ test(
       "event=unknown",
       "correlationId=bad",
       "from=bad",
+      "asOf=bad",
+      "snapshot=2:1:",
+      "snapshot=1:4:4",
+      "range=unknown",
       "search=%00",
       "actorId[]=x",
     ])
@@ -226,5 +233,27 @@ test(
     assert.equal(first.pageSize, 25)
     assert.equal(last.page, 2)
     assert.equal(last.events.length, 3)
+
+    const firstRecent = await read("?source=policies&range=24h")
+    await prisma.attendancePolicy.create({
+      data: { name: "New policy during browsing", timeZone: "Asia/Manila" },
+    })
+    // This row becomes visible after page one with a timestamp inside its window.
+    await prisma.attendanceAudit.create({ data: {
+      actionId: randomUUID(), entityId: "backdated", entityType: "AttendancePolicy", action: "INSERT",
+      reason: "Historical import", after: { name: "Historical import" },
+      createdAt: new Date(Date.parse(firstRecent.asOf) - 100),
+    } })
+    const next = await read(
+      `?source=policies&range=24h&page=2&asOf=${encodeURIComponent(firstRecent.asOf)}&snapshot=${encodeURIComponent(firstRecent.snapshot)}`,
+    )
+    assert.equal(next.asOf, firstRecent.asOf)
+    assert.equal(next.total, firstRecent.total)
+    assert.deepEqual(
+      next.events.map(({ id }) => id),
+      last.events.map(({ id }) => id),
+    )
+    const refreshed = await read("?source=policies&range=24h")
+    assert.equal(refreshed.total, firstRecent.total + 2)
   },
 )

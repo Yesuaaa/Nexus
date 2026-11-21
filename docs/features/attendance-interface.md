@@ -86,9 +86,13 @@ Existing-session corrections retain their starting local date and original workd
 
 Policy details → Assigned people offers Unassign with confirmation for policy administrators. Current assignments end tomorrow in the policy timezone, preserving today's workday; scheduled assignments without recorded attendance are cancelled. Ended assignments remain as history. The operation uses the employee lock, administrative permission checks, and transactional audit context through `POST /api/attendance/assignments/:assignmentId/unassign`.
 
+Active leave requests must be resolved before cancelling their scheduled assignment. When leave history references the assignment, Assigned people retains it as Cancelled. The employee can receive a replacement starting on the same date. Attendance, leave calculations, workload planning, and assignment-period totals use effective assignments. Apply migration `20261121130000_attendance_assignment_cancellation` before deploying the updated API.
+
 Policies define all seven weekday working flags and integer-minute targets, a named timezone, unpaid-break availability, and whether overnight work requires review. There is no fixed clock-in window. Overnight work is always recorded across midnight; the review flag does not silently end a session or approve payroll overtime.
 
 Admin can create or edit a policy in place. Edits retain the policy ID and apply to new workdays; recorded workdays preserve the policy name, timezone, daily target, break availability, and overnight-review rule. Assigned policies retain their timezone so effective-date boundaries remain stable. Assignments can start today or on a future date and close earlier overlapping periods only when existing records are preserved.
+
+Adjacent policy assignments switch at midnight on the effective date in the incoming policy's timezone. If the outgoing policy's local date rolls over first, new punches use its final workday until the switch. For example, a Manila-to-UTC change takes effect at 8 a.m. Manila time, and punches earlier that morning use the outgoing policy's last workday. Open sessions keep their original workday through clock-out. Assignment status uses the same cutoff. Apply migration `20261121120000_attendance_policy_timezone_handoff` before deploying the updated API.
 
 Archive is the soft-delete action. The policy directory has active and archived filters, and archived policies can be restored. Existing assignments continue to work while archived; new assignments and edits require restoration. Permanent deletion requires archiving first and is limited to policies with no assignments, preserving attendance history. Policy details reuse the shared tabs, `MemberIdentity`, status pills, loading/error state, empty state, and pagination to show current, scheduled, and ended assignments with employee identities and effective dates.
 
@@ -119,6 +123,8 @@ These complement the [self-service attendance API](attendance-backend.md):
 
 Overview queries are limited to 10,000 records and policy listings to the latest 200 versions. Time Logs exports the currently displayed page as CSV, with daily totals included once per workday and actual session instants retained.
 
+Attendance history and Time Logs Records include approved leave on working dates, even when the employee has no clock records. Leave and recorded work share the same filters and pagination. Leave rows use the saved policy snapshot for the date, and the CSV includes approved leave hours. Personal and management overviews count approved leave days separately from recorded workdays and check-ins. Only current approvals contribute leave hours, so reversals remove the projected leave from the next report.
+
 ## Verification
 
 ### Management design alignment (2026-11-13)
@@ -146,6 +152,8 @@ Future work includes break-time corrections, cross-workday reassignment, approve
 OT & Agreements retains `/attendance/adjustments` for route compatibility. Corrections and overtime share the existing search field, type filter, management scope toggle, responsive table, pills, ellipsis menu, and review side panel. Staff use the existing correction modal for missing or incorrect attendance.
 
 Clock-out automatically creates a Pending overtime request for whole excess worked minutes, excluding unpaid breaks. The request and punch are saved atomically. Split sessions submit only additional excess; rejected time is not resubmitted. Active sessions do not submit overtime. Pending corrections defer automatic submission until attendance is resolved. Approved corrections also submit newly recorded excess.
+
+Automatic overtime skips intervals that overlap approved leave. Manual submission, Head verification, and final approval also check for overlap. Overtime may end exactly when leave begins. Clock-out recovery records the shift and alerts HR when it crosses approved leave.
 
 The existing notification inbox alerts the current Department Head and active HR/Admin accounts. Department Heads verify requests within their department; verification notifies HR for final approval. HR cannot approve Pending overtime before department verification. A department needs an authorized head to complete this step, and self-review remains prohibited. Verification identity, date, and note are preserved separately from final review. Approval records overtime minutes without modifying attendance timestamps or calculating pay. Corrections are blocked while the workday has pending, verified, or approved overtime to protect reviewed totals. Existing manual overtime API requests remain supported for compatibility and use the same validation and approval flow.
 

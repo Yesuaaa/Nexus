@@ -6,6 +6,9 @@ import { presentWorkforceComplianceLogs } from "./projection.js"
 type LogFilters = {
   from?: Date
   to?: Date
+  snapshot?: string
+  asOf?: Date
+  rangeDays: number
   page: number
   source?: string
   event?: string
@@ -35,7 +38,7 @@ export type ComplianceHistoryRow = {
   createdAt: Date
 }
 
-function history(from: Date, to: Date) {
+function history(from: Date, to: Date, asOf: Date, snapshot: string) {
   return Prisma.sql`
     SELECT a.id, coalesce(a."operationId"::text, 'attendance:' || a.id) AS "groupId",
       a."operationId", a."correlationId", a."actorRoleAtTime", a."actorId",
@@ -57,6 +60,8 @@ function history(from: Date, to: Date) {
           AND a.before->>'archivedAt' IS NULL AND a.after->>'archivedAt' IS NOT NULL THEN 'ARCHIVED'
         WHEN a."entityType" = 'AttendancePolicy' AND a.action = 'UPDATE'
           AND a.before->>'archivedAt' IS NOT NULL AND a.after->>'archivedAt' IS NULL THEN 'RESTORED'
+        WHEN a."entityType" = 'AttendancePolicyAssignment' AND a.action = 'UPDATE'
+          AND a.before->>'cancelledAt' IS NULL AND a.after->>'cancelledAt' IS NOT NULL THEN 'CANCELLED'
         WHEN a.action = 'INSERT' THEN 'CREATED'
         WHEN a.action = 'DELETE' THEN 'DELETED'
         ELSE 'UPDATED'
@@ -64,6 +69,8 @@ function history(from: Date, to: Date) {
       a.before, a.after, a."createdAt"
     FROM "AttendanceAudit" a
     WHERE a."createdAt" BETWEEN ${from.toISOString()}::timestamptz AND ${to.toISOString()}::timestamptz
+      AND a."createdAt" < ${asOf.toISOString()}::timestamptz
+      AND (a."writerTransaction" IS NULL OR pg_visible_in_snapshot(a."writerTransaction"::xid8, ${snapshot}::pg_snapshot))
       AND a.before IS DISTINCT FROM a.after
     UNION ALL
     SELECT d.id, coalesce(d."operationId"::text, 'leave:' || d.id),
@@ -72,6 +79,8 @@ function history(from: Date, to: Date) {
       jsonb_build_object('status', d."fromStatus"), jsonb_build_object('status', d."toStatus"), d."createdAt"
     FROM "LeaveDecision" d JOIN "LeaveRequest" r ON r.id = d."requestId"
     WHERE d."createdAt" BETWEEN ${from.toISOString()}::timestamptz AND ${to.toISOString()}::timestamptz
+      AND d."createdAt" < ${asOf.toISOString()}::timestamptz
+      AND (d."writerTransaction" IS NULL OR pg_visible_in_snapshot(d."writerTransaction"::xid8, ${snapshot}::pg_snapshot))
   `
 }
 
@@ -106,14 +115,17 @@ export async function listWorkforceComplianceLogs(filters: LogFilters) {
 
   return getPrisma()!.$transaction(
     async (tx) => {
-      const [{ asOf }] = await tx.$queryRaw<{ asOf: Date }[]>`
-        SELECT CURRENT_TIMESTAMP(3) AS "asOf"
+      const [{ now, currentSnapshot }] = await tx.$queryRaw<{ now: Date; currentSnapshot: string }[]>`
+        SELECT date_trunc('milliseconds', CURRENT_TIMESTAMP) AS now, pg_current_snapshot()::text AS "currentSnapshot"
       `
+      const asOf = filters.asOf && filters.asOf < now ? filters.asOf : now
       const to = filters.to && filters.to < asOf ? filters.to : asOf
-      const from = filters.from ?? new Date(to.getTime() - 30 * day)
+      const from =
+        filters.from ?? new Date(to.getTime() - filters.rangeDays * day)
       if (from > to || to.getTime() - from.getTime() > 366 * day)
         fail(400, "Choose a log range of at most 366 days")
-      const rowsInRange = history(from, to)
+      const snapshot = filters.snapshot ?? currentSnapshot
+      const rowsInRange = history(from, to, asOf, snapshot)
       const [result] = await tx.$queryRaw<
         { total: number; page: number; ids: string[] }[]
       >`
@@ -144,6 +156,7 @@ export async function listWorkforceComplianceLogs(filters: LogFilters) {
         : []
       return {
         asOf,
+        snapshot,
         events: presentWorkforceComplianceLogs(result.ids, rows),
         total: result.total,
         page: result.page,

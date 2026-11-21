@@ -37,11 +37,18 @@ export function attendanceStatus(
   return "NOT_STARTED"
 }
 
+export function attendanceStatusLabel(day: AttendanceWorkday) {
+  const status = attendanceStatus(day)
+  return status === "NOT_REQUIRED" && (day.approvedLeaveMinutes ?? 0) > 0
+    ? "Approved leave"
+    : attendanceStatusLabels[status]
+}
+
 export function elapsedWork(day: AttendanceWorkday, asOf: number): number {
   return day.sessions.reduce((total, session) => {
     const start = Date.parse(session.startedAt)
     const end = Math.min(
-      session.endedAt ? Date.parse(session.endedAt) : asOf,
+      session.endedAt || session.suspendedAt ? Date.parse((session.endedAt ?? session.suspendedAt)!) : asOf,
       asOf,
     )
     if (end <= start) return total

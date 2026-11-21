@@ -77,16 +77,21 @@ export function getAuditLogs(
   filters: LogFilters,
   page: number,
   signal: AbortSignal,
+  timeWindow?: { snapshot?: string; asOf?: string; range?: "24h" | "7d" },
 ) {
   const query = new URLSearchParams(
     Object.entries(filters).filter(([, value]) => value),
   )
   query.set("page", String(page))
+  if (timeWindow?.snapshot) query.set("snapshot", timeWindow.snapshot)
+  if (timeWindow?.asOf) query.set("asOf", timeWindow.asOf)
+  if (timeWindow?.range) query.set("range", timeWindow.range)
   return apiRequest<{
     events: AuditLog[]
     total: number
     page: number
     pageSize: number
+    snapshot?: string
     asOf: string
     retentionDays: number | null
   }>(`${endpoint}?${query}`, { signal })

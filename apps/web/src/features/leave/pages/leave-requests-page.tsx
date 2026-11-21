@@ -19,6 +19,7 @@ import { sileo } from "@/lib/toast"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import {
   actOnLeave,
+  leaveDetail,
   leaveRequests,
   type LeaveAction,
   type LeaveRequest,
@@ -27,7 +28,8 @@ import { LeaveRequestDialog } from "../components/leave-request-dialog"
 import { LeaveRequestTable } from "../components/leave-request-table"
 import { LeaveReviewPanel } from "../components/leave-review-panel"
 
-export function LeaveRequestsPage() {
+export function LeaveRequestsPage({linkedId}:{linkedId?:string} = {}) {
+ const [linkedOpen,setLinkedOpen]=useState(true)
   const account = usePortalAccount()
   const manager = canManageAttendance(account)
   const selfService = canAccessPersonalAttendance(account)
@@ -59,7 +61,7 @@ export function LeaveRequestsPage() {
 
   const list = useAsyncResource(
     (signal) =>
-      leaveRequests(
+      linkedId ? leaveDetail(linkedId,signal).then(({request})=>({requests:[request],total:1,page:1,pageSize:1,capabilities:{submit:false}})) : leaveRequests(
         effectiveScope,
         page,
         settledSearch,
@@ -69,7 +71,7 @@ export function LeaveRequestsPage() {
         from,
         to,
       ),
-    [effectiveScope, page, settledSearch, type, status, from, to],
+    [linkedId,effectiveScope, page, settledSearch, type, status, from, to],
     {
       enabled: !searchPending,
       fallbackError: "Couldn't load leave requests.",
@@ -79,17 +81,22 @@ export function LeaveRequestsPage() {
   const current = data?.requests.find(
     (request) => request.id === selection?.request.id,
   )
+  const selectedRequest = current ?? selection?.request ?? (linkedOpen && linkedId && !list.error && !list.loading ? data?.requests[0]:undefined)
+  const selectedAction = selection?.action
+  const availableAction =
+    selectedAction && selectedRequest?.capabilities[selectedAction]
+      ? selectedAction
+      : null
 
   async function submitAction(note: string) {
-    const selected = current ?? selection?.request
-    const action = selection?.action
-    if (!selected || !action || pending) return false
+    const action = availableAction
+    if (!selection || !selectedRequest || !action || pending) return false
     setPending(true)
     setActionError("")
     try {
-      await actOnLeave(selected.id, action, {
+      await actOnLeave(selectedRequest.id, action, {
         actionId: selection.actionId,
-        expectedVersion: selected.version,
+        expectedVersion: selectedRequest.version,
         note,
       })
       sileo.success({
@@ -180,7 +187,7 @@ export function LeaveRequestsPage() {
             options={[
               { value: "", label: "All statuses" },
               { value: "SUBMITTED", label: "Submitted" },
-              { value: "VERIFIED", label: "Awaiting HR" },
+              { value: "VERIFIED", label: "Verified" },
               { value: "APPROVED", label: "Approved" },
               { value: "REJECTED", label: "Rejected" },
               { value: "CANCELLED", label: "Cancelled" },
@@ -245,13 +252,13 @@ export function LeaveRequestsPage() {
           onSaved={list.retry}
         />
       )}
-      {selection && (
+      {selectedRequest && (
         <LeaveReviewPanel
-          request={current ?? selection.request}
-          action={selection.action}
+          request={selectedRequest}
+          action={availableAction}
           pending={pending}
           error={actionError}
-          onClose={() => setSelection(null)}
+          onClose={() => {setSelection(null);setLinkedOpen(false)}}
           onSubmit={submitAction}
         />
       )}

@@ -1,7 +1,22 @@
 import type { Prisma } from "../../generated/prisma/client.js"
 import { activeAccount, activeStaff } from "../../shared/query/accounts.js"
+import { approvedLeaveOverlappingInterval } from "../leave/leave.repository.js"
 import { attendanceRepository } from "./attendance.repository.js"
 import { summarizeAttendance } from "./attendance.summary.js"
+
+/** HR can review exceptions when the employee has no independent, active Head. */
+export async function hrAdjustmentScope(tx: Prisma.TransactionClient): Promise<Prisma.AttendanceAdjustmentWhereInput> {
+  const exceptions = await tx.$queryRaw<{id:string}[]>`
+    SELECT a.id FROM "AttendanceAdjustment" a
+    JOIN "Employee" e ON e.id = a."employeeId"
+    LEFT JOIN "Department" d ON d.id = e."departmentId"
+    LEFT JOIN "User" h ON h.id = d."headId" AND h.role = 'STAFF'
+      AND h."isActive" AND h."accountDeletedAt" IS NULL
+      AND h.id <> a."requestedById" AND h.id IS DISTINCT FROM e."userId"
+    WHERE a.status = 'PENDING' AND h.id IS NULL
+  `
+  return { OR: [{ status: { not: "PENDING" } }, { id: { in: exceptions.map(row => row.id) } }] }
+}
 
 /** Uses the existing notification inbox, with the request as its source. */
 export async function notifyOvertime(
@@ -16,28 +31,38 @@ export async function notifyOvertime(
   const department = request.employee.departmentId
     ? await tx.department.findUnique({
         where: { id: request.employee.departmentId },
+        select: {head: {select: {id:true, role:true, isActive:true,accountDeletedAt:true}}},
       })
     : null
+  const head = department?.head
+  const eligible = head?.role === "STAFF" && head.isActive && !head.accountDeletedAt && head.id !== request.requestedById && head.id !== request.employee.userId
   const recipients = await tx.user.findMany({
     where: {
       ...activeAccount,
-      id: { not: request.requestedById },
+      ...(stage === "PENDING" ? {id: {notIn: [request.requestedById, ...(request.employee.userId ? [request.employee.userId] : [])]}} : {}),
       OR: [
         { role: "SUPERADMIN" },
-        ...(stage !== "PENDING" ? [{ role: "ADMIN" as const }] : []),
-        ...(stage === "PENDING" && department?.headId
-          ? [{ ...activeStaff, id: department.headId }]
+        ...(stage !== "PENDING" ? [{id:request.requestedById}] : []),
+        ...(stage !== "PENDING" || !eligible ? [{ role: "ADMIN" as const }] : []),
+        ...(stage === "PENDING" && eligible
+          ? [{ ...activeStaff, id: head.id }]
           : []),
       ],
     },
     select: { id: true },
   })
+  if (stage === "VERIFIED") {
+    await tx.workflowNotification.updateMany({
+      where:{attendanceAdjustmentId: requestId,type:"ATTENDANCE_"+request.type+"_VERIFIED",userId:{in:recipients.map(row=>row.id)}},
+      data:{readAt:null,createdAt:new Date()},
+    })
+  }
   await tx.workflowNotification.createMany({
     data: recipients.map(({ id }) => ({
       userId: id,
       attendanceAdjustmentId: request.id,
       type: `ATTENDANCE_${request.type}_${stage}`,
-      summary: `${request.employee.fullName}: ${request.type === "OVERTIME" ? `${request.overtimeMinutes} overtime minutes` : "attendance correction"} ${stage === "PENDING" ? "awaiting department verification" : stage === "VERIFIED" ? "verified, awaiting HR approval" : stage.toLowerCase()}.`,
+      summary: `${request.employee.fullName}: ${request.type === "OVERTIME" ? `${request.overtimeMinutes} overtime minutes` : "attendance correction"} ${stage === "PENDING" ? (eligible ? "awaiting department verification" : "awaiting HR review") : stage === "VERIFIED" ? "verified, awaiting HR approval" : stage.toLowerCase()}.`,
     })),
     skipDuplicates: true,
   })
@@ -134,6 +159,17 @@ export async function submitRecordedOvertime(
         item.proposedStartedAt < session.endedAt! &&
         item.proposedEndedAt > start,
     )
+  )
+    return
+  if (
+    (
+      await approvedLeaveOverlappingInterval(
+        tx,
+        employeeId,
+        start,
+        session.endedAt,
+      )
+    ).length
   )
     return
   const request = await tx.attendanceAdjustment.create({

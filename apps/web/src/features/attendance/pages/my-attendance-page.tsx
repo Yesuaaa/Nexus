@@ -72,20 +72,8 @@ export function MyAttendancePage() {
     Boolean(clock.error) ||
     !day ||
     Boolean(clock.state?.needsPolicy)
-  const latest = history.data?.workdays[0]
-  const lastEnd = latest?.sessions.at(-1)?.endedAt
-  const localNow = day?.workDate
-  const continuation =
-    !active &&
-    latest?.id &&
-    day &&
-    lastEnd &&
-    latest.workDate < day.workDate &&
-    new Intl.DateTimeFormat("sv-SE", { timeZone: latest.timeZone }).format(
-      new Date(lastEnd),
-    ) === localNow
-      ? latest
-      : null
+  const continuation = clock.state?.continuation
+  const clockInReason = clock.state?.clockInBlockedReason
   function propose(
     input: AttendanceMutation,
     label: string,
@@ -120,6 +108,28 @@ export function MyAttendancePage() {
             your working days and required hours before clocking in.
           </Alert>
         )}
+        {!active && clockInReason && !clock.state?.needsPolicy && <Alert>{clockInReason}</Alert>}
+              {continuation && (
+                <div className="mt-4 rounded-lg border border-[#dfe6eb] p-3">
+                  <p className="mt-0 text-xs leading-5">
+                    Your previous overnight workday ended today. You can add a session to {continuation.workDate}.
+                  </p>
+                  <Button
+                    variant="brandOutline"
+                    size="sm"
+                    disabled={clock.loading || clock.pending || Boolean(clock.error)}
+                    onClick={() =>
+                      propose(
+                        { action: "clock-in", workdayId: continuation.id },
+                        "Continue overnight workday",
+                        `Add another session to ${continuation.workDate}. Its daily requirement is counted once.`,
+                      )
+                    }
+                  >
+                    Continue {continuation.workDate}
+                  </Button>
+                </div>
+              )}
         {day && (
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(250px,1fr)]">
             <OverviewPanel
@@ -162,7 +172,7 @@ export function MyAttendancePage() {
                 {!active ? (
                   <Button
                     variant="brand"
-                    disabled={blocked}
+                    disabled={blocked || clockInReason !== null}
                     onClick={() =>
                       propose(
                         { action: "clock-in" },
@@ -252,29 +262,6 @@ export function MyAttendancePage() {
                   This session stays on {day.workDate}, including work after
                   midnight. It will remain open until you clock out.
                 </p>
-              )}
-              {continuation && (
-                <div className="mt-4 rounded-lg border border-[#dfe6eb] p-3">
-                  <p className="mt-0 text-xs leading-5">
-                    Your previous overnight workday ended today. Continue{" "}
-                    {continuation.workDate} or use Clock in to start today's
-                    workday.
-                  </p>
-                  <Button
-                    variant="brandOutline"
-                    size="sm"
-                    disabled={blocked}
-                    onClick={() =>
-                      propose(
-                        { action: "clock-in", workdayId: continuation.id! },
-                        "Continue overnight workday",
-                        `Add another session to ${continuation.workDate}. Its daily requirement is counted once.`,
-                      )
-                    }
-                  >
-                    Continue {continuation.workDate}
-                  </Button>
-                </div>
               )}
             </OverviewPanel>
             <OverviewPanel

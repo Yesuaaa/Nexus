@@ -18,6 +18,7 @@ import {
   useSidePanel,
 } from "@/components/ui/side-panel"
 import type { LeaveAction, LeaveRequest } from "../api/leave-api"
+import { leaveStatusLabel } from "../model/leave-status"
 
 const actionLabels: Record<LeaveAction, string> = {
   verify: "Verify request",
@@ -70,7 +71,7 @@ export function LeaveReviewPanel({
         closeDisabled={pending}
         meta={
           <Pill tone={request.status === "APPROVED" ? "success" : "warning"}>
-            {request.status}
+            {leaveStatusLabel(request)}
           </Pill>
         }
       />
@@ -88,6 +89,13 @@ export function LeaveReviewPanel({
       >
         <SidePanelBody>
           {error && <Alert>{error}</Alert>}
+          {request.capabilities.requiresReverification && (
+            <p className="m-0 text-xs leading-5 text-[#65718a]">
+              {request.capabilities.fallback
+                ? "There is no eligible Department Head to verify this request. The employee needs to cancel and resubmit it for HR review."
+                : "The employee changed departments. The receiving Department Head must verify this request before HR can approve it."}
+            </p>
+          )}
           <SidePanelSection title="Request summary">
             <DetailList>
               <DetailItem label="Employee">

@@ -89,6 +89,7 @@ export function AttendanceRecordsPage() {
         "Worked hours",
         "Required hours",
         "Review excess",
+        "Approved leave hours",
       ],
       ...matching.workdays.map((day) => [
         day.workDate,
@@ -100,6 +101,7 @@ export function AttendanceRecordsPage() {
         String(day.workedHours),
         String(day.requiredMinutes / 60),
         String(day.excessRequiresReview),
+        String((day.approvedLeaveMinutes ?? 0) / 60),
       ]),
     ]
     const blob = new Blob(

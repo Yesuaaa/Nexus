@@ -1,8 +1,9 @@
 "use client"
 
-import { Fragment, useState } from "react"
+import { Fragment, useRef, useState } from "react"
+import { RefreshCw } from "lucide-react"
 import Link from "next/link"
-import { PageHeader } from "@/components/layout/page-header"
+import { PageHeader, PageHeaderButton } from "@/components/layout/page-header"
 import { contentClass } from "@/components/layout/styles"
 import { Avatar } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -346,6 +347,9 @@ export function AuditLogsPage({
   const [source, setSource] = useState("")
   const [range, setRange] = useState<TimeRange>("")
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const fixedWindow = endpoint === "/api/workforce-compliance-logs"
+  const windowKey = JSON.stringify([query, activity, source, range])
+  const logWindow = useRef<{ key: string; asOf: string; snapshot?: string } | null>(null)
   const list = usePaginatedList({
     params: { search: query, activity, source, range },
     load: ({ page, signal }) => {
@@ -353,7 +357,9 @@ export function AuditLogsPage({
         search: query,
         outcome: operationActions ? "" : activity,
         source,
-        from: fromForRange(range, endpoint === "/api/people-hr-logs"),
+        from: fixedWindow
+          ? ""
+          : fromForRange(range, endpoint === "/api/people-hr-logs"),
         to: "",
         event: operationActions ? activity : "",
         actorId: "",
@@ -361,12 +367,28 @@ export function AuditLogsPage({
         requestId: "",
         correlationId: "",
       }
-      return getAuditLogs(endpoint, filters, page, signal)
+      const previous = logWindow.current
+      return getAuditLogs(
+        endpoint,
+        filters,
+        page,
+        signal,
+        fixedWindow
+          ? {
+              snapshot: previous?.key === windowKey ? previous.snapshot : undefined,
+              asOf: previous?.key === windowKey ? previous.asOf : undefined,
+              range: range || undefined,
+            }
+          : undefined,
+      )
     },
     rows: (result) => result.events,
     matches: matchesAuditLogSearch,
     initial: null,
-    refresh: "focus",
+    refresh: fixedWindow ? false : "focus",
+    onLoaded: (result) => {
+      if (fixedWindow) logWindow.current = { key: windowKey, asOf: result.asOf, snapshot: result.snapshot }
+    },
     fallbackError: `Couldn't load ${title}.`,
   })
   const { setPage } = list
@@ -381,7 +403,25 @@ export function AuditLogsPage({
 
   return (
     <main className={cn(contentClass, "p-[clamp(16px,2.1vw,32px)]")}>
-      <PageHeader title={title} description={description} />
+      <PageHeader
+        title={title}
+        description={description}
+        actions={
+          fixedWindow && (
+            <PageHeaderButton
+              disabled={list.loading}
+              onClick={() => {
+                logWindow.current = null
+                resetSelectionAndPage()
+                list.retry()
+              }}
+            >
+              <RefreshCw aria-hidden="true" />
+              Refresh logs
+            </PageHeaderButton>
+          )
+        }
+      />
       <section className="mt-[18px] min-w-0" aria-label={`${title} history`}>
         <div className="pb-4">
           <div className={`${filterBarClass} min-w-0`}>

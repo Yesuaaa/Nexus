@@ -145,6 +145,19 @@ async function createApprovedCorrection(
     },
   )
   expect(reviewedResponse.status).toBe(200)
+  const final = await fetch(
+    `${api}/api/attendance/adjustments/${created.adjustment.id}/review`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${fixture.actors.admin.token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ decision: "APPROVED", note: "Approved by the isolated HR fixture" }),
+    },
+  )
+  expect(final.status).toBe(200)
+  expect((await final.json()).adjustment.status).toBe("APPROVED")
 }
 async function clock(value: string) {
   const response = await fetch(`${api}/__attendance_clock`, {
@@ -1127,7 +1140,6 @@ for (const width of [390, 820, 1440]) {
         if (
           [
             "overview",
-            "dashboard",
             "time-logs/overview",
             "requests/overview",
             "policies/overview",
@@ -1135,16 +1147,16 @@ for (const width of [390, 820, 1440]) {
         ) {
           const kpis = page
             .getByRole("main", { name: "Attendance workspace" })
-            .locator("section[aria-busy]")
+            .locator("dl[aria-busy]")
           await expect(kpis).toHaveCount(1)
           await expect(kpis).toHaveAttribute("aria-busy", "false")
-          const cards = kpis.locator("article")
+          const cards = kpis.getByRole("term")
           await expect(cards).toHaveCount(4)
           const columns = await kpis.evaluate(
             (element) =>
               getComputedStyle(element).gridTemplateColumns.split(" ").length,
           )
-          expect(columns).toBe(width <= 560 ? 1 : width <= 1050 ? 2 : 4)
+          expect(columns).toBe(4)
         }
         await assertNoPageOverflow(page)
         if (path === "requests/overtime" || path === "requests/corrections") {
@@ -1264,7 +1276,6 @@ test("grouped attendance routes enforce staff and department-head boundaries", a
     "audit",
     "policies/overview",
     "settings",
-    "dashboard",
   ]) {
     await page.goto("/attendance/" + path)
     await expect(page).toHaveURL(/\/module$/)
@@ -1298,54 +1309,33 @@ test("time log overview preserves available figures during partial failures and 
   page,
 }) => {
   await signIn(page, "admin")
-  for (const failed of ["audit", "overview"]) {
-    const pattern = `**/api/attendance/${failed}?*`
+  for (const failed of ["departments", "overview"]) {
+    const pattern = `**/api/attendance/${failed}*`
     await page.route(pattern, (route) =>
-      route.fulfill({
-        status: 503,
-        json: { error: "Summary temporarily unavailable." },
-      }),
+      route.fulfill({ status: 503, json: { error: "Summary temporarily unavailable." } }),
     )
-    const available = page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname ===
-        `/api/attendance/${failed === "audit" ? "overview" : "audit"}`,
+    const available = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === `/api/attendance/${failed === "departments" ? "overview" : "departments"}`,
     )
     await page.goto("/attendance/time-logs/overview")
     const response = await available
     expect(response.status()).toBe(200)
-    const data = (await response.json()) as {
-      total?: number
-      checkIns?: { total: number }
-    }
     const main = page.getByRole("main", { name: "Attendance workspace" })
-    const kpis = main.getByRole("region", { name: "Record activity figures" })
-    await expect(kpis).toHaveAttribute("aria-busy", "false")
-    await expect(
-      kpis.getByText("Data unavailable", { exact: true }),
-    ).toHaveCount(failed === "audit" ? 1 : 3)
-    const availableMetric = kpis.locator("article").filter({
-      has: page.getByRole("heading", {
-        name: failed === "audit" ? "Check-ins" : "Record changes",
-        exact: true,
-      }),
-    })
-    const count = failed === "audit" ? data.checkIns?.total : data.total
-    expect(count).toBeDefined()
-    await expect(
-      availableMetric.getByText(count!.toLocaleString("en-US"), {
-        exact: true,
-      }),
-    ).toBeVisible()
+    const figures = main.getByLabel("Time log figures")
+    await expect(figures).toHaveAttribute("aria-busy", "false")
+    await expect(main.getByRole("button", {name:"Retry",exact:true})).toBeVisible()
+    if (failed === "departments") {
+      const data = await response.json()
+      await expect(figures.locator(":scope > div").filter({has: page.getByText("Check-ins", {exact:true})}).getByRole("definition")).toHaveText(String(data.checkIns.total))
+    } else {
+      await expect(figures.getByRole("definition").filter({hasText:"—"})).toHaveCount(4)
+      await expect(main.getByRole("combobox", {name:"Time logs department"})).toBeEnabled()
+    }
     await page.unroute(pattern)
-    await main.getByRole("button", { name: "Retry", exact: true }).click()
-    await expect(kpis).toHaveAttribute("aria-busy", "false")
-    await expect(
-      kpis.getByText("Data unavailable", { exact: true }),
-    ).toHaveCount(0)
-    await expect(
-      main.getByRole("button", { name: "Retry", exact: true }),
-    ).toHaveCount(0)
+    await main.getByRole("button", {name:"Retry",exact:true}).click()
+    await expect(main.getByRole("button", {name:"Retry",exact:true})).toHaveCount(0)
+    await expect(figures).toHaveAttribute("aria-busy", "false")
+    await expect(figures.getByRole("definition").filter({hasText:"—"})).toHaveCount(0)
     await assertNoPageOverflow(page)
   }
 })

@@ -7,9 +7,12 @@ import {
 import { fail } from "./workflow.validation.js"
 import { leaveAdminVisibility } from "../leave/leave.repository.js"
 
-export function notificationScope(
+import { hrAdjustmentScope } from "../attendance/attendance.overtime.js"
+
+async function notificationScope(
+  tx: Prisma.TransactionClient,
   userId: string,
-): Prisma.WorkflowNotificationWhereInput {
+): Promise<Prisma.WorkflowNotificationWhereInput> {
   return {
     userId,
     OR: [
@@ -33,6 +36,7 @@ export function notificationScope(
         leaveRequestId: { not: null },
         user: { ...activeAccount, role: "SUPERADMIN" },
       },
+      {attendanceAdjustment:{requestedById:userId},user:activeAccount},
       {
         attendanceAdjustment: {
           employee: { department: activeDepartmentHead(userId) },
@@ -41,7 +45,7 @@ export function notificationScope(
       {
         attendanceAdjustmentId: { not: null },
         user: { ...activeAccount, role: "ADMIN" },
-        attendanceAdjustment: { status: { not: "PENDING" } },
+        attendanceAdjustment: await hrAdjustmentScope(tx),
       },
       {
         attendanceAdjustmentId: { not: null },
@@ -103,7 +107,7 @@ export async function listWorkflowNotifications(userId: string) {
         settings.workflowNotifications === false
       )
         return { notifications: [], unreadCount: 0 }
-      const where = notificationScope(userId)
+      const where = await notificationScope(tx,userId)
       const [notifications, unreadCount] = await Promise.all([
         tx.workflowNotification.findMany({
           where,
@@ -141,19 +145,19 @@ export async function listWorkflowNotifications(userId: string) {
 }
 
 export async function readWorkflowNotification(userId: string, id: string) {
-  const result = await getPrisma()!.workflowNotification.updateMany({
-    where: { ...notificationScope(userId), id },
+  const result = await getPrisma()!.$transaction(async tx=>tx.workflowNotification.updateMany({
+    where: { ...await notificationScope(tx,userId), id },
     data: { readAt: new Date() },
-  })
+  }))
   if (!result.count) fail("Notification not found", 404)
   return { ok: true }
 }
 
 export async function readAllWorkflowNotifications(userId: string) {
-  await getPrisma()!.workflowNotification.updateMany({
-    where: { ...notificationScope(userId), readAt: null },
+  await getPrisma()!.$transaction(async tx=>tx.workflowNotification.updateMany({
+    where: { ...await notificationScope(tx,userId), readAt: null },
     data: { readAt: new Date() },
-  })
+  }))
   return { ok: true }
 }
 

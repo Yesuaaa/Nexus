@@ -11,8 +11,10 @@ import { activeAccount } from "../../shared/query/accounts.js"
 import { parseQueryString } from "../../shared/query-helpers.js"
 import { hasPermission, Permission } from "../auth/auth.permissions.js"
 import { selfEmployee } from "../attendance/attendance.service.js"
-import { attendanceWorkDate } from "../attendance/attendance.validation.js"
-import { leaveAdminVisibility } from "./leave.repository.js"
+import {
+  leaveAdminVisibility,
+  leaveDayOverlapsInterval,
+} from "./leave.repository.js"
 import { workforceLogContext } from "../workforce-compliance-logs/write-context.js"
 import {
   expectedLeaveVersion,
@@ -112,6 +114,7 @@ async function calculateDays(
   let assignments = await tx.attendancePolicyAssignment.findMany({
     where: {
       employeeId,
+      cancelledAt: null,
       effectiveFrom: { lte: endDate },
       OR: [{ effectiveUntil: null }, { effectiveUntil: { gt: startDate } }],
     },
@@ -123,7 +126,10 @@ async function calculateDays(
   ].sort())
     await tx.$queryRaw`SELECT id FROM "AttendancePolicy" WHERE id = ${policyId} FOR SHARE`
   assignments = await tx.attendancePolicyAssignment.findMany({
-    where: { id: { in: assignments.map((assignment) => assignment.id) } },
+    where: {
+      id: { in: assignments.map((assignment) => assignment.id) },
+      cancelledAt: null,
+    },
     include: { policy: { include: { days: true } } },
     orderBy: { effectiveFrom: "asc" },
   })
@@ -181,7 +187,8 @@ function capabilities(
   const departmentHead = user.role === "STAFF" && head?.id === user.id && !own
   const organization = user.role === "ADMIN" || user.role === "SUPERADMIN"
   const reviewer = organization && !own
-  const transferred =
+  const requiresReverification =
+    request.status === "VERIFIED" &&
     request.routeDepartmentId !== request.employee.departmentId
   return {
     cancel:
@@ -189,23 +196,23 @@ function capabilities(
       (request.status === "SUBMITTED" || request.status === "VERIFIED"),
     verify:
       departmentHead &&
-      (request.status === "SUBMITTED" ||
-        (request.status === "VERIFIED" && transferred)),
+      (request.status === "SUBMITTED" || requiresReverification),
     approve:
       reviewer &&
-      (user.role === "SUPERADMIN"
-        ? request.status === "SUBMITTED" || request.status === "VERIFIED"
-        : request.status === "VERIFIED" ||
-          (request.status === "SUBMITTED" && fallback)),
+      !requiresReverification &&
+      (request.status === "VERIFIED" ||
+        (request.status === "SUBMITTED" &&
+          (user.role === "SUPERADMIN" || fallback))),
     reject:
       (departmentHead && request.status === "SUBMITTED") ||
       (reviewer &&
         (user.role === "SUPERADMIN"
           ? request.status === "SUBMITTED" || request.status === "VERIFIED"
-          : (request.status === "VERIFIED" && !transferred) ||
+          : (request.status === "VERIFIED" && !requiresReverification) ||
             (request.status === "SUBMITTED" && fallback))),
     reverse: reviewer && request.status === "APPROVED",
     fallback,
+    requiresReverification,
   }
 }
 
@@ -300,7 +307,7 @@ async function notify(tx: Tx, requestId: string, stage: LeaveStatusInput) {
         })
       : stage === "VERIFIED"
         ? await tx.user.findMany({
-            where: { ...activeAccount, role: { in: ["ADMIN", "SUPERADMIN"] } },
+            where: { ...activeAccount, OR:[{id:request.requestedById},{role: { in: ["ADMIN", "SUPERADMIN"] }}] },
             select: { id: true },
           })
         : [{ id: request.requestedById }]
@@ -314,6 +321,7 @@ async function notify(tx: Tx, requestId: string, stage: LeaveStatusInput) {
     data: recipients.map(({ id }) => ({
       userId: id,
       leaveRequestId: request.id,
+      leaveVersion: stage === "VERIFIED" ? request.version : 0,
       type: `LEAVE_${stage}`,
       summary: message,
     })),
@@ -324,8 +332,10 @@ async function notify(tx: Tx, requestId: string, stage: LeaveStatusInput) {
 async function assertApprovalConflicts(
   tx: Tx,
   request: Prisma.LeaveRequestGetPayload<{ include: typeof requestInclude }>,
-  clock: Clock,
 ) {
+  if (request.employee.status === "INACTIVE")
+    fail(409, "Leave approval is blocked because the employee is inactive.")
+
   const recalculated = await calculateDays(
     tx,
     request.employeeId,
@@ -347,20 +357,28 @@ async function assertApprovalConflicts(
   )
     fail(409, "Attendance policy changed; cancel and submit the request again")
 
+  const coveredDays = snapshots.filter((day) => day.leaveMinutes > 0)
+  const coveredWorkDates = new Set(
+    coveredDays.map((day) => day.workDate.getTime()),
+  )
+  const overlapsCoveredDay = (start: Date, end: Date) =>
+    coveredDays.some((day) => leaveDayOverlapsInterval(day, start, end))
+
   const sessions = await tx.attendanceWorkSession.findMany({
     where: { employeeId: request.employeeId },
-    select: { startedAt: true, endedAt: true },
+    select: {
+      startedAt: true,
+      endedAt: true,
+      workday: { select: { workDate: true } },
+    },
   })
   if (sessions.some((session) => !session.endedAt))
     fail(409, "Close active attendance sessions before approving leave")
   if (
-    sessions.some((session) =>
-      snapshots.some((day) => {
-        const label = day.workDate.toISOString().slice(0, 10)
-        const start = attendanceWorkDate(session.startedAt, day.timeZone)
-        const end = attendanceWorkDate(session.endedAt ?? clock(), day.timeZone)
-        return start <= label && end >= label
-      }),
+    sessions.some(
+      ({ startedAt, endedAt, workday }) =>
+        coveredWorkDates.has(workday.workDate.getTime()) ||
+        (endedAt !== null && overlapsCoveredDay(startedAt, endedAt)),
     )
   )
     fail(409, "Resolve recorded attendance before approving this leave request")
@@ -373,15 +391,8 @@ async function assertApprovalConflicts(
     select: { proposedStartedAt: true, proposedEndedAt: true },
   })
   if (
-    adjustments.some((adjustment) =>
-      snapshots.some((day) => {
-        const label = day.workDate.toISOString().slice(0, 10)
-        return (
-          attendanceWorkDate(adjustment.proposedStartedAt, day.timeZone) <=
-            label &&
-          attendanceWorkDate(adjustment.proposedEndedAt, day.timeZone) >= label
-        )
-      }),
+    adjustments.some(({ proposedStartedAt, proposedEndedAt }) =>
+      overlapsCoveredDay(proposedStartedAt, proposedEndedAt),
     )
   )
     fail(409, "Resolve attendance requests before approving this leave request")
@@ -691,11 +702,7 @@ export function createLeaveService(clock: Clock = () => new Date()) {
                   : action === "CANCEL"
                     ? access.cancel
                     : access.reverse
-          if (
-            action === "APPROVE" &&
-            current.status === "VERIFIED" &&
-            current.routeDepartmentId !== current.employee.departmentId
-          )
+          if (action === "APPROVE" && access.requiresReverification)
             fail(
               409,
               "Employee changed departments; obtain current department verification or cancel and resubmit",
@@ -703,8 +710,7 @@ export function createLeaveService(clock: Clock = () => new Date()) {
           if (!allowed) fail(403, "You cannot perform this leave action")
           if (current.employee.departmentId !== snapshot.employee.departmentId)
             fail(409, "Employee placement changed; refresh and try again")
-          if (action === "APPROVE")
-            await assertApprovalConflicts(tx, current, clock)
+          if (action === "APPROVE") await assertApprovalConflicts(tx, current)
           const nextStatus =
             action === "VERIFY"
               ? "VERIFIED"

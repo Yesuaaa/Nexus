@@ -1,3 +1,4 @@
+import { leaveDayOverlapsInterval } from "../leave/leave.repository.js"
 import type { Prisma } from "../../generated/prisma/client.js"
 import {
   consultationCalendarWhere,
@@ -77,6 +78,7 @@ export async function workloadPlanningContext(
       tx.attendancePolicyAssignment.findMany({
         where: {
           employeeId: { in: staff.map((employee) => employee.id) },
+          cancelledAt: null,
           effectiveFrom: { lt: until },
           OR: [{ effectiveUntil: null }, { effectiveUntil: { gt: start } }],
         },
@@ -97,14 +99,16 @@ export async function workloadPlanningContext(
       tx.leaveRequestDay.findMany({
         where: {
           employeeId: { in: staff.map((employee) => employee.id) },
-          workDate: { gte: start, lt: until },
+          workDate: { gte: new Date(start.getTime()-86400000), lt: new Date(until.getTime()+86400000) },
           leaveMinutes: { gt: 0 },
           request: { status: "APPROVED" },
         },
-        select: { employeeId: true, workDate: true, leaveMinutes: true },
+        select: { employeeId: true, workDate: true, leaveMinutes: true, timeZone: true },
         orderBy: [{ workDate: "asc" }, { id: "asc" }],
       }),
     ])
+  const weeklyLeave = approvedLeave.filter(day => day.workDate >= start && day.workDate < until)
+  const headLeave = approvedLeave.filter(day => day.employeeId === head?.id)
   const commitments = [
     ...consultations.map((item) => ({
       ...item,
@@ -116,7 +120,10 @@ export async function workloadPlanningContext(
       id: `meeting-${item.id}`,
       title: "Service meeting",
     })),
-  ].sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())
+  ].map(item => ({
+    ...item,
+    overlapsLeave: headLeave.some(day => leaveDayOverlapsInterval(day, item.startsAt, item.endsAt)),
+  })).sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())
   const overlaps = commitments.flatMap((first, index) =>
     commitments
       .slice(index + 1)
@@ -134,14 +141,14 @@ export async function workloadPlanningContext(
           week,
           assignments.filter((item) => item.employeeId === employee.id),
         ),
-        approvedLeave: approvedLeave
+        approvedLeave: weeklyLeave
           .filter((day) => day.employeeId === employee.id)
           .map((day) => ({
             workDate: day.workDate.toISOString().slice(0, 10),
             minutes: day.leaveMinutes,
           })),
         approvedLeaveHours:
-          approvedLeave
+          weeklyLeave
             .filter((day) => day.employeeId === employee.id)
             .reduce((sum, day) => sum + day.leaveMinutes, 0) / 60,
         // Null means unknown, not an empty week of confirmed free time.

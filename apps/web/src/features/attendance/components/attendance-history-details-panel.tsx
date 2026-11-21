@@ -20,7 +20,7 @@ import type {
 import {
   attendanceDate,
   attendanceStatus,
-  attendanceStatusLabels,
+  attendanceStatusLabel,
   attendanceStatusTones,
   duration,
   isOvernight,
@@ -42,6 +42,7 @@ export function AttendanceHistoryDetailsPanel({
   const panel = useSidePanel(onClose)
   const employee = day.employee
   const status = attendanceStatus(day)
+  const leaveMinutes = day.approvedLeaveMinutes ?? 0
 
   return (
     <SidePanel
@@ -71,9 +72,14 @@ export function AttendanceHistoryDetailsPanel({
             <DetailItem label="Worked / required">
               {duration(day.workedMilliseconds)} / {day.requiredMinutes / 60}h
             </DetailItem>
+            {leaveMinutes > 0 && (
+              <DetailItem label="Approved leave">
+                {leaveMinutes / 60}h
+              </DetailItem>
+            )}
             <DetailItem label="Status">
               <Pill tone={attendanceStatusTones[status]}>
-                {attendanceStatusLabels[status]}
+                {attendanceStatusLabel(day)}
               </Pill>
             </DetailItem>
             {day.pendingCorrections > 0 && (

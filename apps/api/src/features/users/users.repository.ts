@@ -73,7 +73,7 @@ export const usersRepository = {
         role: currentRole,
         isActive: currentIsActive,
         accountDeletedAt: null,
-      })
+      },operation.actorAccountId)
       if (!updated) return null
       const user = await tx.user.findUniqueOrThrow({
         where: { id },

@@ -31,6 +31,13 @@ import {
 } from "../api/attendance-api"
 import { attendanceWeekNames } from "./attendance-policy-panel"
 
+const assignmentStatusLabels = {
+  CURRENT: "Current",
+  SCHEDULED: "Scheduled",
+  ENDED: "Ended",
+  CANCELLED: "Cancelled",
+} satisfies Record<AttendancePolicyAssignment["status"], string>
+
 export function AttendancePolicyDetailsPanel({
   policy,
   onClose,
@@ -172,8 +179,9 @@ export function AttendancePolicyAssignments({
                             .join(" · ")}
                         />
                         <p className="mt-1 mb-0 text-[11px] text-[#738096]">
-                          {assignment.effectiveFrom.slice(0, 10)} —{" "}
-                          {assignment.effectiveUntil?.slice(0, 10) ?? "Ongoing"}
+                          {assignment.status === "CANCELLED"
+                            ? `Was scheduled for ${assignment.effectiveFrom.slice(0, 10)}`
+                            : `${assignment.effectiveFrom.slice(0, 10)} — ${assignment.effectiveUntil?.slice(0, 10) ?? "Ongoing"}`}
                         </p>
                       </div>
                       <Pill
@@ -186,13 +194,10 @@ export function AttendancePolicyAssignments({
                         }
                         className="shrink-0"
                       >
-                        {assignment.status === "CURRENT"
-                          ? "Current"
-                          : assignment.status === "SCHEDULED"
-                            ? "Scheduled"
-                            : "Ended"}
+                        {assignmentStatusLabels[assignment.status]}
                       </Pill>
-                      {assignment.status !== "ENDED" && (
+                      {(assignment.status === "CURRENT" ||
+                        assignment.status === "SCHEDULED") && (
                         <Button
                           variant="brandOutline"
                           size="panel"
@@ -227,7 +232,7 @@ export function AttendancePolicyAssignments({
           subject={selected.employee.fullName}
           description={
             selected.status === "SCHEDULED"
-              ? "Cancel this scheduled assignment. This employee will need another policy assignment to record attendance during that period."
+              ? "Cancel this scheduled assignment. Any previous coverage shortened by this replacement resumes until its original end or the next scheduled policy."
               : "End this assignment tomorrow in the policy timezone. Today's attendance is preserved. The employee will need another policy assignment to record future attendance."
           }
           confirmLabel="Unassign"
@@ -243,7 +248,12 @@ export function AttendancePolicyAssignments({
             setError("")
             try {
               await unassignAttendancePolicy(selected.id)
-              sileo.success({ title: "Policy assignment removed" })
+              sileo.success({
+                title:
+                  selected.status === "SCHEDULED"
+                    ? "Scheduled policy assignment cancelled"
+                    : "Policy assignment removed",
+              })
               setSelected(null)
               assignments.retry()
             } catch (failure) {

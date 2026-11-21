@@ -22,7 +22,7 @@ export function summarizeAttendance(day: SummarySource, asOf: Date) {
   let unpaidBreakMilliseconds = 0
   const intervals = day.sessions.flatMap((session) => {
     const end = new Date(
-      Math.min(session.endedAt?.getTime() ?? asOf.getTime(), asOf.getTime()),
+      Math.min(session.endedAt?.getTime() ?? session.suspendedAt?.getTime() ?? asOf.getTime(), asOf.getTime()),
     )
     if (end <= session.startedAt) return []
     const breaks = session.breaks.flatMap((pause) => {
@@ -54,7 +54,7 @@ export function summarizeAttendance(day: SummarySource, asOf: Date) {
     0,
     workedMilliseconds - requiredMilliseconds,
   )
-  const activeSession = day.sessions.find((session) => session.endedAt === null)
+  const activeSession = day.sessions.find((session) => session.endedAt === null && !session.suspendedAt)
   const status =
     effectiveRequiredMinutes === 0
       ? "NOT_REQUIRED"
@@ -91,7 +91,7 @@ export function summarizeAttendance(day: SummarySource, asOf: Date) {
       day.sessions.some(
         (session) =>
           attendanceWorkDate(session.startedAt, day.timeZone) !==
-          attendanceWorkDate(session.endedAt ?? asOf, day.timeZone),
+          attendanceWorkDate(session.endedAt ?? session.suspendedAt ?? asOf, day.timeZone),
       ),
     baseRequiredMinutes: day.requiredMinutes,
     approvedLeaveMinutes,

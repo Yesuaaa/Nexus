@@ -8,7 +8,13 @@ Status: Implemented. This record preserves the workflow design, edge-case contra
 
 Department transfers block final approval until the receiving Head explicitly verifies again; that mutation appends a decision and updates routing metadata. If there is no receiving Head, cancel and resubmit through the HR exception route. No GET handler mutates routing. Future approved leave blocks policy edits and reassignment; active future requests block assignment removal. These guards use Employee serialization and policy row locks.
 
-Corrections check every local date touched by their interval, with exclusive end boundaries. Leave approval requires all open sessions to be closed. An already-started shift may still cross into future approved leave: clock-out remains available as a recovery operation, records the conflict in the attendance audit, returns a visible conflict warning, and notifies HR to reverse/reconcile the leave. This is an explicit reconciliation exception; the application cannot predict a shift's eventual end when clocking in.
+The leave list and details show when a transferred request needs verification or resubmission. HR can approve once the receiving Head verifies. Each verification sends HR a separate unread notice, with one notice per reviewer and request version. The migration adds version tracking while preserving existing notifications and their read status.
+
+Corrections check every local date touched by their interval, with exclusive end boundaries. Approval checks recorded work and elapsed time in open shifts against covered working dates. An unrelated open shift allows approval of future leave. An already-started shift may still cross into future approved leave: clock-out remains available as a recovery operation, records the conflict in the attendance audit, returns a visible conflict warning, and notifies HR to reverse/reconcile the leave. This is an explicit reconciliation exception; the application cannot predict a shift's eventual end when clocking in.
+
+Leave approval checks completed attendance and unresolved attendance requests on dates with positive leave minutes. It uses an exclusive end for each interval, including at local midnight. For completed attendance it also checks the workday the session was recorded under.
+
+Final approval rechecks employment status and the active workforce login linked to the requester under row locks. If the employee is inactive, approval returns a conflict and the request remains available for rejection by an authorized reviewer.
 
 Calendar leave events carry date-only start and exclusive end values, which the UI uses directly across timezone/DST changes. Cancellation and reversal reuse `ConfirmationDialog`. Request details and inclusive overlap date filters are available through the API, with date controls in the leave list.
 

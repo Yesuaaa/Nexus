@@ -27,6 +27,8 @@ type Workday = {
   }[]
 }
 type State = {
+  clockInBlockedReason?: string | null
+  continuation?: { id: string; workDate: string } | null
   asOf: string
   employeeId: string
   needsPolicy: boolean
@@ -196,6 +198,8 @@ test(
       const current = await state(staff, "/me/current")
       assert.equal(current.workday!.workedHours, 0)
       assert.equal(current.workday!.workDate, "2026-11-14")
+      assert.equal(current.clockInBlockedReason, null)
+      assert.equal(current.continuation?.id, overnightDayId)
       const audit = await prisma.attendanceAudit.findFirstOrThrow({
         where: { entityId: overnightSessionId, action: "UPDATE" },
       })

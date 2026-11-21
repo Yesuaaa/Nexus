@@ -931,7 +931,7 @@ export async function setEmployeeLoginStatus(
         role: Role.STAFF,
         isActive: employee.user.isActive,
         accountDeletedAt: null,
-      })
+      },operation.actorAccountId)
       if (!updated)
         throw new EmployeeError(409, "Employee changed; refresh and retry")
       const after = await tx.user.findUniqueOrThrow({

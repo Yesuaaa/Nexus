@@ -17,6 +17,8 @@ import { isForeignKeyViolation } from "../../lib/errors.js"
 import { HttpError } from "../../shared/http-error.js"
 import { canChangeAccountStatus } from "./users.policy.js"
 
+import { lockRowsReturning } from "../../shared/db/locks.js"
+import { setAttendanceAuditContext } from "../workforce-compliance-logs/write-context.js"
 type Db = Prisma.TransactionClient
 
 /** No one may change their own role, status or Trash state (403). */
@@ -81,13 +83,21 @@ export async function setAccountActive(
   db: Db,
   userId: string,
   isActive: boolean,
-  guard: Prisma.UserWhereInput = {},
+  guard: Prisma.UserWhereInput,
+  actorId:string,
 ) {
+  const employees=!isActive ? await lockRowsReturning(db,"Employee",userId,"update","userId") : []
   const { count } = await db.user.updateMany({
     where: { ...guard, id: userId },
     data: { isActive },
   })
-  if (count && !isActive) await revokeSessions(db, userId)
+  if (count && !isActive) {
+    if(employees.length){
+      await setAttendanceAuditContext(db,actorId,"Open shift suspended at account deactivation")
+      await db.attendanceWorkSession.updateMany({where:{employeeId:{in:employees.map(row=>row.id)},endedAt:null,suspendedAt:null},data:{suspendedAt:new Date()}})
+    }
+    await revokeSessions(db, userId)
+  }
   return count > 0
 }
 

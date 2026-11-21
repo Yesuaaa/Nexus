@@ -44,6 +44,7 @@ export function Calendar({
   today: currentDate = calendarToday(),
   markers,
   onSelect,
+  onViewMonthChange,
 }: {
   value: string
   min?: string
@@ -52,9 +53,14 @@ export function Calendar({
   variant?: "compact" | "month"
   today?: string
   markers?: Record<string, { label: string; color: string; title?: string }[]>
+  onViewMonthChange?: (month: string) => void
   onSelect: (date: string) => void
 }) {
-  const [view, setView] = useState(() => calendarDate(value))
+  const [view, updateView] = useState(() => calendarDate(value))
+  function setView(date: Date) {
+    updateView(date)
+    onViewMonthChange?.(calendarKey(date).slice(0, 7))
+  }
   const monthGrid = variant === "month"
   const [focused, setFocused] = useState(() => calendarKey(calendarDate(value)))
   const grid = useRef<HTMLDivElement>(null)

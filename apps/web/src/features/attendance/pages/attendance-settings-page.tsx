@@ -21,7 +21,7 @@ import {
   ResponsiveDataTableHeader,
 } from "@/components/ui/responsive-data-table"
 import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
-import { useLocalTable } from "@/components/ui/use-local-table"
+import { usePaginatedList } from "@/components/ui/use-paginated-list"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import { AttendanceShell } from "../components/attendance-shell"
 import { ResourceStatus } from "../components/attendance-shared"
@@ -43,6 +43,7 @@ import {
 } from "lucide-react"
 import {
   attendancePolicies,
+  attendancePolicyPage,
   archiveAttendancePolicy,
   deleteAttendancePolicy,
   type AttendancePolicy,
@@ -82,9 +83,6 @@ const policyActionItems: RowActionMenuItem<PolicyAction>[] = [
 ]
 
 export function AttendanceSettingsPage() {
-  const policies = useAsyncResource(attendancePolicies, [], {
-    fallbackError: "Couldn't load attendance policies.",
-  })
   const [search, setSearch] = useState("")
   const [archivedView, setArchivedView] = useState(false)
   const [confirmation, setConfirmation] = useState<{
@@ -101,18 +99,21 @@ export function AttendanceSettingsPage() {
     null,
   )
   const query = search.trim().toLowerCase()
-  const rows = (policies.data?.policies ?? []).filter(
-    (policy) =>
-      Boolean(policy.archivedAt) === archivedView &&
-      `${policy.name} ${policy.timeZone}`.toLowerCase().includes(query),
-  )
-  const table = useLocalTable(rows, {
-    view: [query, archivedView],
-    loading: policies.loading,
-    search: query,
+  const policies = usePaginatedList({
+    params: {search: query, archivedView},
+    load: ({page, signal}) => attendancePolicyPage(page, signal, archivedView ? "archived" : "active", query, 10),
+    rows: result => result.policies,
+    matches: (policy, term) => `${policy.name} ${policy.timeZone}`.toLowerCase().includes(term.toLowerCase()),
+    initial: null,
+    fallbackError: "Couldn't load attendance policies.",
+  })
+  const choices = useAsyncResource(signal => attendancePolicies(signal, "active"), [panel?.mode], {
+    enabled: panel?.mode === "assign",
+    fallbackError: "Couldn't load policies for assignment.",
   })
   function switchView(nextArchivedView: boolean) {
     if (nextArchivedView === archivedView) return
+    policies.setPage(1)
     setArchivedView(nextArchivedView)
     setSearch("")
   }
@@ -164,7 +165,8 @@ export function AttendanceSettingsPage() {
           label="Search attendance policies"
           placeholder="Search policies or timezone…"
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          maxLength={100}
+          onChange={(event) => { setSearch(event.target.value); policies.setPage(1) }}
         />
         <ManagementViewToggle
           active={archivedView}
@@ -189,7 +191,7 @@ export function AttendanceSettingsPage() {
       />
       <ResponsiveDataTable
         label="Attendance policies"
-        aria-busy={policies.loading || table.searchPending}
+        aria-busy={policies.loading || policies.searchPending}
       >
         <ResponsiveDataTableHeader
           className="@max-[820px]:sr-only"
@@ -212,7 +214,7 @@ export function AttendanceSettingsPage() {
           </ResponsiveDataTableColumnHeader>
         </ResponsiveDataTableHeader>
         {!policies.error &&
-        ((policies.loading && !policies.data) || table.searchPending) ? (
+        ((policies.loading && !policies.data) || policies.searchPending) ? (
           <ResponsiveDataTableBody className="relative min-w-0 overflow-x-clip">
             <DataTableSkeletonRows
               label="attendance policies"
@@ -236,12 +238,12 @@ export function AttendanceSettingsPage() {
           </ResponsiveDataTableBody>
         ) : (
           <AnimatedSlotGridBody
-            items={table.visible}
-            viewKey={table.viewKey}
+            items={policies.rows}
+            viewKey={policies.tableViewKey}
             quickKey={search}
             animateRows={false}
             getKey={(policy) => policy.id}
-            onRowsSettled={table.onRowsSettled}
+            onRowsSettled={policies.onRowsSettled}
             rowClassName={policyRowClass}
             ariaBusy={policies.loading && Boolean(policies.data)}
             className="relative min-w-0 overflow-x-clip"
@@ -355,17 +357,18 @@ export function AttendanceSettingsPage() {
           />
         )}
       </ResponsiveDataTable>
-      {!table.searchPending && (
+      {policies.footer && !policies.searchPending && (
         <TablePaginationFooter
-          {...table.footer}
+          {...policies.footer}
           label="Attendance policy pages"
-          onPageChange={table.setPage}
+          onPageChange={policies.setPage}
         />
       )}
+      {panel?.mode === "assign" && choices.error && <ResourceStatus loading={false} error={choices.error} retry={choices.retry} />}
       {panel && (
         <AttendancePolicyPanel
           {...panel}
-          policies={(policies.data?.policies ?? []).filter(
+          policies={(choices.data?.policies ?? []).filter(
             (policy) => !policy.archivedAt,
           )}
           onClose={() => setPanel(null)}

@@ -143,10 +143,10 @@ export function WorkflowNotifications() {
             <DropdownMenuItem key={item.id} asChild>
               <Link
                 href={
-                  item.type.startsWith("ATTENDANCE_OVERTIME_")
-                    ? "/attendance/adjustments"
-                    : item.type.startsWith("LEAVE_")
-                      ? "/attendance/requests/leave"
+                  item.entityId && item.type.startsWith("ATTENDANCE_")
+                    ? `/attendance/requests/${item.type.startsWith("ATTENDANCE_OVERTIME_")?"overtime":"corrections"}?request=${encodeURIComponent(item.entityId)}`
+                    : item.entityId && item.type.startsWith("LEAVE_")
+                      ? `/attendance/requests/leave?request=${encodeURIComponent(item.entityId)}`
                       : item.entityId &&
                           [
                             "PROJECT_ACTIVATED",

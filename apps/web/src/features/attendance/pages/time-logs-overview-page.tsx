@@ -194,6 +194,14 @@ export function TimeLogsOverviewPage() {
               </div>
               <div className="flex gap-4 max-[560px]:flex-col max-[560px]:gap-0.5">
                 <dt className="w-40 shrink-0 text-[#738096]">
+                  Approved leave days
+                </dt>
+                <dd className="m-0 text-[#182235]">
+                  {result.error ? "—" : (data?.approvedLeaveDays ?? 0)}
+                </dd>
+              </div>
+              <div className="flex gap-4 max-[560px]:flex-col max-[560px]:gap-0.5">
+                <dt className="w-40 shrink-0 text-[#738096]">
                   Sessions per employee
                 </dt>
                 <dd className="m-0 text-[#182235]">

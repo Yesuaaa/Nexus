@@ -102,6 +102,7 @@ export function WorkloadPlanningContext({ staff }: { staff: WorkloadStaff }) {
                 <DetailItem key={item.id} label={item.title}>
                   {formatDateTime(item.startsAt, "UTC")} –{" "}
                   {formatDateTime(item.endsAt, "UTC")} UTC
+                  {item.overlapsLeave && <Pill tone="warning">Overlaps approved leave</Pill>}
                 </DetailItem>
               ))}
             </DetailList>
