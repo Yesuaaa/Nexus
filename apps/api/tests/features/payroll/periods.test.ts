@@ -2,6 +2,12 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import { generatePayrollPeriodCandidates } from "../../../src/features/payroll/payroll-periods.js"
 
+function nextDate(value: string) {
+  const date = new Date(`${value}T00:00:00.000Z`)
+  date.setUTCDate(date.getUTCDate() + 1)
+  return date.toISOString().slice(0, 10)
+}
+
 const monthly = {
   id: "monthly",
   frequency: "MONTHLY" as const,
@@ -73,6 +79,61 @@ test("semi-monthly periods respect cutoff days and month ends", () => {
       ["2026-02-28", "2026-02-28"],
     ],
   )
+})
+
+test("[PAY-API-003] minimum cutoff partitions leap year into adjacent periods", () => {
+  const periods = generatePayrollPeriodCandidates(
+    {
+      id: "minimum-cutoff",
+      frequency: "SEMI_MONTHLY",
+      firstCutoffDay: 1,
+      effectiveFrom: "2024-01-01",
+      effectiveTo: null,
+    },
+    2024,
+  )
+
+  assert.equal(periods.length, 24)
+  assert.deepEqual(
+    periods
+      .filter(({ startDate }) => startDate.startsWith("2024-02"))
+      .map(({ startDate, endDate }) => [startDate, endDate]),
+    [
+      ["2024-02-01", "2024-02-01"],
+      ["2024-02-02", "2024-02-29"],
+    ],
+  )
+  assert.equal(periods[0]?.startDate, "2024-01-01")
+  assert.equal(periods.at(-1)?.endDate, "2024-12-31")
+  for (let index = 1; index < periods.length; index += 1) {
+    assert.equal(
+      periods[index]?.startDate,
+      nextDate(periods[index - 1]!.endDate),
+      `period ${index} must start the day after its predecessor ends`,
+    )
+  }
+})
+
+test("[PAY-API-003] monthly schedule remains contiguous across a calendar-year boundary", () => {
+  const configuration = {
+    id: "year-boundary",
+    frequency: "MONTHLY" as const,
+    firstCutoffDay: null,
+    effectiveFrom: "2025-12-15",
+    effectiveTo: "2026-01-10",
+  }
+  const december = generatePayrollPeriodCandidates(configuration, 2025)
+  const january = generatePayrollPeriodCandidates(configuration, 2026)
+
+  assert.deepEqual(
+    december.map(({ startDate, endDate }) => [startDate, endDate]),
+    [["2025-12-15", "2025-12-31"]],
+  )
+  assert.deepEqual(
+    january.map(({ startDate, endDate }) => [startDate, endDate]),
+    [["2026-01-01", "2026-01-10"]],
+  )
+  assert.equal(january[0]?.startDate, nextDate(december.at(-1)!.endDate))
 })
 
 test("effective configuration boundaries clip regular periods without overlap", () => {

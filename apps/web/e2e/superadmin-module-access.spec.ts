@@ -218,6 +218,30 @@ for (const [role, width, readOnly] of [
   }) => {
     await page.setViewportSize({ width, height: 844 })
     await restoreSession(page, role)
+    await page.route("**/api/payroll/overview?**", (route) =>
+      route.fulfill({
+        json: {
+          scope: { periods: 0, from: null, to: null },
+          approvedNet: "0.00",
+          approvedRuns: 0,
+          realConfirmedPaid: "0.00",
+          pendingApprovals: 0,
+          currentExceptions: 0,
+          trend: [],
+          payoutCounts: {},
+          exceptionCounts: [],
+          attention: [],
+        },
+      }),
+    )
+    await page.route("**/api/payroll/compensation?**", (route) =>
+      route.fulfill({
+        json: { rows: [], total: 0, page: 1, pageSize: 10 },
+      }),
+    )
+    await page.route("**/api/departments", (route) =>
+      route.fulfill({ json: { departments: [] } }),
+    )
     await page.goto("/module")
 
     const payroll = page.getByRole("link", {
@@ -242,20 +266,14 @@ for (const [role, width, readOnly] of [
     await payrollOverview.click()
     await expect(page).toHaveURL("/module/payroll")
     await expect(
-      page.getByRole("heading", { name: "Payroll Management", exact: true }),
+      page.getByRole("heading", { name: "Payroll Overview", exact: true }),
     ).toBeVisible()
     await expect(
       page.getByRole("navigation", { name: "Breadcrumb" }),
     ).toContainText("People & HR")
     await expect(
-      page.getByRole("heading", {
-        name: "Configure compensation and schedules",
-        exact: true,
-      }),
+      page.getByRole("region", { name: "Payroll totals", exact: true }),
     ).toBeVisible()
-    await expect(page.getByText("Read only", { exact: true })).toHaveCount(
-      readOnly ? 1 : 0,
-    )
 
     if (width < 768)
       await page.getByRole("button", { name: "Open navigation menu" }).click()
@@ -277,6 +295,16 @@ for (const [role, width, readOnly] of [
       await expect(link).toBeVisible()
       await expect(link).not.toHaveAttribute("aria-disabled", "true")
     }
+    await sidebar
+      .getByRole("link", { name: "Compensation", exact: true })
+      .click()
+    await expect(page).toHaveURL("/module/payroll/compensation")
+    await expect(
+      page.getByRole("heading", { name: "Employee Compensation", exact: true }),
+    ).toBeVisible()
+    await expect(page.getByText("Read only", { exact: true })).toHaveCount(
+      readOnly ? 1 : 0,
+    )
     if (width >= 768) {
       await page.getByRole("button", { name: "Collapse sidebar" }).click()
       await sidebar

@@ -106,10 +106,30 @@ test(
       assert.equal(anonymous.status, 401, `${path} should require a session`)
     }
 
+    const token = admin.headers.Authorization.slice("Bearer ".length)
+    const [header, payload, signature] = token.split(".")
+    assert.ok(header && payload && signature)
+    const alteredSignature = `${signature[0] === "a" ? "b" : "a"}${signature.slice(1)}`
+    const invalidBearer = await fetch(`${base}/payroll/compensation`, {
+      headers: {
+        Authorization: `Bearer ${header}.${payload}.${alteredSignature}`,
+      },
+    })
+    assert.equal(invalidBearer.status, 401)
+    assert.deepEqual(await invalidBearer.json(), {
+      error: "Invalid or expired session",
+      code: "INVALID_ACCESS_TOKEN",
+    })
+
     const writeRequests = [
       ["/payroll/compensation/no-employee/versions", { payType: "MONTHLY" }],
       ["/payroll/settings/versions", { frequency: "MONTHLY" }],
     ] as const
+    const beforeDeniedWrites = {
+      compensationVersions: await prisma.employeeCompensation.count(),
+      configurations: await prisma.payrollConfiguration.count(),
+      auditRecords: await prisma.workforceManagementChange.count(),
+    }
     for (const [path, body] of writeRequests) {
       for (const user of [superadmin, staff, client]) {
         const response = await fetch(`${base}${path}`, {
@@ -122,6 +142,24 @@ test(
           403,
           `${path} should require payroll manage`,
         )
+        assert.deepEqual(await response.json(), {
+          error: "Insufficient permissions",
+        })
+      }
+      for (const user of [inactiveAdmin, deletedSuperadmin]) {
+        const response = await fetch(`${base}${path}`, {
+          method: "POST",
+          headers: { ...user.headers, "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        })
+        assert.equal(
+          response.status,
+          401,
+          `${path} should deny invalid sessions`,
+        )
+        assert.deepEqual(await response.json(), {
+          error: "Invalid or expired session",
+        })
       }
       const anonymous = await fetch(`${base}${path}`, {
         method: "POST",
@@ -129,7 +167,18 @@ test(
         body: JSON.stringify(body),
       })
       assert.equal(anonymous.status, 401, `${path} should require a session`)
+      assert.deepEqual(await anonymous.json(), {
+        error: "Authentication required",
+      })
     }
+    assert.deepEqual(
+      {
+        compensationVersions: await prisma.employeeCompensation.count(),
+        configurations: await prisma.payrollConfiguration.count(),
+        auditRecords: await prisma.workforceManagementChange.count(),
+      },
+      beforeDeniedWrites,
+    )
   },
 )
 
@@ -239,6 +288,61 @@ test(
       initial,
     )
     assert.equal(firstResponse.status, 201, await firstResponse.clone().text())
+    // PAY-API-002: rejected revisions preserve valid compensation and its audit trail.
+    const compensationState = async () =>
+      (
+        await prisma.employeeCompensation.findMany({
+          where: { employeeId: employee.id },
+          orderBy: { effectiveFrom: "asc" },
+          include: { components: { orderBy: { id: "asc" } } },
+        })
+      ).map(
+        ({
+          id,
+          payType,
+          baseRate,
+          currency,
+          effectiveFrom,
+          effectiveTo,
+          components,
+        }) => ({
+          id,
+          payType,
+          baseRate: baseRate.toFixed(2),
+          currency,
+          effectiveFrom: effectiveFrom.toISOString().slice(0, 10),
+          effectiveTo: effectiveTo?.toISOString().slice(0, 10) ?? null,
+          components: components.map(
+            ({ id: componentId, type, name, amount }) => ({
+              id: componentId,
+              type,
+              name,
+              amount: amount.toFixed(2),
+            }),
+          ),
+        }),
+      )
+    const validStateBeforeRejectedRevision = await compensationState()
+    const auditCountBeforeRejectedRevision =
+      await prisma.workforceManagementChange.count({
+        where: { subjectType: "COMPENSATION", subjectId: employee.id },
+      })
+    const invalidRevision = await request(
+      `/payroll/compensation/${employee.id}/versions`,
+      adminToken,
+      { ...initial, effectiveFrom: "2099-03-01", baseRate: "72500.101" },
+    )
+    assert.equal(invalidRevision.status, 400)
+    assert.deepEqual(
+      await compensationState(),
+      validStateBeforeRejectedRevision,
+    )
+    assert.equal(
+      await prisma.workforceManagementChange.count({
+        where: { subjectType: "COMPENSATION", subjectId: employee.id },
+      }),
+      auditCountBeforeRejectedRevision,
+    )
     await prisma.employee.createMany({
       data: Array.from({ length: 21 }, (_, index) => {
         const number = String(index + 1).padStart(2, "0")
@@ -320,17 +424,18 @@ test(
       ["1250.05", "200.01"],
     )
 
+    const futureInput = {
+      ...initial,
+      payType: "DAILY",
+      baseRate: "3456.78",
+      effectiveFrom: "2099-04-01",
+      changeReason: "Future rate revision",
+      components: [],
+    }
     const futureResponse = await request(
       `/payroll/compensation/${employee.id}/versions`,
       adminToken,
-      {
-        ...initial,
-        payType: "DAILY",
-        baseRate: "3456.78",
-        effectiveFrom: "2099-04-01",
-        changeReason: "Future rate revision",
-        components: [],
-      },
+      futureInput,
     )
     assert.equal(
       futureResponse.status,
@@ -341,6 +446,13 @@ test(
       compensation: { id: string; baseRate: string }
     }
     assert.equal(future.compensation.baseRate, "3456.78")
+
+    const repeatedFutureSubmission = await request(
+      `/payroll/compensation/${employee.id}/versions`,
+      adminToken,
+      futureInput,
+    )
+    assert.equal(repeatedFutureSubmission.status, 409)
 
     const duplicateDate = await request(
       `/payroll/compensation/${employee.id}/versions`,
