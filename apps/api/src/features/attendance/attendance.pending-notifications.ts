@@ -1,23 +1,23 @@
 import type { Prisma } from "../../generated/prisma/client.js"
 
-export async function notifyPendingCorrection(
+export async function notifyPendingAdjustment(
   tx: Prisma.TransactionClient,
   requestId: string,
 ) {
   await tx.$executeRaw`
-    SELECT attendance_notify_pending_corrections(ARRAY[${requestId}]::text[], true)
+    SELECT attendance_notify_pending_adjustments(ARRAY[${requestId}]::text[], true)
   `
 }
 
-export async function notifyPendingCorrectionsAfterHeadChange(
+export async function notifyPendingAdjustmentsAfterHeadChange(
   tx: Prisma.TransactionClient,
   departmentId: string,
 ) {
   await tx.$executeRaw`
-    SELECT attendance_notify_pending_corrections(ARRAY(
+    SELECT attendance_notify_pending_adjustments(ARRAY(
       SELECT a.id FROM "AttendanceAdjustment" a
       JOIN "Employee" e ON e.id = a."employeeId"
-      WHERE a.status = 'PENDING' AND a.type = 'CORRECTION'
+      WHERE a.status = 'PENDING'
         AND e."departmentId" = ${departmentId}
     ), false)
   `

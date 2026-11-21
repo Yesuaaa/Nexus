@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { test } from "node:test"
 import type { Role } from "../../../src/generated/prisma/client.js"
+import { submitRecordedOvertime } from "../../../src/features/attendance/attendance.overtime.js"
 import { issueSession } from "../../../src/features/auth/auth.service.js"
 import { startPgliteApp } from "../../support/pglite-app.js"
 
@@ -11,7 +12,7 @@ test(
   async (t) => {
     const reviewTime = new Date("2026-11-20T12:00:00+08:00")
     let now = reviewTime
-    const { prisma, base } = await startPgliteApp(t, {
+    const { db, prisma, base } = await startPgliteApp(t, {
       app: { attendanceClock: () => now },
     })
     const department = await prisma.department.create({
@@ -183,6 +184,478 @@ test(
       assert.match(await response.text(), message)
       assert.deepEqual(await snapshot(employeeId), before)
     }
+
+    async function clockShift(
+      staff: { token: string },
+      start: string,
+      end: string,
+    ) {
+      try {
+        now = new Date(start)
+        const punched = await call(staff, "/me/clock-in", {})
+        assert.equal(punched.status, 201, await punched.clone().text())
+        const { workday } = (await punched.json()) as {
+          workday: { activeSessionId: string }
+        }
+        const sessionId = workday.activeSessionId
+        now = new Date(end)
+        const closed = await call(staff, "/me/clock-out", { sessionId })
+        assert.equal(closed.status, 200, await closed.clone().text())
+        return sessionId
+      } finally {
+        now = reviewTime
+      }
+    }
+
+    async function rejectedNovember12Shift(staff: { token: string }) {
+      const sessionId = await clockShift(
+        staff,
+        "2026-11-12T08:00:00+08:00",
+        "2026-11-12T18:00:00+08:00",
+      )
+      const original = await prisma.attendanceAdjustment.findFirstOrThrow({
+        where: { sessionId, type: "OVERTIME" },
+      })
+      assert.deepEqual(overtimeInterval(original), {
+        startedAt: "2026-11-12T08:00:00.000Z",
+        endedAt: "2026-11-12T10:00:00.000Z",
+        minutes: 120,
+        status: "PENDING",
+      })
+      await reviewed(head, original.id, "REJECTED", "REJECTED")
+      return sessionId
+    }
+
+    function overtimeInterval(request: {
+      proposedStartedAt: Date
+      proposedEndedAt: Date
+      overtimeMinutes: number
+      status: string
+    }) {
+      return {
+        startedAt: request.proposedStartedAt.toISOString(),
+        endedAt: request.proposedEndedAt.toISOString(),
+        minutes: request.overtimeMinutes,
+        status: request.status,
+      }
+    }
+
+    async function history(actor: { token: string }, route: string) {
+      const response = await call(actor, route)
+      assert.equal(response.status, 200, await response.clone().text())
+      const { workdays } = (await response.json()) as {
+        workdays: {
+          id: string
+          workDate: string
+          timeZone: string
+          workedMinutes: number
+          requiredMinutes: number
+          excessMinutes: number
+          unpaidBreakMilliseconds: number
+        }[]
+      }
+      return workdays.map(
+        ({
+          id,
+          workDate,
+          timeZone,
+          workedMinutes,
+          requiredMinutes,
+          excessMinutes,
+          unpaidBreakMilliseconds,
+        }) => ({
+          id,
+          workDate,
+          timeZone,
+          workedMinutes,
+          requiredMinutes,
+          excessMinutes,
+          unpaidBreakMilliseconds,
+        }),
+      )
+    }
+
+    await t.test(
+      "corrected Manila attendance requests the 60 minutes adjacent to rejected overtime",
+      async () => {
+        const staff = await account("corrected-overtime")
+        const sessionId = await rejectedNovember12Shift(staff)
+        const original = await snapshot(staff.employee.id)
+        const correction = await submit(staff, {
+          ...proposal("2026-11-12T07:00:00+08:00", "2026-11-12T18:00:00+08:00"),
+          sessionId,
+        })
+        await reviewed(head, correction.id, "VERIFIED")
+        await reviewed(hr, correction.id, "APPROVED")
+
+        const corrected = await snapshot(staff.employee.id)
+        assert.deepEqual(corrected.days, original.days)
+        assert.equal(corrected.sessions[0]?.id, sessionId)
+        assert.equal(corrected.sessions[0]?.workdayId, original.days[0]?.id)
+        assert.equal(
+          corrected.sessions[0]?.startedAt.toISOString(),
+          "2026-11-11T23:00:00.000Z",
+        )
+        const range = "?from=2026-11-12&to=2026-11-12"
+        const totals = [
+          {
+            id: original.days[0]?.id,
+            workDate: "2026-11-12",
+            timeZone: "Asia/Manila",
+            workedMinutes: 660,
+            requiredMinutes: 480,
+            excessMinutes: 180,
+            unpaidBreakMilliseconds: 0,
+          },
+        ]
+        assert.deepEqual(await history(staff, `/me/history${range}`), totals)
+        assert.deepEqual(
+          await history(hr, `/employees/${staff.employee.id}/history${range}`),
+          totals,
+        )
+
+        const originalRequest = original.adjustments[0]
+        assert.equal(originalRequest.status, "REJECTED")
+        assert.deepEqual(
+          corrected.adjustments.find(({ id }) => id === originalRequest.id),
+          originalRequest,
+        )
+        assert.deepEqual(
+          corrected.audit.filter(
+            ({ entityId }) => entityId === originalRequest.id,
+          ),
+          original.audit.filter(
+            ({ entityId }) => entityId === originalRequest.id,
+          ),
+        )
+        const pending = corrected.adjustments.filter(
+          ({ type, status }) => type === "OVERTIME" && status === "PENDING",
+        )
+        assert.deepEqual(pending.map(overtimeInterval), [
+          {
+            startedAt: "2026-11-12T07:00:00.000Z",
+            endedAt: "2026-11-12T08:00:00.000Z",
+            minutes: 60,
+            status: "PENDING",
+          },
+        ])
+        const generated = pending[0]
+        assert.equal(generated.sessionId, sessionId)
+        assert.ok(
+          corrected.notifications.some(
+            ({ attendanceAdjustmentId, userId, type }) =>
+              attendanceAdjustmentId === generated.id &&
+              userId === head.user.id &&
+              type === "ATTENDANCE_OVERTIME_PENDING",
+          ),
+        )
+        const overtimeAudit = corrected.audit.find(
+          ({ entityId }) => entityId === generated.id,
+        )
+        assert.ok(overtimeAudit?.operationId)
+        assert.ok(
+          corrected.audit.some(
+            ({ entityId, action, operationId }) =>
+              entityId === sessionId &&
+              action === "UPDATE" &&
+              operationId === overtimeAudit.operationId,
+          ),
+        )
+        const repeat = await review(hr, correction.id)
+        assert.equal(repeat.status, 409)
+        await prisma.$transaction((tx) =>
+          submitRecordedOvertime(
+            tx,
+            staff.user.id,
+            staff.employee.id,
+            sessionId,
+            now,
+          ),
+        )
+        assert.deepEqual(await snapshot(staff.employee.id), corrected)
+      },
+    )
+
+    await t.test(
+      "a correction with no increase in excess does not resubmit rejected overtime",
+      async () => {
+        const staff = await account("unchanged-excess")
+        const sessionId = await rejectedNovember12Shift(staff)
+        const before = await snapshot(staff.employee.id)
+        const correction = await submit(staff, {
+          ...proposal("2026-11-12T07:30:00+08:00", "2026-11-12T17:30:00+08:00"),
+          sessionId,
+        })
+        await reviewed(head, correction.id, "VERIFIED")
+        await reviewed(hr, correction.id, "APPROVED")
+        const after = await snapshot(staff.employee.id)
+        assert.deepEqual(
+          after.adjustments.filter(({ type }) => type === "OVERTIME"),
+          before.adjustments,
+        )
+        assert.equal(
+          after.sessions[0]?.endedAt?.toISOString(),
+          "2026-11-12T09:30:00.000Z",
+        )
+        assert.deepEqual(
+          await history(staff, "/me/history?from=2026-11-12&to=2026-11-12"),
+          [
+            {
+              id: before.days[0]?.id,
+              workDate: "2026-11-12",
+              timeZone: "Asia/Manila",
+              workedMinutes: 600,
+              requiredMinutes: 480,
+              excessMinutes: 120,
+              unpaidBreakMilliseconds: 0,
+            },
+          ],
+        )
+      },
+    )
+
+    await t.test(
+      "a split overnight correction allocates disjoint overtime atomically on the original workday",
+      async (t) => {
+        const staff = await account("split-overnight-overtime")
+        const first = await session(
+          staff.employee.id,
+          "2026-11-13T15:00:00+08:00",
+          "2026-11-13T18:00:00+08:00",
+        )
+        const second = await session(
+          staff.employee.id,
+          "2026-11-13T20:00:00+08:00",
+          "2026-11-14T05:00:00+08:00",
+        )
+        assert.equal(second.workdayId, first.workdayId)
+        await prisma.attendanceBreak.createMany({
+          data: [
+            {
+              startedAt: "2026-11-13T23:30:00+08:00",
+              endedAt: "2026-11-14T00:30:00+08:00",
+              isPaid: false,
+            },
+            {
+              startedAt: "2026-11-14T03:30:00+08:00",
+              endedAt: "2026-11-14T04:00:00+08:00",
+              isPaid: false,
+            },
+            {
+              startedAt: "2026-11-14T04:00:00+08:00",
+              endedAt: "2026-11-14T04:15:00+08:00",
+              isPaid: true,
+            },
+          ].map((pause) => ({ ...pause, sessionId: second.id })),
+        })
+        const prior = await submit(staff, {
+          ...proposal("2026-11-14T02:00:00+08:00", "2026-11-14T03:00:00+08:00"),
+          type: "OVERTIME",
+        })
+        await reviewed(head, prior.id, "REJECTED", "REJECTED")
+        const correction = await submit(staff, {
+          ...proposal("2026-11-13T14:00:00+08:00", "2026-11-13T18:00:00+08:00"),
+          sessionId: first.id,
+        })
+        await reviewed(head, correction.id, "VERIFIED")
+        const before = await snapshot(staff.employee.id)
+
+        const failures = [
+          {
+            table: "AttendanceAdjustment",
+            condition: `NEW.type = 'OVERTIME' AND NEW."proposedStartedAt" = TIMESTAMPTZ '2026-11-13 17:00:00Z'`,
+          },
+          {
+            table: "WorkflowNotification",
+            condition: `NEW.type = 'ATTENDANCE_OVERTIME_PENDING' AND EXISTS (
+              SELECT 1 FROM "AttendanceAdjustment" WHERE id = NEW."attendanceAdjustmentId"
+                AND "proposedStartedAt" = TIMESTAMPTZ '2026-11-13 17:00:00Z'
+            )`,
+          },
+        ]
+        for (const { table, condition } of failures) {
+          await t.test(
+            `a failed ${table} write rolls back the correction and both overtime windows`,
+            async () => {
+              // The later window must already have a request and notice inside the transaction.
+              await db.exec(`
+              CREATE FUNCTION fail_overtime_window() RETURNS trigger LANGUAGE plpgsql AS $$
+              BEGIN
+                IF ${condition} AND EXISTS (
+                  SELECT 1 FROM "WorkflowNotification" n
+                  JOIN "AttendanceAdjustment" a ON a.id = n."attendanceAdjustmentId"
+                  WHERE n.type = 'ATTENDANCE_OVERTIME_PENDING' AND a.status = 'PENDING'
+                    AND a."proposedStartedAt" = TIMESTAMPTZ '2026-11-13 19:00:00Z'
+                ) THEN
+                  RAISE EXCEPTION 'Synthetic overtime window write failure';
+                END IF;
+                RETURN NEW;
+              END $$;
+              CREATE TRIGGER fail_overtime_window BEFORE INSERT ON "${table}"
+              FOR EACH ROW EXECUTE FUNCTION fail_overtime_window();
+            `)
+              try {
+                const response = await review(hr, correction.id)
+                assert.equal(response.status, 500, await response.text())
+                assert.deepEqual(await snapshot(staff.employee.id), before)
+              } finally {
+                await db.exec(
+                  `DROP TRIGGER fail_overtime_window ON "${table}"; DROP FUNCTION fail_overtime_window();`,
+                )
+              }
+            },
+          )
+        }
+
+        await reviewed(hr, correction.id, "APPROVED")
+        const after = await snapshot(staff.employee.id)
+        assert.deepEqual(after.days, before.days)
+        assert.deepEqual(
+          after.adjustments.find(({ id }) => id === prior.id),
+          before.adjustments.find(({ id }) => id === prior.id),
+        )
+        const generated = after.adjustments
+          .filter(
+            ({ type, status }) => type === "OVERTIME" && status === "PENDING",
+          )
+          .sort(
+            (a, b) =>
+              a.proposedStartedAt.getTime() - b.proposedStartedAt.getTime(),
+          )
+        assert.deepEqual(generated.map(overtimeInterval), [
+          {
+            startedAt: "2026-11-13T17:00:00.000Z",
+            endedAt: "2026-11-13T18:00:00.000Z",
+            minutes: 60,
+            status: "PENDING",
+          },
+          {
+            startedAt: "2026-11-13T19:00:00.000Z",
+            endedAt: "2026-11-13T21:00:00.000Z",
+            minutes: 90,
+            status: "PENDING",
+          },
+        ])
+        for (const request of generated) {
+          assert.equal(request.sessionId, second.id)
+          assert.equal(
+            after.notifications.filter(
+              ({ attendanceAdjustmentId, userId, type }) =>
+                attendanceAdjustmentId === request.id &&
+                userId === head.user.id &&
+                type === "ATTENDANCE_OVERTIME_PENDING",
+            ).length,
+            1,
+          )
+        }
+        assert.deepEqual(
+          await history(staff, "/me/history?from=2026-11-13&to=2026-11-14"),
+          [
+            {
+              id: first.workdayId,
+              workDate: "2026-11-13",
+              timeZone: "Asia/Manila",
+              workedMinutes: 690,
+              requiredMinutes: 480,
+              excessMinutes: 210,
+              unpaidBreakMilliseconds: 90 * 60_000,
+            },
+          ],
+        )
+        await reviewed(head, generated[1].id, "VERIFIED")
+        await reviewed(hr, generated[1].id, "APPROVED")
+      },
+    )
+
+    await t.test(
+      "a prior request outside the eligible window still consumes the same day's budget",
+      async () => {
+        const staff = await account("overtime-budget")
+        const recorded = await session(
+          staff.employee.id,
+          "2026-11-12T08:00:00+08:00",
+          "2026-11-12T18:00:00+08:00",
+        )
+        const claim = await submit(staff, {
+          ...proposal("2026-11-12T08:00:00+08:00", "2026-11-12T09:00:00+08:00"),
+          type: "OVERTIME",
+        })
+        await reviewed(head, claim.id, "REJECTED", "REJECTED")
+        const correction = await submit(staff, {
+          ...proposal("2026-11-12T07:00:00+08:00", "2026-11-12T18:00:00+08:00"),
+          sessionId: recorded.id,
+        })
+        await reviewed(head, correction.id, "VERIFIED")
+        await reviewed(hr, correction.id, "APPROVED")
+        const after = await snapshot(staff.employee.id)
+        const pending = after.adjustments.filter(
+          ({ type, status }) => type === "OVERTIME" && status === "PENDING",
+        )
+        assert.deepEqual(pending.map(overtimeInterval), [
+          {
+            startedAt: "2026-11-12T08:00:00.000Z",
+            endedAt: "2026-11-12T10:00:00.000Z",
+            minutes: 120,
+            status: "PENDING",
+          },
+        ])
+      },
+    )
+
+    await t.test(
+      "an old overnight rejection blocks only its overlapping time on the next workday",
+      async () => {
+        const staff = await account("prior-workday-rejection")
+        const sessionId = await clockShift(
+          staff,
+          "2026-11-14T15:00:00+08:00",
+          "2026-11-15T16:00:00+08:00",
+        )
+        const original = await prisma.attendanceAdjustment.findFirstOrThrow({
+          where: { sessionId, type: "OVERTIME" },
+        })
+        await reviewed(head, original.id, "REJECTED", "REJECTED")
+        const correction = await submit(staff, {
+          ...proposal("2026-11-14T15:00:00+08:00", "2026-11-14T23:00:00+08:00"),
+          sessionId,
+        })
+        await reviewed(head, correction.id, "VERIFIED")
+        await reviewed(hr, correction.id, "APPROVED")
+        const nextSession = await clockShift(
+          staff,
+          "2026-11-15T00:00:00+08:00",
+          "2026-11-15T18:00:00+08:00",
+        )
+        const after = await snapshot(staff.employee.id)
+        const pending = after.adjustments.filter(
+          ({ type, status }) => type === "OVERTIME" && status === "PENDING",
+        )
+        assert.deepEqual(pending.map(overtimeInterval), [
+          {
+            startedAt: "2026-11-15T08:00:00.000Z",
+            endedAt: "2026-11-15T10:00:00.000Z",
+            minutes: 120,
+            status: "PENDING",
+          },
+        ])
+        assert.equal(pending[0].sessionId, nextSession)
+        assert.equal(after.days.length, 2)
+        assert.equal(
+          after.adjustments.find(({ id }) => id === original.id)?.status,
+          "REJECTED",
+        )
+        await prisma.$transaction((tx) =>
+          submitRecordedOvertime(
+            tx,
+            staff.user.id,
+            staff.employee.id,
+            nextSession,
+            now,
+          ),
+        )
+        assert.deepEqual(await snapshot(staff.employee.id), after)
+      },
+    )
 
     for (const status of ["PENDING", "VERIFIED", "APPROVED"]) {
       await t.test(

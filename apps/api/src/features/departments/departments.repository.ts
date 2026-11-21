@@ -21,7 +21,7 @@ import { lockRows } from "../../shared/db/locks.js"
 import { paginate } from "../../shared/query/pagination.js"
 import { departmentSummarySelect } from "../../shared/query/selects.js"
 import { notifyPendingLeaveAfterHeadChange } from "../leave/leave.repository.js"
-import { notifyPendingCorrectionsAfterHeadChange } from "../attendance/attendance.correction-notifications.js"
+import { notifyPendingAdjustmentsAfterHeadChange } from "../attendance/attendance.pending-notifications.js"
 import {
   employeeInclude,
   clearFormerDepartmentHeadTitle,
@@ -436,7 +436,7 @@ export const departmentsRepository = {
       await recordDepartmentChanges(tx, operation, current, saved)
       if (headChanged) {
         await notifyPendingLeaveAfterHeadChange(tx, id)
-        await notifyPendingCorrectionsAfterHeadChange(tx, id)
+        await notifyPendingAdjustmentsAfterHeadChange(tx, id)
       }
 
       return tx.department.findUniqueOrThrow({

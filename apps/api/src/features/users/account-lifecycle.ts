@@ -16,7 +16,7 @@ import { getPrisma } from "../../lib/db.js"
 import { isForeignKeyViolation } from "../../lib/errors.js"
 import { HttpError } from "../../shared/http-error.js"
 import { notifyPendingLeaveAfterHeadChange } from "../leave/leave.repository.js"
-import { notifyPendingCorrectionsAfterHeadChange } from "../attendance/attendance.correction-notifications.js"
+import { notifyPendingAdjustmentsAfterHeadChange } from "../attendance/attendance.pending-notifications.js"
 import { canChangeAccountStatus } from "./users.policy.js"
 
 import { lockRows, lockRowsReturning } from "../../shared/db/locks.js"
@@ -122,7 +122,7 @@ export async function setAccountActive(
       )
     if (currentDepartment) {
       await notifyPendingLeaveAfterHeadChange(db, currentDepartment.id)
-      await notifyPendingCorrectionsAfterHeadChange(db, currentDepartment.id)
+      await notifyPendingAdjustmentsAfterHeadChange(db, currentDepartment.id)
     }
   }
   return count > 0

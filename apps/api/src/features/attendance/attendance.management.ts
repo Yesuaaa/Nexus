@@ -28,7 +28,7 @@ import {
   attendanceReportPage,
 } from "./attendance.reporting.js"
 import { summarizeAttendance } from "./attendance.summary.js"
-import { notifyPendingCorrection } from "./attendance.correction-notifications.js"
+import { notifyPendingAdjustment } from "./attendance.pending-notifications.js"
 import {
   notifyOvertime,
   hrAdjustmentScope,
@@ -1453,9 +1453,7 @@ export function createAttendanceManagement(clock: () => Date) {
               requestedById: userId,
             },
           })
-          if (type === "CORRECTION")
-            await notifyPendingCorrection(tx, adjustment.id)
-          else await notifyOvertime(tx, adjustment.id, "PENDING")
+          await notifyPendingAdjustment(tx, adjustment.id)
           return { adjustment }
         },
         { isolationLevel: "ReadCommitted" },

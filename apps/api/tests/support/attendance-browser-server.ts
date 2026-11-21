@@ -41,6 +41,7 @@ test("attendance browser API fixture", { timeout: 1800000 }, async (t) => {
     ["superadmin", "SUPERADMIN"],
     ["recovery", "STAFF"],
     ["correction-dst", "STAFF"],
+    ["overtime-staff", "STAFF"],
   ] as const) {
     const user = await prisma.user.create({
       data: {

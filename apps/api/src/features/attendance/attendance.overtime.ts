@@ -1,11 +1,12 @@
 import type { Prisma } from "../../generated/prisma/client.js"
-import { activeAccount, activeStaff } from "../../shared/query/accounts.js"
+import { activeAccount } from "../../shared/query/accounts.js"
 import { approvedLeaveOverlappingInterval } from "../leave/leave.repository.js"
 import {
   attendanceRepository,
   type AttendanceWorkdayRecord,
 } from "./attendance.repository.js"
 import { summarizeAttendance } from "./attendance.summary.js"
+import { notifyPendingAdjustment } from "./attendance.pending-notifications.js"
 
 /** HR can review exceptions when the employee has no independent, active Head. */
 export async function hrAdjustmentScope(tx: Prisma.TransactionClient): Promise<Prisma.AttendanceAdjustmentWhereInput> {
@@ -25,31 +26,18 @@ export async function hrAdjustmentScope(tx: Prisma.TransactionClient): Promise<P
 export async function notifyOvertime(
   tx: Prisma.TransactionClient,
   requestId: string,
-  stage: "PENDING" | "VERIFIED" | "APPROVED" | "REJECTED",
+  stage: "VERIFIED" | "APPROVED" | "REJECTED",
 ) {
   const request = await tx.attendanceAdjustment.findUniqueOrThrow({
     where: { id: requestId },
     include: { employee: true },
   })
-  const department = request.employee.departmentId
-    ? await tx.department.findUnique({
-        where: { id: request.employee.departmentId },
-        select: {head: {select: {id:true, role:true, isActive:true,accountDeletedAt:true}}},
-      })
-    : null
-  const head = department?.head
-  const eligible = head?.role === "STAFF" && head.isActive && !head.accountDeletedAt && head.id !== request.requestedById && head.id !== request.employee.userId
   const recipients = await tx.user.findMany({
     where: {
       ...activeAccount,
-      ...(stage === "PENDING" ? {id: {notIn: [request.requestedById, ...(request.employee.userId ? [request.employee.userId] : [])]}} : {}),
       OR: [
-        { role: "SUPERADMIN" },
-        ...(stage !== "PENDING" ? [{id:request.requestedById}] : []),
-        ...(stage !== "PENDING" || !eligible ? [{ role: "ADMIN" as const }] : []),
-        ...(stage === "PENDING" && eligible
-          ? [{ ...activeStaff, id: head.id }]
-          : []),
+        { role: { in: ["ADMIN", "SUPERADMIN"] } },
+        { id: request.requestedById },
       ],
     },
     select: { id: true },
@@ -65,7 +53,7 @@ export async function notifyOvertime(
       userId: id,
       attendanceAdjustmentId: request.id,
       type: `ATTENDANCE_${request.type}_${stage}`,
-      summary: `${request.employee.fullName}: ${request.type === "OVERTIME" ? `${request.overtimeMinutes} overtime minutes` : "attendance correction"} ${stage === "PENDING" ? (eligible ? "awaiting department verification" : "awaiting HR review") : stage === "VERIFIED" ? "verified, awaiting HR approval" : stage.toLowerCase()}.`,
+      summary: `${request.employee.fullName}: ${request.type === "OVERTIME" ? `${request.overtimeMinutes} overtime minutes` : "attendance correction"} ${stage === "VERIFIED" ? "verified, awaiting HR approval" : stage.toLowerCase()}.`,
     })),
     skipDuplicates: true,
   })
@@ -97,7 +85,37 @@ export async function hasPendingWorkdayCorrection(
   return result.pending
 }
 
-/** Called inside the serialized punch transaction; clock-out and request are atomic. */
+type MillisecondInterval = { start: number; end: number }
+
+/** Return the parts of a half-open interval outside start-ordered exclusions. */
+function subtractIntervals(
+  interval: MillisecondInterval,
+  exclusions: readonly MillisecondInterval[],
+) {
+  const remaining: MillisecondInterval[] = []
+  let start = interval.start
+  for (const exclusion of exclusions) {
+    if (exclusion.end <= start) continue
+    if (exclusion.start >= interval.end) break
+    if (exclusion.start > start) remaining.push({ start, end: exclusion.start })
+    start = exclusion.end
+  }
+  if (start < interval.end) remaining.push({ start, end: interval.end })
+  return remaining
+}
+
+function startAfterWorkedTime(
+  intervals: readonly MillisecondInterval[],
+  elapsed: number,
+) {
+  for (const { start, end } of intervals) {
+    const duration = end - start
+    if (elapsed < duration) return start + elapsed
+    elapsed -= duration
+  }
+}
+
+/** Call within the attendance write transaction while holding the employee lock. */
 export async function submitRecordedOvertime(
   tx: Prisma.TransactionClient,
   userId: string,
@@ -114,95 +132,108 @@ export async function submitRecordedOvertime(
   )
   if (!day || day.sessions.some((item) => !item.endedAt)) return
   if (await hasPendingWorkdayCorrection(tx, day)) return
+
+  const sessionInterval = {
+    start: session.startedAt.getTime(),
+    end: Math.min(session.endedAt.getTime(), now.getTime()),
+  }
+  if (sessionInterval.end <= sessionInterval.start) return
+
+  const { excessMinutes, requiredMinutes } = summarizeAttendance(day, now)
+  if (excessMinutes < 1) return
   const existing = await tx.attendanceAdjustment.findMany({
     where: {
       employeeId,
       type: "OVERTIME",
-      session: { workdayId: session.workdayId },
+      OR: [
+        { session: { workdayId: day.id } },
+        {
+          proposedStartedAt: { lt: new Date(sessionInterval.end) },
+          proposedEndedAt: { gt: session.startedAt },
+        },
+      ],
     },
+    select: {
+      proposedStartedAt: true,
+      proposedEndedAt: true,
+      overtimeMinutes: true,
+      session: { select: { workdayId: true } },
+    },
+    orderBy: { proposedStartedAt: "asc" },
   })
-  // Rejected time is already reviewed; subsequent punches must not resubmit it.
-  const unclaimed =
-    Math.floor(summarizeAttendance(day, now).excessMinutes) -
-    existing.reduce((sum, item) => sum + item.overtimeMinutes, 0)
-  const before = day.sessions.filter(
+  // Rejections still consume their recorded workday budget and block their intervals.
+  const claimed = existing
+    .filter((request) => request.session?.workdayId === day.id)
+    .reduce((sum, request) => sum + request.overtimeMinutes, 0)
+  let unclaimed = Math.floor(excessMinutes) - claimed
+  if (unclaimed <= 0) return
+
+  const earlierSessions = day.sessions.filter(
     (item) => item.startedAt < session.startedAt,
   )
-  const sessionExcess =
-    Math.floor(
-      summarizeAttendance({ ...day, sessions: [...before, session] }, now)
-        .excessMinutes,
-    ) -
-    Math.floor(
-      summarizeAttendance({ ...day, sessions: before }, now).excessMinutes,
+  const { workedMilliseconds: earlierWorked } = summarizeAttendance(
+    { ...day, sessions: earlierSessions },
+    now,
+  )
+  const unpaid = session.breaks
+    .filter((pause) => !pause.isPaid)
+    .map((pause) => ({
+      start: pause.startedAt.getTime(),
+      end: pause.endedAt?.getTime() ?? sessionInterval.end,
+    }))
+  const eligibleStart = startAfterWorkedTime(
+    subtractIntervals(sessionInterval, unpaid),
+    Math.max(0, requiredMinutes * 60_000 - earlierWorked),
+  )
+  if (eligibleStart === undefined) return
+
+  // A corrected overnight session can leave a historical request on another workday.
+  const windows = subtractIntervals(
+    { start: eligibleStart, end: sessionInterval.end },
+    existing.map((request) => ({
+      start: request.proposedStartedAt.getTime(),
+      end: request.proposedEndedAt.getTime(),
+    })),
+  )
+  // Prefer later work as before, without spanning previously requested time.
+  for (const window of windows.reverse()) {
+    const worked = subtractIntervals(window, unpaid)
+    const duration = worked.reduce(
+      (sum, { start, end }) => sum + end - start,
+      0,
     )
-  const available = Math.min(
-    unclaimed,
-    sessionExcess -
-      existing
-        .filter((item) => item.sessionId === session.id)
-        .reduce((sum, item) => sum + item.overtimeMinutes, 0),
-  )
-  if (available <= 0) return
-  let remaining = available * 60000
-  let cursor = session.endedAt.getTime()
-  const pauses = session.breaks
-    .filter((pause) => !pause.isPaid && pause.endedAt)
-    .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())
-  for (const pause of pauses) {
-    const worked = cursor - pause.endedAt!.getTime()
-    if (remaining <= worked) break
-    remaining -= worked
-    cursor = pause.startedAt.getTime()
-  }
-  const start = new Date(
-    Math.max(session.startedAt.getTime(), cursor - remaining),
-  )
-  const unpaid = pauses.reduce(
-    (sum, pause) =>
-      sum +
-      Math.max(
-        0,
-        pause.endedAt!.getTime() -
-          Math.max(start.getTime(), pause.startedAt.getTime()),
-      ),
-    0,
-  )
-  const minutes = Math.floor(
-    (session.endedAt.getTime() - start.getTime() - unpaid) / 60000,
-  )
-  if (
-    minutes <= 0 ||
-    existing.some(
-      (item) =>
-        item.proposedStartedAt < session.endedAt! &&
-        item.proposedEndedAt > start,
+    const minutes = Math.min(unclaimed, Math.floor(duration / 60_000))
+    if (minutes === 0) continue
+    const start = startAfterWorkedTime(worked, duration - minutes * 60_000)
+    if (start === undefined) continue
+    const startedAt = new Date(start)
+    const endedAt = new Date(window.end)
+    if (
+      (
+        await approvedLeaveOverlappingInterval(
+          tx,
+          employeeId,
+          startedAt,
+          endedAt,
+        )
+      ).length
     )
-  )
-    return
-  if (
-    (
-      await approvedLeaveOverlappingInterval(
-        tx,
+      continue
+    const request = await tx.attendanceAdjustment.create({
+      data: {
+        requestKey: `automatic-overtime:${session.id}:${startedAt.toISOString()}:${endedAt.toISOString()}`,
         employeeId,
-        start,
-        session.endedAt,
-      )
-    ).length
-  )
-    return
-  const request = await tx.attendanceAdjustment.create({
-    data: {
-      requestKey: `automatic-overtime:${session.id}:${start.toISOString()}:${session.endedAt.toISOString()}`,
-      employeeId,
-      sessionId,
-      requestedById: userId,
-      type: "OVERTIME",
-      overtimeMinutes: minutes,
-      proposedStartedAt: start,
-      proposedEndedAt: session.endedAt,
-      reason: "Recorded overtime submitted automatically at clock-out.",
-    },
-  })
-  await notifyOvertime(tx, request.id, "PENDING")
+        sessionId,
+        requestedById: userId,
+        type: "OVERTIME",
+        overtimeMinutes: minutes,
+        proposedStartedAt: startedAt,
+        proposedEndedAt: endedAt,
+        reason: "Recorded overtime submitted automatically at clock-out.",
+      },
+    })
+    await notifyPendingAdjustment(tx, request.id)
+    unclaimed -= minutes
+    if (unclaimed === 0) break
+  }
 }

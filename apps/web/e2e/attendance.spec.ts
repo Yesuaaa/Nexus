@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test"
+import { test, expect, type Browser, type Page } from "@playwright/test"
 import { spawn, type ChildProcess } from "node:child_process"
 import { randomUUID } from "node:crypto"
 import path from "node:path"
@@ -2145,6 +2145,605 @@ test("replacement Head opens and marks a real pending correction notice", async 
   } finally {
     await setHead("head")
   }
+})
+
+test("replacement Head opens and marks a real pending overtime notice", async ({
+  page,
+}) => {
+  function request(actor: string, path: string, method = "GET", body?: object) {
+    return fetch(`${api}/api${path}`, {
+      method,
+      headers: {
+        authorization: `Bearer ${fixture.actors[actor].token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    })
+  }
+  const requester = "overtime-staff"
+  const replacement = "correction-dst"
+  await clock("2026-10-30T08:00:00+08:00")
+  const opened = await request(requester, "/attendance/me/clock-in", "POST", {})
+  expect(opened.status, await opened.clone().text()).toBe(201)
+  const { workday } = (await opened.json()) as {
+    workday: { activeSessionId: string }
+  }
+  await clock("2026-10-30T18:00:00+08:00")
+  const closed = await request(requester, "/attendance/me/clock-out", "POST", {
+    sessionId: workday.activeSessionId,
+  })
+  expect(closed.status, await closed.text()).toBe(200)
+  const list = await request(
+    requester,
+    "/attendance/adjustments?scope=mine&type=OVERTIME&status=PENDING",
+  )
+  expect(list.status).toBe(200)
+  const { adjustments } = (await list.json()) as {
+    adjustments: {
+      id: string
+      employee: { departmentId: string }
+      overtimeMinutes: number
+    }[]
+  }
+  expect(adjustments).toHaveLength(1)
+  const [
+    {
+      id,
+      employee: { departmentId },
+      overtimeMinutes,
+    },
+  ] = adjustments
+  expect(overtimeMinutes).toBe(120)
+  const link = `/attendance/requests/overtime?request=${id}`
+  async function pendingNotice(actor: string) {
+    const response = await request(actor, "/request-workflows/notifications")
+    expect(response.status).toBe(200)
+    const { notifications } = (await response.json()) as {
+      notifications: {
+        id: string
+        entityId: string
+        type: string
+        readAt: string | null
+      }[]
+    }
+    return notifications.find(
+      (item) =>
+        item.entityId === id && item.type === "ATTENDANCE_OVERTIME_PENDING",
+    )
+  }
+  async function setHead(actor: string) {
+    const response = await request(
+      "admin",
+      `/departments/${departmentId}`,
+      "PUT",
+      {
+        headId: fixture.actors[actor].userId,
+      },
+    )
+    expect(response.status, await response.text()).toBe(200)
+  }
+  const former = await pendingNotice("head")
+  if (!former)
+    throw new Error("Expected a pending notice for the original Head")
+  await setHead(replacement)
+  try {
+    expect(
+      (await request("head", `/attendance/adjustments/${id}`)).status,
+    ).toBe(404)
+    expect(await pendingNotice("head")).toBeUndefined()
+    expect(
+      (
+        await request(
+          "head",
+          `/request-workflows/notifications/${former.id}/read`,
+          "PATCH",
+        )
+      ).status,
+    ).toBe(404)
+    expect(await pendingNotice(replacement)).toMatchObject({ readAt: null })
+    await page.unroute("**/api/**")
+    await routeAttendanceApi(page, { realNotifications: true })
+    await signIn(page, replacement)
+    await page.goto("/attendance/check-ins")
+    await page
+      .getByRole("button", { name: /^Notifications, \d+ unread$/ })
+      .click()
+    await page
+      .getByRole("menuitem", {
+        name: /120 overtime minutes awaiting department verification/,
+      })
+      .and(page.locator(`[href="${link}"]`))
+      .click()
+    await expect(page).toHaveURL((url) => url.pathname + url.search === link)
+    const detail = page.getByRole("dialog", { name: "Overtime request" })
+    await expect(detail.getByText("120 minutes", { exact: true })).toBeVisible()
+    await expect
+      .poll(async () => (await pendingNotice(replacement))?.readAt)
+      .toEqual(expect.any(String))
+  } finally {
+    await setHead("head")
+  }
+})
+
+const overtimePage = "/attendance/requests/overtime"
+const overtimeAdjustments = "/attendance/adjustments"
+
+function overtimeFixtureCall(
+  actor: string,
+  path: string,
+  method = "GET",
+  body?: object,
+) {
+  return fetch(`${api}/api${path}`, {
+    method,
+    headers: {
+      authorization: `Bearer ${fixture.actors[actor].token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  })
+}
+
+async function seedOvertimeReview(date: string, verify = true) {
+  const employee = "overtime-staff"
+  await clock(`${date}T08:00:00+08:00`)
+  const opened = await overtimeFixtureCall(
+    employee,
+    "/attendance/me/clock-in",
+    "POST",
+    {},
+  )
+  expect(opened.status, await opened.clone().text()).toBe(201)
+  const { workday } = (await opened.json()) as {
+    workday: { activeSessionId: string }
+  }
+  await clock(`${date}T18:00:00+08:00`)
+  const closed = await overtimeFixtureCall(
+    employee,
+    "/attendance/me/clock-out",
+    "POST",
+    {
+      sessionId: workday.activeSessionId,
+    },
+  )
+  expect(closed.status, await closed.text()).toBe(200)
+  const list = await overtimeFixtureCall(
+    employee,
+    `${overtimeAdjustments}?scope=mine&type=OVERTIME&status=PENDING`,
+  )
+  expect(list.status).toBe(200)
+  const { adjustments } = (await list.json()) as {
+    adjustments: {
+      id: string
+      sessionId: string
+      overtimeMinutes: number
+      employee: { departmentId: string }
+      reason: string
+    }[]
+  }
+  const request = adjustments.find(
+    ({ sessionId }) => sessionId === workday.activeSessionId,
+  )
+  if (!request) throw new Error("Expected overtime for the fixture shift")
+  expect(request.overtimeMinutes).toBe(120)
+  if (verify) {
+    const result = await overtimeFixtureCall(
+      "head",
+      `${overtimeAdjustments}/${request.id}/review`,
+      "POST",
+      {
+        decision: "APPROVED",
+        note: "Head verified the overtime fixture shift",
+      },
+    )
+    expect(result.status, await result.clone().text()).toBe(200)
+    expect(await result.json()).toMatchObject({
+      adjustment: { status: "VERIFIED" },
+    })
+  }
+  return request
+}
+
+function overtimeRowMenu(page: Page, id: string) {
+  return page.locator(`[id="attendance-adjustment-actions-${id}"]`)
+}
+
+function overtimeResponse(page: Page, method: string, path: string) {
+  return page.waitForResponse(
+    (response) =>
+      response.request().method() === method &&
+      new URL(response.url()).pathname === `/api${path}`,
+  )
+}
+
+async function recordWinningOvertimeDecision(
+  browser: Browser,
+  origin: string,
+  id: string,
+  decision: "Approve" | "Reject",
+  note: string,
+) {
+  const context = await browser.newContext()
+  try {
+    const page = await context.newPage()
+    await routeAttendanceApi(page)
+    await signIn(page, "superadmin")
+    await page.goto(origin + overtimePage)
+    await overtimeRowMenu(page, id).click()
+    await page.getByRole("menuitem", { name: `${decision} request` }).click()
+    const panel = page.getByRole("dialog", { name: `${decision} overtime` })
+    await panel.getByRole("textbox", { name: "Review note" }).fill(note)
+    const saved = overtimeResponse(
+      page,
+      "POST",
+      `${overtimeAdjustments}/${id}/review`,
+    )
+    await panel.getByRole("button", { name: "Confirm decision" }).click()
+    const response = await saved
+    expect(response.status(), await response.text()).toBe(200)
+    expect(await response.json()).toMatchObject({
+      adjustment: {
+        status: decision === "Approve" ? "APPROVED" : "REJECTED",
+        reviewedById: fixture.actors.superadmin.userId,
+        reviewNote: note,
+      },
+    })
+  } finally {
+    await context.close()
+  }
+}
+
+test("overtime conflict recovers a stale HR approval after Superadmin rejection", async ({
+  page,
+  browser,
+}) => {
+  const { id } = await seedOvertimeReview("2026-10-31")
+  const path = `${overtimeAdjustments}/${id}`
+  await signIn(page, "admin")
+  await page.goto(overtimePage)
+  const menu = overtimeRowMenu(page, id)
+  await menu.click()
+  await page.getByRole("menuitem", { name: "Approve request" }).click()
+  const panel = page.getByRole("dialog", { name: "Approve overtime" })
+  await expect(
+    panel.getByText("Verified — awaiting HR", { exact: true }),
+  ).toBeVisible()
+  const note = panel.getByRole("textbox", { name: "Review note" })
+  const confirm = panel.getByRole("button", { name: "Confirm decision" })
+  await note.fill("  abc")
+  const reads: string[] = []
+  page.on("request", (request) => {
+    const url = new URL(request.url())
+    if (
+      request.method() === "GET" &&
+      [`/api${path}`, `/api${overtimeAdjustments}`].includes(url.pathname)
+    )
+      reads.push(url.pathname)
+  })
+  const invalid = overtimeResponse(page, "POST", `${path}/review`)
+  await confirm.click()
+  expect((await invalid).status()).toBe(400)
+  await expect(panel.getByRole("alert")).toHaveText(
+    "Provide a valid name or reason",
+  )
+  await expect(note).toHaveValue("  abc")
+  await expect(confirm).toBeEnabled()
+  expect(reads).toEqual([])
+  await note.fill("HR approval prepared before the competing rejection")
+
+  const rejection = "Superadmin rejection from a separate browser session"
+  await recordWinningOvertimeDecision(
+    browser,
+    new URL(page.url()).origin,
+    id,
+    "Reject",
+    rejection,
+  )
+  const conflict = overtimeResponse(page, "POST", `${path}/review`)
+  await confirm.click()
+  expect((await conflict).status()).toBe(409)
+  const detail = page.getByRole("dialog", { name: "Overtime request" })
+  await expect(detail.getByRole("alert")).toHaveText(
+    "This request has already been reviewed",
+    { timeout: 5000 },
+  )
+  await expect(detail.getByText("Rejected", { exact: true })).toBeVisible()
+  await expect(detail.getByText(rejection, { exact: true })).toBeVisible()
+  await expect(
+    detail.getByRole("button", { name: "Confirm decision" }),
+  ).toHaveCount(0)
+  await expect
+    .poll(() => reads)
+    .toEqual(
+      expect.arrayContaining([`/api${path}`, `/api${overtimeAdjustments}`]),
+    )
+  await detail.getByRole("button", { name: "Done" }).click()
+  await expect(page.getByRole("row").filter({ has: menu })).toContainText(
+    "Rejected",
+  )
+  await menu.click()
+  await expect(
+    page.getByRole("menuitem", { name: /Approve request|Reject request/ }),
+  ).toHaveCount(0)
+  await page.getByRole("menuitem", { name: "View details" }).click()
+  await expect(detail.getByText(rejection, { exact: true })).toBeVisible()
+})
+
+test("overtime conflict shows the winning approval after a stale rejection leaves the filtered queue", async ({
+  page,
+  browser,
+}) => {
+  const { id } = await seedOvertimeReview("2026-11-01")
+  const path = `${overtimeAdjustments}/${id}`
+  await signIn(page, "admin")
+  await page.goto(overtimePage)
+  await page.getByRole("combobox", { name: "Request status filter" }).click()
+  await page.getByRole("option", { name: "Verified", exact: true }).click()
+  const menu = overtimeRowMenu(page, id)
+  await menu.click()
+  await page.getByRole("menuitem", { name: "Reject request" }).click()
+  const panel = page.getByRole("dialog", { name: "Reject overtime" })
+  await panel
+    .getByRole("textbox", { name: "Review note" })
+    .fill("HR rejection prepared before the competing approval")
+  const approval = "Superadmin approval from a separate browser session"
+  await recordWinningOvertimeDecision(
+    browser,
+    new URL(page.url()).origin,
+    id,
+    "Approve",
+    approval,
+  )
+  const conflict = overtimeResponse(page, "POST", `${path}/review`)
+  await panel.getByRole("button", { name: "Confirm decision" }).click()
+  expect((await conflict).status()).toBe(409)
+  const detail = page.getByRole("dialog", { name: "Overtime request" })
+  await expect(detail.getByRole("alert")).toHaveText(
+    "This request has already been reviewed",
+  )
+  await expect(detail.getByText("Approved", { exact: true })).toBeVisible()
+  await expect(detail.getByText(approval, { exact: true })).toBeVisible()
+  await expect(
+    detail.getByRole("textbox", { name: "Review note" }),
+  ).toHaveCount(0)
+  await detail.getByRole("button", { name: "Done" }).click()
+  await expect(
+    page.getByRole("combobox", { name: "Request status filter" }),
+  ).toHaveText("Verified")
+  await expect(
+    page.getByRole("table", { name: "Attendance requests" }),
+  ).toHaveAttribute("aria-busy", "false")
+  await expect(menu).toHaveCount(0)
+})
+
+test("overtime conflict clears private details after the Head loses review access", async ({
+  page,
+}) => {
+  const { id, employee, reason } = await seedOvertimeReview("2026-11-02", false)
+  const path = `${overtimeAdjustments}/${id}`
+  await signIn(page, "head")
+  await page.goto(overtimePage)
+  const menu = overtimeRowMenu(page, id)
+  await menu.click()
+  await page.getByRole("menuitem", { name: "Verify overtime" }).click()
+  const panel = page.getByRole("dialog", { name: "Verify overtime" })
+  await expect(panel.getByText(reason, { exact: true })).toBeVisible()
+  await panel
+    .getByRole("textbox", { name: "Review note" })
+    .fill("Verification prepared before leadership changed")
+  const department = `/departments/${employee.departmentId}`
+  const replacement = await overtimeFixtureCall("admin", department, "PUT", {
+    headId: fixture.actors["correction-dst"].userId,
+  })
+  expect(replacement.status, await replacement.text()).toBe(200)
+  const recovery = requestGate()
+  try {
+    await page.route(
+      `**/api${path}`,
+      async (route) => {
+        recovery.start()
+        await recovery.pending
+        await route.fallback()
+      },
+      { times: 1 },
+    )
+    const conflict = overtimeResponse(page, "POST", `${path}/review`)
+    const detail = overtimeResponse(page, "GET", path)
+    const list = overtimeResponse(page, "GET", overtimeAdjustments)
+    await panel.getByRole("button", { name: "Confirm decision" }).click()
+    const denied = await conflict
+    expect(denied.status()).toBe(403)
+    const { error } = (await denied.json()) as { error: string }
+    await recovery.started
+    await expect(
+      page.getByRole("alert").filter({ hasText: error }),
+    ).toBeVisible()
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await expect(menu).toHaveCount(0)
+    recovery.release()
+    const [detailResult, listResult] = await Promise.all([detail, list])
+    expect(detailResult.status()).toBe(404)
+    expect(listResult.status()).toBe(403)
+    await expect(page.getByText(error, { exact: true }).first()).toBeVisible()
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await expect(page.getByText(reason, { exact: true })).toHaveCount(0)
+    await expect(menu).toHaveCount(0)
+    const saved = await overtimeFixtureCall("correction-dst", path)
+    expect(saved.status).toBe(200)
+    expect(await saved.json()).toMatchObject({
+      adjustment: { status: "PENDING", verifiedById: null, reviewedById: null },
+    })
+  } finally {
+    recovery.release()
+    const restored = await overtimeFixtureCall("admin", department, "PUT", {
+      headId: fixture.actors.head.userId,
+    })
+    expect(restored.status, await restored.text()).toBe(200)
+  }
+})
+
+test("typed attendance deep links enforce request type and backend scope", async ({
+  page,
+  browser,
+}) => {
+  const overtime = await seedOvertimeReview("2026-11-03", false)
+  const correctionReason = "Private reason for the typed correction link"
+  const submitted = await overtimeFixtureCall(
+    "staff",
+    overtimeAdjustments,
+    "POST",
+    {
+      type: "CORRECTION",
+      requestKey: randomUUID(),
+      startedAt: "2026-10-28T09:00:00+08:00",
+      endedAt: "2026-10-28T09:30:00+08:00",
+      reason: correctionReason,
+    },
+  )
+  expect(submitted.status, await submitted.clone().text()).toBe(201)
+  const { adjustment: correction } = (await submitted.json()) as {
+    adjustment: { id: string; createdAt: string }
+  }
+  const correctionsPage = "/attendance/requests/corrections"
+  const requests = [
+    {
+      id: overtime.id,
+      route: overtimePage,
+      wrongRoute: correctionsPage,
+      title: "Overtime request",
+      reason: overtime.reason,
+    },
+    {
+      id: correction.id,
+      route: correctionsPage,
+      wrongRoute: overtimePage,
+      title: "Attendance correction",
+      reason: correctionReason,
+    },
+  ]
+  const unavailable = "Attendance request not found"
+  const auditDate = correction.createdAt.slice(0, 10)
+
+  async function snapshot() {
+    const details = await Promise.all(
+      requests.map(async ({ id }) => {
+        const response = await overtimeFixtureCall(
+          "head",
+          `${overtimeAdjustments}/${id}`,
+        )
+        expect(response.status).toBe(200)
+        return response.json()
+      }),
+    )
+    const audit = await overtimeFixtureCall(
+      "head",
+      `/attendance/audit?from=${auditDate}&to=${auditDate}&search=AttendanceAdjustment`,
+    )
+    expect(audit.status, await audit.clone().text()).toBe(200)
+    return { details, audit: await audit.json() }
+  }
+  const before = await snapshot()
+  const writes: string[] = []
+  function trackAttendanceWrites(target: Page) {
+    target.on("request", (request) => {
+      const pathname = new URL(request.url()).pathname
+      if (
+        pathname.startsWith("/api/attendance/") &&
+        !["GET", "HEAD"].includes(request.method())
+      ) {
+        writes.push(`${request.method()} ${pathname}`)
+      }
+    })
+  }
+  trackAttendanceWrites(page)
+  await signIn(page, "head")
+  await page.goto(overtimePage)
+  const origin = new URL(page.url()).origin
+
+  async function follow(
+    target: Page,
+    route: string,
+    id: string,
+    status: number,
+  ) {
+    const url = `${origin}${route}?request=${id}`
+    const response = overtimeResponse(
+      target,
+      "GET",
+      `${overtimeAdjustments}/${id}`,
+    )
+    await target.goto(url)
+    expect((await response).status()).toBe(status)
+    await expect(target).toHaveURL(url)
+  }
+
+  for (const { id, route, wrongRoute, title, reason } of requests) {
+    await test.step(`${title} opens only on its matching route`, async () => {
+      await follow(page, route, id, 200)
+      const panel = page.getByRole("dialog", { name: title })
+      await expect(panel.getByText(reason, { exact: true })).toBeVisible()
+
+      await follow(page, wrongRoute, id, 200)
+      const error = page
+        .getByRole("alert")
+        .getByText(unavailable, { exact: true })
+      async function expectUnavailable() {
+        await expect(error.or(panel)).toBeVisible()
+        expect
+          .soft(await error.isVisible(), `${title} under ${wrongRoute}`)
+          .toBe(true)
+        expect.soft(await panel.count()).toBe(0)
+        expect.soft(await overtimeRowMenu(page, id).count()).toBe(0)
+        expect
+          .soft(await page.getByText(reason, { exact: true }).count())
+          .toBe(0)
+      }
+      await expectUnavailable()
+      const reloaded = overtimeResponse(
+        page,
+        "GET",
+        `${overtimeAdjustments}/${id}`,
+      )
+      await page.reload()
+      expect((await reloaded).status()).toBe(200)
+      await expectUnavailable()
+      await expect(page).toHaveURL(`${origin}${wrongRoute}?request=${id}`)
+    })
+  }
+
+  for (const { id, route } of requests) {
+    await page.goto(route)
+    await expect(overtimeRowMenu(page, id)).toBeVisible()
+    const other = requests.find((request) => request.id !== id)
+    if (other) await expect(overtimeRowMenu(page, other.id)).toHaveCount(0)
+  }
+  await follow(page, overtimePage, randomUUID(), 404)
+  await expect(
+    page.getByRole("alert").getByText(unavailable, { exact: true }),
+  ).toBeVisible()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+
+  const context = await browser.newContext()
+  try {
+    const outsider = await context.newPage()
+    trackAttendanceWrites(outsider)
+    await routeAttendanceApi(outsider)
+    await signIn(outsider, "correction-dst")
+    for (const { id, route, wrongRoute, reason } of requests) {
+      for (const path of [route, wrongRoute]) {
+        await follow(outsider, path, id, 404)
+        await expect(
+          outsider.getByRole("alert").getByText(unavailable, { exact: true }),
+        ).toBeVisible()
+        await expect(outsider.getByRole("dialog")).toHaveCount(0)
+        await expect(outsider.getByText(reason, { exact: true })).toHaveCount(0)
+      }
+    }
+  } finally {
+    await context.close()
+  }
+  expect(writes).toEqual([])
+  expect(await snapshot()).toEqual(before)
 })
 
 test("Superadmin opens organization leave by direct URL and notification", async ({
