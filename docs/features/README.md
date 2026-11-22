@@ -6,6 +6,8 @@ Use the date the feature was completed, and keep later implementation changes in
 
 ## Records
 
+- [Payroll workflow guide](payroll-workflow.md), documented 2026-11-20: setup, calculation, independent approval, payslips, Staff concerns, sandbox disbursements and reconciliation.
+
 - [Branch 266 database rollback](branch266-database-rollback.md), completed 2026-11-17.
 
 - [Superadmin Service Operations logs](service-operation-logs.md), developed 2026-11-17.

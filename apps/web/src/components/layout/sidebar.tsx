@@ -18,6 +18,7 @@ import {
   MessagesSquare,
   MoveLeft,
   UsersRound,
+  WalletCards,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -48,6 +49,7 @@ import {
   ProjectWorkspaceSidebarLinks,
   StaffProjectSidebarLinks,
 } from "@/features/projects/components/client-project-sidebar-links"
+import { Pill } from "@/components/ui/pill"
 
 import { focusRing, iconButtonClass } from "./styles"
 import {
@@ -90,9 +92,12 @@ const navigationIcons: Partial<Record<RoutePolicyId, NavIcon>> = {
   help: CircleHelp,
   employees: UsersRound,
   "staff-workload": Gauge,
+  "staff-my-payroll": WalletCards,
   "administrative-workload": Gauge,
   "service-operation-logs": History,
   "project-management-logs": History,
+  "people-hr-logs": History,
+  "workforce-compliance-logs": History,
   "attendance-audit": History,
 }
 
@@ -143,6 +148,7 @@ type NavGroup = {
     label: string
     ariaLabel?: string
     match?: (pathname: string) => boolean
+    disabled?: boolean
   }[]
 }
 
@@ -178,6 +184,45 @@ function moduleGroup(
         label: "Management",
         ariaLabel: `${singular} Management`,
       },
+    ],
+  }
+}
+
+function payrollModuleGroup(visible: (account: Account) => boolean): NavGroup {
+  return {
+    kind: "group",
+    label: "Payroll",
+    icon: WalletCards,
+    visible,
+    links: [
+      {
+        href: "/module/payroll",
+        label: "Overview",
+        ariaLabel: "Payroll overview",
+      },
+      { href: "/module/payroll/runs", label: "Payroll Runs" },
+      {
+        href: "/module/payroll/compensation",
+        label: "Compensation",
+      },
+      {
+        href: "/module/payroll/approvals",
+        label: "Approvals",
+      },
+      {
+        href: "/module/payroll/disbursements",
+        label: "Disbursements",
+      },
+      {
+        href: "/module/payroll/reconciliation",
+        label: "Reconciliation",
+      },
+      {
+        href: "/module/payroll/payslips",
+        label: "Payslips & History",
+      },
+      { href: "/module/payroll/reports", label: "Reports" },
+      { href: "/module/payroll/settings", label: "Settings" },
     ],
   }
 }
@@ -287,6 +332,26 @@ function GroupDisclosure({
           <div className="mt-0.5 mb-1 ml-[19px] grid gap-0.5 border-l border-[#e6e9ee] pl-2">
             {group.links.map((link) => {
               const active = isGroupLinkActive(link, pathname)
+              const className = cn(
+                rowClass,
+                "h-8 px-2.5 text-[12.5px]",
+                active && activeRowClass,
+              )
+              if (link.disabled)
+                return (
+                  <span
+                    key={link.href}
+                    className={cn(
+                      className,
+                      "cursor-default text-[#8a94a6] hover:bg-transparent hover:text-[#8a94a6]",
+                    )}
+                  >
+                    <span className="min-w-0 flex-1 truncate">
+                      {link.label}
+                    </span>
+                    <Pill tone="neutral">Coming soon</Pill>
+                  </span>
+                )
               return (
                 <Link
                   key={link.href}
@@ -295,12 +360,7 @@ function GroupDisclosure({
                   aria-label={link.ariaLabel}
                   aria-current={active ? "page" : undefined}
                   onClick={onNavigate}
-                  className={cn(
-                    rowClass,
-                    "h-8 px-2.5 text-[12.5px]",
-                    focusRing,
-                    active && activeRowClass,
-                  )}
+                  className={cn(className, focusRing)}
                 >
                   <span className="min-w-0 truncate">{link.label}</span>
                 </Link>
@@ -352,6 +412,19 @@ function GroupFlyout({
         </DropdownMenuLabel>
         {group.links.map((link) => {
           const active = isGroupLinkActive(link, pathname)
+          if (link.disabled)
+            return (
+              <DropdownMenuItem
+                key={link.href}
+                disabled
+                className="rounded-md px-2 py-1.5 text-[13px] text-[#6f7b8e]"
+              >
+                <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                  <span className="truncate">{link.label}</span>
+                  <Pill tone="neutral">Coming soon</Pill>
+                </span>
+              </DropdownMenuItem>
+            )
           return (
             <DropdownMenuItem
               key={link.href}
@@ -445,6 +518,9 @@ export function Sidebar({
   }
 
   function renderPolicy(policy: RoutePolicy) {
+    if (policy.id === "module-payroll")
+      return renderGroup(payrollModuleGroup(policy.canAccess))
+
     const attendanceGroup = attendanceNavigation.find(
       (group) => group.id === policy.id,
     )

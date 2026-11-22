@@ -17,6 +17,14 @@ export const AdministrativeCapability = {
 export type AdministrativeCapability =
   (typeof AdministrativeCapability)[keyof typeof AdministrativeCapability]
 
+export const PayrollCapability = {
+  READ: Permission.PAYROLL_READ,
+  MANAGE: Permission.PAYROLL_MANAGE,
+} as const
+
+export type PayrollCapability =
+  (typeof PayrollCapability)[keyof typeof PayrollCapability]
+
 export const OperationalCapability = {
   ASSIGNED_STAFF: "staff:assigned-operation",
   DEPARTMENT_HEAD: "department-head:assigned-operation",
@@ -64,6 +72,29 @@ export function hasAdministrativeCapability(
     case AdministrativeCapability.MANAGEMENT:
     case AdministrativeCapability.BUSINESS_CONVERSATION_INSPECTION:
       return hasPermission(actor.role, capability)
+    default:
+      return false
+  }
+}
+
+/** Payroll access is separate from global administration; Superadmin is read-only. */
+export function hasPayrollCapability(
+  actor: AuthorizationActor,
+  capability: PayrollCapability,
+): boolean {
+  if (!isActive(actor)) return false
+
+  switch (capability) {
+    case PayrollCapability.READ:
+      return (
+        (actor.role === Role.ADMIN || actor.role === Role.SUPERADMIN) &&
+        hasPermission(actor.role, Permission.PAYROLL_READ)
+      )
+    case PayrollCapability.MANAGE:
+      return (
+        actor.role === Role.ADMIN &&
+        hasPermission(actor.role, Permission.PAYROLL_MANAGE)
+      )
     default:
       return false
   }

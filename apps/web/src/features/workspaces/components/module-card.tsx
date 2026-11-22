@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import {
+  Banknote,
   BriefcaseBusiness,
   Clock3,
   FolderKanban,
@@ -22,6 +23,7 @@ const moduleIcons: Record<string, LucideIcon> = {
   attendance: Clock3,
   administration: ShieldCheck,
   finance: WalletCards,
+  payroll: Banknote,
 }
 
 export function ModuleCard({ module }: { module: WorkspaceModule }) {

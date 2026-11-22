@@ -342,8 +342,8 @@ export function FiguresRow({
   loading,
   label,
 }: {
-  /** Designed for exactly four figures. */
-  items: [Figure, Figure, Figure, Figure]
+  /** Designed for a compact three- or four-figure summary. */
+  items: [Figure, Figure, Figure] | [Figure, Figure, Figure, Figure]
   loading: boolean
   label: string
 }) {
@@ -351,7 +351,12 @@ export function FiguresRow({
     <dl
       aria-label={label}
       aria-busy={loading}
-      className="m-0 mt-5 grid grid-cols-4 divide-x divide-[#eceef1] overflow-hidden rounded-xl border border-[#eceef1] max-[560px]:mt-4"
+      className={cn(
+        "m-0 mt-5 grid divide-x divide-[#eceef1] overflow-hidden rounded-xl border border-[#eceef1] max-[560px]:mt-4",
+        items.length === 3
+          ? "grid-cols-3 max-[560px]:grid-cols-1 max-[560px]:divide-x-0 max-[560px]:divide-y"
+          : "grid-cols-4",
+      )}
     >
       {items.map((item) => (
         <div

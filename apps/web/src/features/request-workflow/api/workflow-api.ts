@@ -1,4 +1,8 @@
-import { apiRequest, apiStreamRequest } from "@/features/auth/api/auth-api"
+import {
+  apiRequest,
+  apiStreamRequest,
+  downloadAuthenticatedFile,
+} from "@/features/auth/api/auth-api"
 import type { Workflow, WorkflowAction, WorkflowFile } from "../model/workflow"
 
 const path = (id: string) => `/api/request-workflows/${encodeURIComponent(id)}`
@@ -68,15 +72,10 @@ export async function downloadWorkflowFile(
   requestId: string,
   file: Pick<WorkflowFile, "id" | "name">,
 ) {
-  const response = await apiStreamRequest(
+  return downloadAuthenticatedFile(
     `${path(requestId)}/files/${encodeURIComponent(file.id)}`,
+    file.name,
   )
-  const url = URL.createObjectURL(await response.blob())
-  const anchor = document.createElement("a")
-  anchor.href = url
-  anchor.download = file.name
-  anchor.click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 export async function createWorkflowFilePreviewUrl(

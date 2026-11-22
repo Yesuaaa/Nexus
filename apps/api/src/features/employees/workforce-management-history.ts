@@ -3,6 +3,8 @@ import {
   WorkforceManagementOrigin as Origin,
   WorkforceManagementSubject as Subject,
   EmployeeStatus,
+  PayrollRequestStatus,
+  PayrollRequestType,
   EmploymentType,
   type Prisma,
 } from "../../generated/prisma/client.js"
@@ -10,6 +12,7 @@ import {
   assertHistoryObject,
   assertManagementOperation,
   historyNullableId,
+  historyTimestamp,
   historyTransition,
   validateHistoryPayload,
   type HistoryTransition as Transition,
@@ -28,7 +31,34 @@ type Heads = {
   temporaryHeadOriginalId?: Transition<string | null>
   temporaryHeadAssignedId?: Transition<string | null>
 }
-type Payloads = {
+export type PayrollApprovalAuditAction =
+  | "PAYROLL_SUBMITTED"
+  | "PAYROLL_APPROVED"
+  | "PAYROLL_REJECTED"
+  | "PAYROLL_RETURNED_FOR_REVISION"
+  | "PAYROLL_RESUBMITTED"
+
+type PayrollDocumentActivity =
+  | "DISBURSEMENT_PREPARED"
+  | "DISBURSEMENT_VALIDATED"
+  | "DISBURSEMENT_CANCELLED"
+  | "DISBURSEMENT_TEST_DESTINATION"
+  | "DISBURSEMENT_SIMULATED"
+  | "RECONCILIATION_OBSERVED"
+  | "RECONCILIATION_DECIDED"
+  | "GENERATED"
+  | "REGENERATED"
+  | "PUBLISHED"
+  | "REQUEST_CREATED"
+  | "REQUEST_UPDATED"
+  | "REQUEST_MESSAGE"
+  | "REQUEST_EDITED"
+  | "REQUEST_WITHDRAWN"
+
+type Payloads = Record<
+  PayrollApprovalAuditAction,
+  { calculationId: string; reason?: string }
+> & {
   CREATED: Assignments &
     Heads & {
       status?: Transition<EmployeeStatus | null>
@@ -45,6 +75,52 @@ type Payloads = {
   DELETED: Heads & {
     departmentId?: Transition<string | null>
     leadId?: Transition<string | null>
+  }
+  VERSION_CREATED: {
+    previousVersionId: string | null
+    versionId: string
+    reason: string
+  }
+  PAYROLL_PERIOD_CREATED: {
+    configurationId: string
+    startDate: string
+    endDate: string
+    frequency: "MONTHLY" | "SEMI_MONTHLY"
+  }
+  PAYROLL_DOCUMENT_ACTIVITY: {
+    requestStatus?: Transition<PayrollRequestStatus>
+    correctionFlag?: Transition<boolean>
+    type?: Transition<PayrollRequestType>
+    description?: Transition<string>
+    payslipId?: Transition<string | null>
+    withdrawnAt?: Transition<string | null>
+    withdrawnBy?: Transition<string | null>
+    activity: PayrollDocumentActivity
+    calculationId?: string
+    batchId?: string
+    decisionId?: string
+  }
+  PAYROLL_RUN_CREATED: { periodId: string }
+  PAYROLL_PREFERENCES_UPDATED: {
+    showCompanyLogo?: Transition<boolean>
+    showEmployeeId?: Transition<boolean>
+    requirePublicationConfirmation?: Transition<boolean>
+    requireSimulationConfirmation?: Transition<boolean>
+  }
+  PAYROLL_CALCULATED: {
+    calculationId: string
+    previousCalculationId: string | null
+    revision: number
+  }
+  PAYROLL_RECALCULATED: {
+    calculationId: string
+    previousCalculationId: string | null
+    revision: number
+  }
+  PAYROLL_CALCULATION_FAILED: {
+    attemptId: string
+    revision: number
+    failureCode: "CALCULATION_INPUT_INVALID" | "CALCULATION_FAILED"
   }
 }
 
@@ -68,10 +144,47 @@ type WorkforceField =
   | "temporaryHeadOriginalId"
   | "temporaryHeadAssignedId"
   | "leadId"
+  | "previousVersionId"
+  | "versionId"
+  | "reason"
+  | "configurationId"
+  | "periodId"
+  | "startDate"
+  | "endDate"
+  | "frequency"
+  | "calculationId"
+  | "previousCalculationId"
+  | "revision"
+  | "attemptId"
+  | "failureCode"
+  | "type"
+  | "requestStatus"
+  | "correctionFlag"
+  | "payslipId"
+  | "withdrawnAt"
+  | "withdrawnBy"
+  | "showEmployeeId"
+  | "showCompanyLogo"
+  | "requirePublicationConfirmation"
+  | "requireSimulationConfirmation"
 
-type ActionSubjects = {
-  CREATED: Subject
-  PROFILE_UPDATED: Subject
+type ActionSubjects = Record<PayrollApprovalAuditAction, "PAYROLL_RUN"> & {
+  CREATED: Exclude<
+    Subject,
+    | "COMPENSATION"
+    | "PAYROLL_CONFIGURATION"
+    | "PAYROLL_PERIOD"
+    | "PAYROLL_RUN"
+    | "PAYROLL_REQUEST"
+  >
+  PROFILE_UPDATED: Exclude<
+    Subject,
+    | "COMPENSATION"
+    | "PAYROLL_CONFIGURATION"
+    | "PAYROLL_PERIOD"
+    | "PAYROLL_RUN"
+    | "PAYROLL_REQUEST"
+  >
   STATUS_CHANGED: "EMPLOYEE"
   ASSIGNMENT_CHANGED: "EMPLOYEE" | "DEPARTMENT"
   HEAD_CHANGED: "DEPARTMENT"
@@ -79,6 +192,14 @@ type ActionSubjects = {
   LEAD_CHANGED: "TEAM"
   TITLE_CLEARED: "EMPLOYEE" | "DEPARTMENT"
   DELETED: "DEPARTMENT" | "TEAM"
+  VERSION_CREATED: "COMPENSATION" | "PAYROLL_CONFIGURATION"
+  PAYROLL_PERIOD_CREATED: "PAYROLL_PERIOD"
+  PAYROLL_DOCUMENT_ACTIVITY: "PAYROLL_RUN" | "PAYROLL_REQUEST"
+  PAYROLL_RUN_CREATED: "PAYROLL_RUN"
+  PAYROLL_PREFERENCES_UPDATED: "PAYROLL_CONFIGURATION"
+  PAYROLL_CALCULATED: "PAYROLL_RUN"
+  PAYROLL_RECALCULATED: "PAYROLL_RUN"
+  PAYROLL_CALCULATION_FAILED: "PAYROLL_RUN"
 }
 
 export type WorkforceManagementChangeInput = {
@@ -129,7 +250,12 @@ export async function writeWorkforceManagementChange(
   operation: ManagementOperation,
   input: WorkforceManagementChangeInput,
 ) {
-  assertManagementOperation(operation)
+  assertManagementOperation(
+    operation,
+    input?.action === Action.PAYROLL_DOCUMENT_ACTIVITY
+      ? "staff-payroll"
+      : "management",
+  )
   assertHistoryObject(input, [
     "action",
     "origin",
@@ -228,6 +354,209 @@ export async function writeWorkforceManagementChange(
           }
         : { departmentId: removedId, leadId: removedId }
       fields = Object.keys(checks)
+      break
+    case Action.PAYROLL_PREFERENCES_UPDATED:
+      if (
+        input.subjectType !== Subject.PAYROLL_CONFIGURATION ||
+        operation.actorRoleAtTime !== "ADMIN"
+      )
+        throw new Error(
+          "Payroll preference history requires an Admin operation",
+        )
+      checks = {
+        showCompanyLogo: historyTransition(
+          (value) => typeof value === "boolean",
+        ),
+        showEmployeeId: historyTransition(
+          (value) => typeof value === "boolean",
+        ),
+        requirePublicationConfirmation: historyTransition(
+          (value) => typeof value === "boolean",
+        ),
+        requireSimulationConfirmation: historyTransition(
+          (value) => typeof value === "boolean",
+        ),
+      }
+      fields = Object.keys(checks)
+      break
+    case Action.VERSION_CREATED:
+      if (
+        input.subjectType !== "COMPENSATION" &&
+        input.subjectType !== "PAYROLL_CONFIGURATION"
+      )
+        throw new Error("Version history requires a payroll subject")
+      fields = ["previousVersionId", "versionId", "reason"]
+      checks = {
+        previousVersionId: historyNullableId,
+        versionId: isRecordId,
+        reason: (value) =>
+          typeof value === "string" && value.length >= 3 && value.length <= 500,
+      }
+      required = [...fields]
+      break
+    case Action.PAYROLL_PERIOD_CREATED:
+      if (input.subjectType !== Subject.PAYROLL_PERIOD)
+        throw new Error("Payroll period history requires a PayrollPeriod")
+      fields = ["configurationId", "startDate", "endDate", "frequency"]
+      checks = {
+        configurationId: isRecordId,
+        startDate: (value) =>
+          typeof value === "string" &&
+          /^\d{4}-\d\d-\d\d$/.test(value) &&
+          Number.isFinite(Date.parse(`${value}T00:00:00.000Z`)) &&
+          new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) ===
+            value,
+        endDate: (value) =>
+          typeof value === "string" &&
+          /^\d{4}-\d\d-\d\d$/.test(value) &&
+          Number.isFinite(Date.parse(`${value}T00:00:00.000Z`)) &&
+          new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) ===
+            value,
+        frequency: (value) => value === "MONTHLY" || value === "SEMI_MONTHLY",
+      }
+      required = [...fields]
+      break
+    case Action.PAYROLL_RUN_CREATED:
+      if (input.subjectType !== Subject.PAYROLL_RUN)
+        throw new Error("Payroll run history requires a PayrollRun")
+      fields = ["periodId"]
+      checks = { periodId: isRecordId }
+      required = [...fields]
+      break
+    case Action.PAYROLL_CALCULATED:
+    case Action.PAYROLL_RECALCULATED:
+      if (input.subjectType !== Subject.PAYROLL_RUN)
+        throw new Error("Payroll calculation history requires a PayrollRun")
+      fields = ["calculationId", "previousCalculationId", "revision"]
+      checks = {
+        calculationId: isRecordId,
+        previousCalculationId: historyNullableId,
+        revision: (value) => Number.isInteger(value) && Number(value) > 0,
+      }
+      required = [...fields]
+      break
+    case Action.PAYROLL_DOCUMENT_ACTIVITY: {
+      const run = input.subjectType === Subject.PAYROLL_RUN
+      const request = input.subjectType === Subject.PAYROLL_REQUEST
+      if ((!run && !request) || input.origin !== Origin.PAYROLL_MANAGEMENT)
+        throw new Error("Invalid payroll activity subject")
+      fields = request
+        ? [
+            "type",
+            "description",
+            "requestStatus",
+            "correctionFlag",
+            "payslipId",
+            "withdrawnAt",
+            "withdrawnBy",
+          ]
+        : []
+      required = run ? ["activity", "calculationId"] : ["activity"]
+      if (run && String(input.changes?.activity).startsWith("DISBURSEMENT_"))
+        required.push("batchId")
+      if (run && input.changes?.activity === "RECONCILIATION_DECIDED")
+        required.push("decisionId")
+      checks = {
+        activity: (v) =>
+          run
+            ? operation.actorRoleAtTime === "ADMIN" &&
+              (v === "GENERATED" ||
+                v === "REGENERATED" ||
+                v === "PUBLISHED" ||
+                v === "DISBURSEMENT_PREPARED" ||
+                v === "DISBURSEMENT_VALIDATED" ||
+                v === "DISBURSEMENT_CANCELLED" ||
+                v === "DISBURSEMENT_TEST_DESTINATION" ||
+                v === "DISBURSEMENT_SIMULATED" ||
+                v === "RECONCILIATION_OBSERVED" ||
+                v === "RECONCILIATION_DECIDED")
+            : operation.actorRoleAtTime === "STAFF"
+              ? v === "REQUEST_CREATED" ||
+                v === "REQUEST_MESSAGE" ||
+                v === "REQUEST_EDITED" ||
+                v === "REQUEST_WITHDRAWN"
+              : operation.actorRoleAtTime === "ADMIN" &&
+                v === "REQUEST_UPDATED",
+        ...(run
+          ? {
+              calculationId: isRecordId,
+              ...(input.changes?.activity === "RECONCILIATION_DECIDED"
+                ? { decisionId: isRecordId }
+                : {}),
+              ...(String(input.changes?.activity).startsWith("DISBURSEMENT_")
+                ? { batchId: isRecordId }
+                : {}),
+            }
+          : {}),
+        ...(request
+          ? {
+              type: historyTransition((value) =>
+                Object.values(PayrollRequestType).some(
+                  (item) => item === value,
+                ),
+              ),
+              description: historyTransition(
+                (value) =>
+                  typeof value === "string" &&
+                  value.trim().length >= 5 &&
+                  value.length <= 2000,
+              ),
+              payslipId: historyTransition(historyNullableId),
+              withdrawnAt: historyTransition(historyTimestamp),
+              withdrawnBy: historyTransition(historyNullableId),
+            }
+          : {}),
+        ...(input.changes.activity === "REQUEST_UPDATED" ||
+        input.changes.activity === "REQUEST_WITHDRAWN"
+          ? {
+              requestStatus: historyTransition((value) =>
+                Object.values(PayrollRequestStatus).some(
+                  (item) => item === value,
+                ),
+              ),
+              ...(input.changes.activity === "REQUEST_UPDATED"
+                ? {
+                    correctionFlag: historyTransition(
+                      (value) => typeof value === "boolean",
+                    ),
+                  }
+                : {}),
+            }
+          : {}),
+      }
+      break
+    }
+    case Action.PAYROLL_SUBMITTED:
+    case Action.PAYROLL_APPROVED:
+    case Action.PAYROLL_REJECTED:
+    case Action.PAYROLL_RETURNED_FOR_REVISION:
+    case Action.PAYROLL_RESUBMITTED:
+      if (input.subjectType !== Subject.PAYROLL_RUN)
+        throw new Error("Payroll approval history requires a PayrollRun")
+      fields = ["calculationId", "status"]
+      required = ["calculationId"]
+      checks = { calculationId: isRecordId }
+      if (input.action === Action.PAYROLL_REJECTED) {
+        fields = [...fields, "reason"]
+        required.push("reason")
+        checks.reason = (value) =>
+          typeof value === "string" &&
+          value.trim().length >= 5 &&
+          value.length <= 500
+      }
+      break
+    case Action.PAYROLL_CALCULATION_FAILED:
+      if (input.subjectType !== Subject.PAYROLL_RUN)
+        throw new Error("Payroll calculation history requires a PayrollRun")
+      fields = ["attemptId", "revision", "failureCode"]
+      checks = {
+        attemptId: isRecordId,
+        revision: (value) => Number.isInteger(value) && Number(value) > 0,
+        failureCode: (value) =>
+          value === "CALCULATION_INPUT_INVALID" ||
+          value === "CALCULATION_FAILED",
+      }
+      required = [...fields]
       break
   }
   const payload = validateHistoryPayload(
