@@ -113,11 +113,20 @@ test(
       assert.doesNotMatch(text, /PRIVATE|New actor name/)
       const payload = JSON.parse(text) as {
         total: number
-        events: { id: string; actor: { name: string } }[]
+        events: {
+          id: string
+          actor: { name: string }
+          message: string
+          summaryDetail: string | null
+        }[]
       }
       assert.equal(payload.total, 1)
       assert.equal(payload.events[0]?.id, success.id)
       assert.equal(payload.events[0]?.actor.name, client.user.fullName)
+      assert.equal(
+        payload.events[0]?.summaryDetail,
+        "Initial Project → Updated Project",
+      )
     }
 
     await db.exec(
@@ -166,6 +175,36 @@ test(
       /PRIVATE|reject_success_for_test|passwordHash|stack/,
     )
     assert.equal(await prisma.serviceOperationLog.count(), 0)
+
+    const task = await prisma.projectManagementLog.create({
+      data: {
+        event: "TASK_STATUS_CHANGED",
+        source: "planning",
+        outcome: "SUCCESS",
+        projectId: project.id,
+        projectName: "Updated Project",
+        targetLabel: "Prepare artwork",
+        correlationId: randomUUID(),
+        changes: [{ field: "Status", before: "In progress", after: "Done" }],
+      },
+    })
+    const taskLogs = (await (
+      await call(`${reader}?correlationId=${task.correlationId}`)
+    ).json()) as {
+      events: { message: string; summaryDetail: string }[]
+    }
+    assert.deepEqual(
+      taskLogs.events.map(({ message, summaryDetail }) => ({
+        message,
+        summaryDetail,
+      })),
+      [
+        {
+          message: "Moved task “Prepare artwork” to Done.",
+          summaryDetail: "Project “Updated Project” · In progress → Done",
+        },
+      ],
+    )
 
     const now = new Date()
     const boundary = new Date(now.getTime() - retentionMs)

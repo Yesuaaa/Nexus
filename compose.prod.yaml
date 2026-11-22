@@ -1,8 +1,20 @@
 services:
+  migrate:
+    build:
+      context: .
+      target: migrate
+    environment:
+      DATABASE_URL: "${DATABASE_URL:?Set DATABASE_URL to a PostgreSQL connection URL}"
+      DIRECT_URL: "${DIRECT_URL:-}"
+    restart: "no"
+
   api:
     build:
       context: .
       target: api
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     environment:
       PORT: "3001"
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET to a random base64url key of at least 32 bytes}

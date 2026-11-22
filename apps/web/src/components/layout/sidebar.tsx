@@ -182,11 +182,13 @@ function moduleGroup(
   }
 }
 
+const administrativeRequestsPath = "/module/service-operations"
+
 function requestGroup(account: Account): NavGroup {
   const links: NavGroup["links"] = []
-  if (canAccessRoute(account, "/module/service-operations")) {
+  if (canAccessRoute(account, administrativeRequestsPath)) {
     links.push({
-      href: "/module/service-operations",
+      href: administrativeRequestsPath,
       label: "Overview",
       ariaLabel: "Request overview",
     })
@@ -390,6 +392,10 @@ export function Sidebar({
   onCloseDrawer: () => void
 }) {
   const pathname = usePathname()
+  const showRequestsUnderService =
+    account.role === "SUPERADMIN" &&
+    canAccessRoute(account, "/services") &&
+    canAccessRoute(account, administrativeRequestsPath)
   // Groups follow the current page until the user toggles one. Once toggled,
   // the accordion keeps only the selected group open until navigation changes.
   const [openGroupState, setOpenGroupState] = useState<{
@@ -490,9 +496,12 @@ export function Sidebar({
       policy.id === "module-service-operations" ||
       policy.id === "request-inbox"
     ) {
+      if (showRequestsUnderService && policy.id === "module-service-operations")
+        return null
+
       const group = requestGroup(account)
       const hasAdministrativeOverview = group.links.some(
-        (link) => link.href === "/module/service-operations",
+        (link) => link.href === administrativeRequestsPath,
       )
       // If a role can access both links, the overview policy renders the
       // group once and the inbox policy is intentionally suppressed.
@@ -529,6 +538,13 @@ export function Sidebar({
         `/${policy.id}`,
         policy.canAccess,
       )
+      if (policy.id === "services" && showRequestsUnderService) {
+        group.links.push({
+          href: administrativeRequestsPath,
+          label: "Request",
+          ariaLabel: "Request overview",
+        })
+      }
       return renderGroup(group)
     }
     return <SidebarNavigationLink key={policy.id} {...props} />

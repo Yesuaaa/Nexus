@@ -162,6 +162,7 @@ export function CalendarPage() {
   const [staffId, setStaffId] = useState("all")
   const [now, setNow] = useState(() => Date.now())
   const today = dateKey.format(now)
+  const [month, setMonth] = useState(today.slice(0, 7))
   const [selected, setSelected] = useState(today)
   const [allEvents, setEvents] = useState<CalendarEvent[]>([])
   const [loading, setLoading] = useState(true)
@@ -180,7 +181,7 @@ export function CalendarPage() {
       if (inFlight) return
       inFlight = true
       apiRequest<CalendarEvent[] | CalendarResponse>(
-        `/api/projects/calendar${isClient ? "" : `?scope=${scope}`}`,
+        `/api/projects/calendar${isClient ? "" : `?scope=${scope}&month=${month}`}`,
         {
           signal: controller.signal,
         },
@@ -212,7 +213,7 @@ export function CalendarPage() {
       controller.abort()
       stopRefresh()
     }
-  }, [isClient, scope, revision, account.id])
+  }, [isClient, scope, month, revision, account.id])
 
   const events = allEvents.filter(
     (event) =>
@@ -464,6 +465,7 @@ export function CalendarPage() {
             today={today}
             markers={markers}
             onSelect={setSelected}
+            onViewMonthChange={setMonth}
           />
           <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2">
             {Object.entries(eventTypes)

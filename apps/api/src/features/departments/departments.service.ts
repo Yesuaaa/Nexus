@@ -1,5 +1,6 @@
 import { EmployeeStatus, Prisma, Role } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
+import { lockRows } from "../../shared/db/locks.js"
 import {
   readEmployeeMemberState,
   readUserMemberState,
@@ -349,11 +350,22 @@ export const departmentsService = {
         )
       }
       await prisma.$transaction(async (tx) => {
+        await lockRows(tx, "Department", id, "share")
         const before = await readEmployeeMemberState(tx, employee.id)
-        await updateEmployee(tx, employee.id, {
-          departmentId: null,
-          teamId: null,
-        })
+        if (before.employee?.departmentId !== id)
+          throw new DepartmentError(
+            409,
+            "Employee assignment changed; refresh and retry",
+          )
+        await updateEmployee(
+          tx,
+          employee.id,
+          {
+            departmentId: null,
+            teamId: null,
+          },
+          { operation, placementOnly: true },
+        )
         await writeDepartmentMemberChanges(tx, operation, before)
       })
       return { message: "Employee removed from department" }
@@ -374,12 +386,18 @@ export const departmentsService = {
     }
 
     await prisma.$transaction(async (tx) => {
-      const before = await readUserMemberState(tx, user.id, true)
+      await lockRows(tx, "Department", id, "share")
+      const before = await readUserMemberState(tx, user.id, false)
+      if (before.user?.departmentId !== id)
+        throw new DepartmentError(
+          409,
+          "Employee assignment changed; refresh and retry",
+        )
       await tx.user.update({
         where: { id: user.id },
         data: { departmentId: null, teamId: null },
       })
-      await syncEmployeeForUser(tx, user.id)
+      await syncEmployeeForUser(tx, user.id, operation)
       await writeDepartmentMemberChanges(tx, operation, before)
     })
     return { message: "Employee removed from department" }
@@ -511,7 +529,7 @@ export const departmentsService = {
         },
         include: publicUserInclude,
       })
-      await syncEmployeeForUser(tx, saved.id)
+      await syncEmployeeForUser(tx, saved.id, operation)
       await writeDepartmentMemberChanges(tx, operation, before)
       return saved
     })

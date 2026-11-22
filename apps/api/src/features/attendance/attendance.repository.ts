@@ -57,12 +57,9 @@ export const attendanceRepository = {
     return tx.attendanceWorkSession.findFirst({
       where: { employeeId },
       orderBy: [{ startedAt: "desc" }, { id: "desc" }],
-    })
-  },
-  assignments(tx: Prisma.TransactionClient, employeeId: string) {
-    return tx.attendancePolicyAssignment.findMany({
-      where: { employeeId },
-      include: { policy: { include: { days: true } } },
+      include: {
+        workday: { select: { id: true, workDate: true, timeZone: true } },
+      },
     })
   },
 }

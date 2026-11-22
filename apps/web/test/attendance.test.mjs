@@ -9,9 +9,54 @@ import {
   elapsedWork,
   duration,
   attendanceDate,
+  deviceDateTime,
+  deviceDateTimeOccurrences,
 } from "../src/features/attendance/model/attendance.ts"
 import { Permissions } from "../src/features/auth/model/permissions.ts"
 import { formatDateTime } from "../src/lib/format.ts"
+
+test("correction times resolve device-zone gaps, folds, and ordinary intervals", (t) => {
+  const originalZone = process.env.TZ
+  t.after(() => {
+    if (originalZone === undefined) delete process.env.TZ
+    else process.env.TZ = originalZone
+  })
+  process.env.TZ = "America/Los_Angeles"
+  const occurrences = (value) =>
+    deviceDateTimeOccurrences(value).map((date) => date.toISOString())
+
+  assert.deepEqual(occurrences("2026-03-08T02:30"), [])
+  assert.deepEqual(occurrences("2026-02-30T09:00"), [])
+  const starts = occurrences("2026-11-01T01:45")
+  const ends = occurrences("2026-11-01T01:15")
+  assert.deepEqual(starts, [
+    "2026-11-01T08:45:00.000Z",
+    "2026-11-01T09:45:00.000Z",
+  ])
+  assert.deepEqual(ends, [
+    "2026-11-01T08:15:00.000Z",
+    "2026-11-01T09:15:00.000Z",
+  ])
+  assert.equal(Date.parse(ends[1]) - Date.parse(starts[0]), 30 * 60000)
+  assert.equal(Date.parse(ends[0]) - Date.parse(starts[1]), -90 * 60000)
+  assert.equal(deviceDateTime(starts[0]), "2026-11-01T01:45")
+  assert.equal(deviceDateTime(starts[1]), "2026-11-01T01:45")
+  assert.deepEqual(occurrences("2026-11-05T23:30"), [
+    "2026-11-06T07:30:00.000Z",
+  ])
+
+  process.env.TZ = "Australia/Lord_Howe"
+  assert.deepEqual(occurrences("2026-04-05T01:45"), [
+    "2026-04-04T14:45:00.000Z",
+    "2026-04-04T15:15:00.000Z",
+  ])
+  assert.deepEqual(occurrences("2026-10-04T02:15"), [])
+
+  process.env.TZ = "Asia/Manila"
+  assert.deepEqual(occurrences("2026-11-01T01:45"), [
+    "2026-10-31T17:45:00.000Z",
+  ])
+})
 
 test("shared timestamp formatting preserves UTC and overnight local calendar dates", () => {
   const timestamp = "2026-11-13T20:00:00Z"

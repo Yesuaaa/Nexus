@@ -19,7 +19,7 @@ const trustedDatabaseCas = [
   ]),
 ]
 
-function databasePoolConfig(connectionString: string): pg.PoolConfig {
+export function databasePoolConfig(connectionString: string): pg.PoolConfig {
   let url: URL
   try {
     url = new URL(connectionString)
@@ -57,6 +57,10 @@ export function getPrisma() {
       ...databasePoolConfig(connectionString),
       max: Number(process.env.DATABASE_POOL_MAX) || 10,
       connectionTimeoutMillis: 5_000,
+      // The Prisma pg adapter sends UTC wall times without an explicit offset.
+      onConnect: async (connection) => {
+        await connection.query("SET TIME ZONE 'UTC'")
+      },
     })
 
     client = new PrismaClient({

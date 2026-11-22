@@ -203,6 +203,61 @@ export function readProjectLogChanges(input: unknown) {
   })
 }
 
+export function describeProjectActivity(
+  event: string,
+  targetLabel: string | null,
+  changes: ReturnType<typeof readProjectLogChanges>,
+) {
+  const target = targetLabel ? ` “${targetLabel}”` : ""
+  const after = (field: Field) =>
+    changes.find((change) => change.field === field)?.after
+  const status = after("Status")
+
+  switch (event) {
+    case "TASK_STATUS_CHANGED":
+      if (typeof status === "string")
+        return `Moved ${target ? `task${target}` : "a task"} to ${status}.`
+      break
+    case "MILESTONE_COMPLETION_CHANGED": {
+      const completed = after("Completed")
+      if (typeof completed === "boolean")
+        return `${completed ? "Completed" : "Reopened"} ${target ? `milestone${target}` : "a milestone"}.`
+      break
+    }
+    case "TEAM_LEAD_CHANGED": {
+      const lead = after("Team lead")
+      if (typeof lead === "boolean")
+        return lead
+          ? `Assigned ${targetLabel ?? "a team member"} as project team lead.`
+          : `Removed ${targetLabel ?? "a team member"} as project team lead.`
+      break
+    }
+    case "CHANGE_REQUEST_REVIEWED":
+    case "CANCELLATION_REQUEST_REVIEWED": {
+      const request =
+        event === "CHANGE_REQUEST_REVIEWED"
+          ? "change request"
+          : "cancellation request"
+      if (status === "Accepted") return `Accepted a project ${request}.`
+      if (status === "Not approved") return `Declined a project ${request}.`
+      break
+    }
+    case "DELIVERABLE_CLIENT_REVIEWED": {
+      const decision = after("Client decision")
+      const record = target ? `deliverable${target}` : "a deliverable"
+      if (decision === "Approved") return `Client approved ${record}.`
+      if (decision === "Revision requested")
+        return `Client requested revisions to ${record}.`
+      break
+    }
+  }
+
+  const action = isProjectLogEvent(event)
+    ? projectLogEvents[event][2]
+    : "Recorded project activity"
+  return target ? `${action} ·${target}` : `${action}.`
+}
+
 export function encodeProjectLogChanges(changes: ProjectLogChanges) {
   return readProjectLogChanges(
     Object.entries(changes)

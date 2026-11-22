@@ -29,6 +29,12 @@ test(
     assert.equal(day.overnightRequiresReview, true)
     assert.equal(day.requiredMinutes, 450)
     assert.equal(day.timeZone, "Asia/Manila")
+    assert.equal(day.scheduledStartAt, null)
+    assert.equal(day.scheduledEndAt, null)
+    assert.equal(
+      (await prisma.attendancePolicy.findFirstOrThrow()).scheduleMode,
+      "FLEXIBLE",
+    )
     await assert.rejects(
       prisma.$transaction((tx) =>
         tx.attendanceWorkday.update({

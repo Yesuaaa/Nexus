@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Pill } from "@/components/ui/pill"
+import { AttendanceScheduleDetails } from "./attendance-schedule-details"
 import {
   DetailItem,
   DetailList,
@@ -20,10 +21,11 @@ import type {
 import {
   attendanceDate,
   attendanceStatus,
-  attendanceStatusLabels,
+  attendanceStatusLabel,
   attendanceStatusTones,
   duration,
   isOvernight,
+  isSuspendedSession,
 } from "../model/attendance"
 
 export function AttendanceHistoryDetailsPanel({
@@ -31,17 +33,20 @@ export function AttendanceHistoryDetailsPanel({
   asOf,
   actionId,
   onCorrect,
+  onReconcile,
   onClose,
 }: {
   day: AttendanceWorkday
   asOf: number
   actionId: string
   onCorrect?: (session: AttendanceSession, day: AttendanceWorkday) => void
+  onReconcile?: (session: AttendanceSession, day: AttendanceWorkday) => void
   onClose: () => void
 }) {
   const panel = useSidePanel(onClose)
   const employee = day.employee
   const status = attendanceStatus(day)
+  const leaveMinutes = day.approvedLeaveMinutes ?? 0
 
   return (
     <SidePanel
@@ -68,12 +73,18 @@ export function AttendanceHistoryDetailsPanel({
             )}
             <DetailItem label="Timezone">{day.timeZone}</DetailItem>
             <DetailItem label="Policy">{day.policy.name}</DetailItem>
+            <AttendanceScheduleDetails day={day} />
             <DetailItem label="Worked / required">
               {duration(day.workedMilliseconds)} / {day.requiredMinutes / 60}h
             </DetailItem>
+            {leaveMinutes > 0 && (
+              <DetailItem label="Approved leave">
+                {leaveMinutes / 60}h
+              </DetailItem>
+            )}
             <DetailItem label="Status">
               <Pill tone={attendanceStatusTones[status]}>
-                {attendanceStatusLabels[status]}
+                {attendanceStatusLabel(day)}
               </Pill>
             </DetailItem>
             {day.pendingCorrections > 0 && (
@@ -102,9 +113,10 @@ export function AttendanceHistoryDetailsPanel({
           {day.sessions.length ? (
             <div className="grid gap-3">
               {day.sessions.map((session, index) => {
+                const suspended = isSuspendedSession(session)
                 const overnight = isOvernight(
                   session.startedAt,
-                  session.endedAt,
+                  session.endedAt ?? session.suspendedAt ?? null,
                   day.timeZone,
                   asOf,
                 )
@@ -126,8 +138,15 @@ export function AttendanceHistoryDetailsPanel({
                       <DetailItem label="Clock out">
                         {session.endedAt
                           ? attendanceDate(session.endedAt, day.timeZone)
-                          : "Still clocked in"}
+                          : suspended
+                            ? "Shift suspended"
+                            : "Still clocked in"}
                       </DetailItem>
+                      {suspended && session.suspendedAt && (
+                        <DetailItem label="Suspended at">
+                          {attendanceDate(session.suspendedAt, day.timeZone)}
+                        </DetailItem>
+                      )}
                       <DetailItem label="Breaks">
                         {session.breaks.length
                           ? `${session.breaks.length} recorded`
@@ -145,7 +164,9 @@ export function AttendanceHistoryDetailsPanel({
                             {attendanceDate(pause.startedAt, day.timeZone)} to{" "}
                             {pause.endedAt
                               ? attendanceDate(pause.endedAt, day.timeZone)
-                              : "On break"}
+                              : suspended
+                                ? "Pending reconciliation"
+                                : "On break"}
                           </p>
                         ))}
                       </div>
@@ -160,6 +181,18 @@ export function AttendanceHistoryDetailsPanel({
                         }
                       >
                         Request correction
+                      </Button>
+                    )}
+                    {suspended && day.canReconcile && onReconcile && (
+                      <Button
+                        variant="brandOutline"
+                        size="sm"
+                        className="justify-self-start"
+                        onClick={() =>
+                          panel.close(() => onReconcile(session, day))
+                        }
+                      >
+                        Reconcile shift
                       </Button>
                     )}
                   </article>

@@ -13,6 +13,17 @@ export type AuditLogChange = {
   before: AuditLogChangeValue
   after: AuditLogChangeValue
 }
+export type AuditLogEffect = {
+  id: string
+  action: string
+  target: {
+    id: string
+    type: string
+    label: string | null
+  }
+  changes: ({ field: string } | AuditLogChange)[]
+  notes: { label: string; value: string }[]
+}
 export type AuditLog = {
   endpoint: string | null
   id: string
@@ -24,18 +35,21 @@ export type AuditLog = {
   actorRole: string | null
   actor: AuditLogActor
   message: string
+  summaryDetail?: string | null
   target: {
     id: string | null
     type: string | null
     label: string | null
   }
   changes: AuditLogChange[]
+  effects?: AuditLogEffect[]
   subjectId: string | null
   requestId: string | null
   projectId?: string | null
   projectName?: string | null
   workspaceId?: string | null
-  correlationId: string
+  correlationId: string | null
+  operationId?: string
   status: number | null
   failureCode: string | null
   failureReason: string | null
@@ -55,21 +69,30 @@ export type LogFilters = Record<
   string
 >
 export function getAuditLogs(
-  endpoint: "/api/service-operation-logs" | "/api/project-management-logs",
+  endpoint:
+    | "/api/service-operation-logs"
+    | "/api/project-management-logs"
+    | "/api/people-hr-logs"
+    | "/api/workforce-compliance-logs",
   filters: LogFilters,
   page: number,
   signal: AbortSignal,
+  timeWindow?: { snapshot?: string; asOf?: string; range?: "24h" | "7d" },
 ) {
   const query = new URLSearchParams(
     Object.entries(filters).filter(([, value]) => value),
   )
   query.set("page", String(page))
+  if (timeWindow?.snapshot) query.set("snapshot", timeWindow.snapshot)
+  if (timeWindow?.asOf) query.set("asOf", timeWindow.asOf)
+  if (timeWindow?.range) query.set("range", timeWindow.range)
   return apiRequest<{
     events: AuditLog[]
     total: number
     page: number
     pageSize: number
+    snapshot?: string
     asOf: string
-    retentionDays: number
+    retentionDays: number | null
   }>(`${endpoint}?${query}`, { signal })
 }
