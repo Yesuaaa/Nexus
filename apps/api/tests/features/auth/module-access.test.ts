@@ -24,6 +24,7 @@ test(
     const request = (path: string) =>
       fetch(`${base}${path}`, { headers: { Authorization: `Bearer ${token}` } })
     assert.equal((await fetch(`${base}/modules`)).status, 401)
+    assert.equal((await fetch(`${base}/modules/payroll`)).status, 401)
     assert.equal(
       await prisma.employee.count({ where: { userId: account.id } }),
       0,
@@ -35,12 +36,17 @@ test(
     }
     assert.deepEqual(
       modules.map((module) => module.id),
-      Object.keys(moduleRegistry).filter(
-        (id) => moduleRegistry[id as keyof typeof moduleRegistry].implemented,
-      ),
+      [
+        "service-operations",
+        "project-management",
+        "people-hr",
+        "attendance-monitoring",
+        "administration",
+      ],
     )
     for (const module of modules)
       assert.equal((await request(`/modules/${module.id}`)).status, 200)
+    assert.equal((await request("/modules/payroll")).status, 200)
     assert.equal(
       modules.find((module) => module.id === "project-management")?.href,
       "/project-management/overview",
@@ -52,6 +58,7 @@ test(
     for (const id of [
       "unknown",
       "billing-finance",
+      "my-payroll",
       "constructor",
       "toString",
       "__proto__",
@@ -77,10 +84,28 @@ test(
       "/client/services",
     ])
       assert.equal((await request(path)).status, 403, path)
-    for (const role of [Role.ADMIN, Role.STAFF, Role.USER]) {
+    for (const [role, payrollStatus] of [
+      [Role.ADMIN, 200],
+      [Role.STAFF, 403],
+      [Role.USER, 403],
+    ] as const) {
       await prisma.user.update({ where: { id: account.id }, data: { role } })
       assert.equal((await request("/modules")).status, 403)
       assert.equal((await request("/modules/project-management")).status, 403)
+      const payrollResponse = await request("/modules/payroll")
+      assert.equal(payrollResponse.status, payrollStatus)
+      if (payrollResponse.ok) {
+        const { module } = (await payrollResponse.json()) as {
+          module: { id: string; title: string }
+        }
+        assert.deepEqual(module, {
+          id: "payroll",
+          title: "Payroll",
+          description:
+            "Manage employee compensation, payroll processing, approvals, and salary disbursements.",
+          href: "/module/payroll",
+        })
+      }
     }
     await prisma.user.update({
       where: { id: account.id },

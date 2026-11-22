@@ -59,9 +59,20 @@ ResponsiveDataTableBody.displayName = "ResponsiveDataTableBody"
 
 const ResponsiveDataTableRow = React.forwardRef<
   HTMLDivElement,
-  Omit<React.ComponentPropsWithoutRef<"div">, "role">
->(({ className, ...props }, ref) => (
-  <div ref={ref} role="row" className={className} {...props} />
+  Omit<React.ComponentPropsWithoutRef<"div">, "role"> & {
+    variant?: "directory"
+  }
+>(({ className, variant, ...props }, ref) => (
+  <div
+    ref={ref}
+    role="row"
+    className={cn(
+      variant === "directory" &&
+        "border-b border-[#edf0f3] px-4 py-3 last:border-b-0",
+      className,
+    )}
+    {...props}
+  />
 ))
 ResponsiveDataTableRow.displayName = "ResponsiveDataTableRow"
 

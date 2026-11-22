@@ -15,6 +15,7 @@ The table assumes an active account with its role's normal API permissions. “P
 | People & HR          | No                                           | No management module        | No management module                          | Employee and department management              | Employee and department management                        |
 | Workforce Compliance | No                                           | Personal attendance         | Personal attendance and department monitoring | Organization management and personal attendance | Organization management                                   |
 | Administration       | No                                           | No                          | No                                            | No                                              | Account management                                        |
+| Payroll              | No                                           | No                          | No                                            | Payroll overview and management entry           | Payroll overview, read-only                               |
 | Billing & Finance    | No selector card                             | Placeholder                 | Placeholder                                   | Placeholder                                     | Placeholder                                               |
 
 Superadmin access to operational modules does not override Staff assignment checks for project workspaces, Request Inbox, Staff Workload, or private conversations.
@@ -34,6 +35,7 @@ Internal users land on `/module`. Clients land on `/dashboard` and navigate dire
 | Workforce Compliance | Department Head, Admin                               | `/attendance/overview`                                                   |
 | Workforce Compliance | Superadmin                                           | `/attendance/time-logs/overview`                                         |
 | Administration       | Superadmin                                           | `/accounts`                                                              |
+| Payroll              | Admin, Superadmin                                    | `/module/payroll`                                                        |
 | Billing & Finance    | Internal users with at least one available workspace | No route; placeholder                                                    |
 
 Cards are derived from effective permissions and current assignments. Accounts without any available workspace see the empty state. Billing & Finance uses the shared radial-fill and typing animations to show “Coming Soon” on hover or keyboard focus; it grants no finance access.
@@ -80,6 +82,13 @@ Module selection displays five or fewer cards in a single row, centered when the
 - No account may change its own role or active status, or delete itself.
 - Operational client and employee provisioning does not grant access to the Administration account-management API.
 
+### Payroll
+
+- Payroll is a separate module from Billing & Finance. Its overview is available to Admin and Superadmin through `/module/payroll`; Staff and Client accounts receive no Payroll entry or route access.
+- `payroll:read` permits access to Payroll module metadata and its overview. Admin receives `payroll:read` and `payroll:manage`; Superadmin receives `payroll:read` only.
+- Payroll overview currently shows that setup is pending. Payroll records, calculations, approvals, disbursements, payslips, and settings are not implemented in Phase 1. Their navigation entries remain disabled and marked “Coming soon.”
+- The API enforces Payroll module access independently from the browser. Payroll permissions do not grant global administrative-module access.
+
 ### Billing & Finance
 
 The module is a placeholder only. Existing client Billing Logs at `/billing-logs` remain `USER`-only, and existing quotation/payment workflows keep their own authorization. The placeholder does not change either.
@@ -100,6 +109,7 @@ The API assigns effective permissions from the current database role on authenti
 - [Frontend access helpers](../../apps/web/src/features/auth/model/permissions.ts)
 - [Selector module entries](../../apps/web/src/features/dashboard/model/workspace-modules.ts)
 - [Route and navigation policies](../../apps/web/src/features/workspaces/model/route-policy.ts)
+- [Payroll overview](../../apps/web/src/features/payroll/pages/payroll-overview-page.tsx)
 - [General RBAC guide](../rbac.md)
 
 ## Validation

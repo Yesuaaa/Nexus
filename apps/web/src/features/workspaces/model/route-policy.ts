@@ -13,6 +13,8 @@ import {
   canAccessDepartmentManagement,
   canAccessEmployeeManagement,
   canAccessMessages,
+  canAccessPayroll,
+  canAccessMyPayroll,
   canInspectBusinessConversations,
   canAccessProjects,
   canAccessProjectWorkspace,
@@ -36,8 +38,24 @@ export const workspaceModuleLabels = Object.fromEntries(
   Object.entries(moduleRegistry).map(([id, module]) => [id, module.title]),
 ) as Record<WorkspaceModuleId, string>
 
+const payrollWorkspaceModuleId = moduleRegistry.payroll
+  .workspaceParent as WorkspaceModuleId
+const staffPayrollWorkspaceModuleId = moduleRegistry["my-payroll"]
+  .workspaceParent as WorkspaceModuleId
+
 export type RoutePolicyId =
   | `module-${string}`
+  | "payroll-compensation"
+  | "payroll-runs"
+  | "payroll-approvals"
+  | "payroll-disbursements"
+  | "payroll-reconciliation"
+  | "payroll-reports"
+  | "payroll-payslips"
+  | "staff-my-payroll"
+  | "staff-my-payroll-legacy"
+  | "staff-my-payroll-attendance-legacy"
+  | "payroll-settings"
   | "employees-overview"
   | "attendance-time-logs"
   | "attendance-audit"
@@ -120,20 +138,27 @@ export function administrativeModulePolicies(
   registry: Readonly<Record<string, ModuleRegistration>> = moduleRegistry,
 ): RoutePolicy[] {
   return Object.entries(registry)
-    .filter(([, module]) => module.implemented)
+    .filter(([, module]) => module.implemented && !("staffOnly" in module))
     .map(([id, module]) => ({
       id: `module-${id}`,
       match: { kind: "exact", path: `/module/${id}` },
-      moduleId: id as WorkspaceModuleId,
-      canAccess: canAccessAdministrativeModules,
+      moduleId: ("workspaceParent" in module
+        ? module.workspaceParent
+        : id) as WorkspaceModuleId,
+      canAccess:
+        id === "payroll" ? canAccessPayroll : canAccessAdministrativeModules,
       ...(module.administrativePath === null || id === "service-operations"
         ? {
             navigation: {
               href: `/module/${id}`,
               label:
-                id === "service-operations" ? "Request Overview" : "Overview",
+                id === "service-operations"
+                  ? "Request Overview"
+                  : id === "payroll"
+                    ? module.title
+                    : "Overview",
               location: "main" as const,
-              order: 1,
+              order: id === "payroll" ? 40 : 1,
             },
           }
         : {}),
@@ -202,6 +227,78 @@ export const routePolicies: readonly RoutePolicy[] = [
     },
   },
   ...administrativeModulePolicies(),
+  {
+    id: "payroll-compensation",
+    match: { kind: "exact", path: "/module/payroll/compensation" },
+    moduleId: payrollWorkspaceModuleId,
+    canAccess: canAccessPayroll,
+  },
+  {
+    id: "payroll-runs",
+    match: { kind: "exact", path: "/module/payroll/runs" },
+    moduleId: payrollWorkspaceModuleId,
+    canAccess: canAccessPayroll,
+  },
+  {
+    id: "payroll-approvals",
+    match: { kind: "exact", path: "/module/payroll/approvals" },
+    moduleId: payrollWorkspaceModuleId,
+    canAccess: canAccessPayroll,
+  },
+  {
+    id: "payroll-disbursements",
+    match: { kind: "exact", path: "/module/payroll/disbursements" },
+    moduleId: payrollWorkspaceModuleId,
+    canAccess: canAccessPayroll,
+  },
+  {
+    id: "payroll-reports",
+    match: { kind: "exact", path: "/module/payroll/reports" },
+    moduleId: payrollWorkspaceModuleId,
+    canAccess: canAccessPayroll,
+  },
+  {
+    id: "payroll-reconciliation",
+    match: { kind: "exact", path: "/module/payroll/reconciliation" },
+    moduleId: payrollWorkspaceModuleId,
+    canAccess: canAccessPayroll,
+  },
+  {
+    id: "payroll-payslips",
+    match: { kind: "exact", path: "/module/payroll/payslips" },
+    moduleId: payrollWorkspaceModuleId,
+    canAccess: canAccessPayroll,
+  },
+  {
+    id: "staff-my-payroll",
+    match: { kind: "exact", path: "/my-payroll" },
+    moduleId: staffPayrollWorkspaceModuleId,
+    canAccess: canAccessMyPayroll,
+    navigation: {
+      label: "My Payroll",
+      href: "/my-payroll",
+      location: "main",
+      order: 55,
+    },
+  },
+  {
+    id: "staff-my-payroll-legacy",
+    match: { kind: "exact", path: "/staff/my-payroll" },
+    moduleId: staffPayrollWorkspaceModuleId,
+    canAccess: canAccessMyPayroll,
+  },
+  {
+    id: "staff-my-payroll-attendance-legacy",
+    match: { kind: "exact", path: "/attendance/my-payroll" },
+    moduleId: staffPayrollWorkspaceModuleId,
+    canAccess: canAccessMyPayroll,
+  },
+  {
+    id: "payroll-settings",
+    match: { kind: "exact", path: "/module/payroll/settings" },
+    moduleId: payrollWorkspaceModuleId,
+    canAccess: canAccessPayroll,
+  },
   {
     id: "administrative-workload",
     match: { kind: "exact", path: "/module/service-operations/workload" },

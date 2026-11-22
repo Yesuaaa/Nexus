@@ -15,6 +15,7 @@ const operations = new WeakSet<ManagementOperation>()
 /** Backend-only: pass requireAuth's context, never a request body or claims. */
 export function createManagementOperation(
   auth: AuthContext,
+  scope: "management" | "staff-payroll" = "management",
 ): ManagementOperation {
   if (
     !auth?.user ||
@@ -22,7 +23,9 @@ export function createManagementOperation(
     !isRecordId(auth.user.id) ||
     !auth.user.isActive ||
     auth.user.accountDeletedAt !== null ||
-    (auth.user.role !== Role.ADMIN && auth.user.role !== Role.SUPERADMIN)
+    (scope === "staff-payroll"
+      ? auth.user.role !== Role.STAFF
+      : auth.user.role !== Role.ADMIN && auth.user.role !== Role.SUPERADMIN)
   ) {
     throw new Error("Management history requires authenticated administration")
   }
@@ -37,8 +40,12 @@ export function createManagementOperation(
 
 export function assertManagementOperation(
   operation: ManagementOperation,
+  scope: "management" | "staff-payroll" = "management",
 ): void {
-  if (!operations.has(operation)) {
+  if (
+    !operations.has(operation) ||
+    (operation.actorRoleAtTime === Role.STAFF && scope !== "staff-payroll")
+  ) {
     throw new Error("Management operation must be created by the backend")
   }
 }

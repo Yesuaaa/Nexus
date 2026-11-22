@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import { useTableSearchQuery } from "@/components/ui/use-table-search-query"
 import { ApiError } from "@/features/auth/api/auth-api"
 import { errorMessage } from "@/lib/error-message"
 import { watchVisibleRefresh } from "@/lib/visible-refresh"
@@ -105,8 +106,8 @@ export function usePaginatedList<R extends PageInfo, T>({
   const [failure, setFailure] = useState({ requestKey: "", message: "" })
   const { search: rawSearch, ...filters } = params
   const search = rawSearch.trim()
-  const [debouncedSearch, setDebouncedSearch] = useState(search)
-  const searchPending = search !== debouncedSearch
+  const { query: debouncedSearch, pending: searchPending } =
+    useTableSearchQuery(search)
   const requestParams = { ...params, search: debouncedSearch }
   const viewKey = JSON.stringify([requestParams, page])
   const requestKey = JSON.stringify([viewKey, revision])
@@ -117,12 +118,6 @@ export function usePaginatedList<R extends PageInfo, T>({
     !searchPending && data !== null && resolved.viewKey === viewKey
   const error =
     !searchPending && failure.requestKey === requestKey ? failure.message : ""
-
-  useEffect(() => {
-    if (!searchPending) return
-    const timer = window.setTimeout(() => setDebouncedSearch(search), 200)
-    return () => window.clearTimeout(timer)
-  }, [search, searchPending])
 
   const { acceptRows, preview, previewing } = useTableSearch<T>({
     search,

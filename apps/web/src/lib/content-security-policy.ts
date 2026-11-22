@@ -23,6 +23,8 @@ export function buildContentSecurityPolicy(
     "img-src 'self' data: blob: https://*.supabase.co https://*.supabase.com",
     "font-src 'self' data:",
     `connect-src 'self'${apiOrigin ? ` ${apiOrigin}` : ""}`,
+    // Client-side navigation retains the document policy used by PDF previews.
+    "frame-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
