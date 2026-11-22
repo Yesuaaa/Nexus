@@ -39,6 +39,7 @@ test("attendance request failures show an error and recover on retry", async ({
       employees: 1,
       total: 0,
       closed: 0,
+      suspended: 0,
       working: 0,
       onBreak: 0,
       recentActivity: [],

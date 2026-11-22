@@ -8,3 +8,7 @@ export function canSignInToPortal(role: Role, portal: AuthPortal): boolean {
 export function loginPathForRole(role: Role): "/login" | "/internal/login" {
   return role === "USER" ? "/login" : "/internal/login"
 }
+
+export function landingPathForRole(role: Role): "/dashboard" | "/module" {
+  return role === "USER" ? "/dashboard" : "/module"
+}

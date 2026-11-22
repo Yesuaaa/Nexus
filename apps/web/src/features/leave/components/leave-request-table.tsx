@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/row-actions-menu"
 import { AttendanceTableEmpty } from "@/features/attendance/components/attendance-shared"
 import type { LeaveAction, LeaveRequest } from "../api/leave-api"
+import { leaveStatusLabel } from "../model/leave-status"
 
 const grid =
   "grid grid-cols-[minmax(170px,1.2fr)_minmax(110px,.8fr)_minmax(180px,1fr)_minmax(90px,.6fr)_minmax(95px,.65fr)_56px] items-center gap-3.5 @max-[900px]:grid-cols-[minmax(0,1fr)_auto]"
@@ -29,15 +30,6 @@ const labels = {
   EMERGENCY: "Emergency",
   UNPAID: "Unpaid",
   OTHER: "Other",
-} as const
-
-const statuses = {
-  SUBMITTED: "Submitted",
-  VERIFIED: "Awaiting HR",
-  APPROVED: "Approved",
-  REJECTED: "Rejected",
-  CANCELLED: "Cancelled",
-  REVERSED: "Reversed",
 } as const
 
 function tone(status: LeaveRequest["status"]): PillTone {
@@ -176,7 +168,15 @@ export function LeaveRequestTable({
                 {item.days.reduce((sum, day) => sum + day.leaveMinutes, 0) / 60}
               </ResponsiveDataTableCell>
               <ResponsiveDataTableCell>
-                <Pill tone={tone(item.status)}>{statuses[item.status]}</Pill>
+                <Pill
+                  tone={
+                    item.capabilities.requiresReverification
+                      ? "warning"
+                      : tone(item.status)
+                  }
+                >
+                  {leaveStatusLabel(item)}
+                </Pill>
               </ResponsiveDataTableCell>
               <ResponsiveDataTableCell className="justify-self-end">
                 <RowActionsMenu

@@ -1,3 +1,7 @@
+import type {
+  ServiceLogChange,
+  ServiceLogChangeValue,
+} from "./audit-context.js"
 import { serviceLogEvents, type ServiceLogEvent } from "./log-writer.js"
 
 const eventDescriptions: Record<
@@ -224,6 +228,34 @@ export function describeServiceLog(
 function withTarget(message: string, targetLabel: string | null) {
   if (!targetLabel) return message
   return `${message.replace(/\.$/, "")} “${targetLabel}”.`
+}
+
+const summaryValue = (value: NonNullable<ServiceLogChangeValue>) =>
+  typeof value === "boolean" ? (value ? "Yes" : "No") : String(value)
+
+export function describeServiceLogDetail(
+  changes: readonly ServiceLogChange[],
+  failed: boolean,
+): string | null {
+  const change = changes.find(
+    ({ field, before, after }) =>
+      before !== after &&
+      field !== "Record" &&
+      field !== "Week" &&
+      field !== "Workflow action",
+  )
+  if (!change) return null
+
+  const { field, before, after } = change
+  const value =
+    after === null
+      ? null
+      : before === null
+        ? summaryValue(after)
+        : `${summaryValue(before)} → ${summaryValue(after)}`
+  return [failed ? "Attempted change" : null, field, value]
+    .filter(Boolean)
+    .join(" · ")
 }
 
 export function matchingDescriptionCodes(search: string): {

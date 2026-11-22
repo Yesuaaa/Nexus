@@ -977,6 +977,7 @@ model WorkflowNotification {
   attendanceAdjustment AttendanceAdjustment? @relation(fields: [attendanceAdjustmentId], references: [id], onDelete: Restrict)
   leaveRequestId String?
   leaveRequest LeaveRequest? @relation(fields: [leaveRequestId], references: [id], onDelete: Restrict)
+  leaveVersion Int @default(0)
   type String?
   summary String?
   readAt    DateTime?
@@ -984,7 +985,7 @@ model WorkflowNotification {
 
   @@unique([userId, eventId])
   @@unique([userId, attendanceAdjustmentId, type])
-  @@unique([userId, leaveRequestId, type])
+  @@unique([userId, leaveRequestId, type, leaveVersion], map: "WorkflowNotification_leave_version_key")
   @@index([userId, readAt, createdAt])
 }
 
@@ -1037,6 +1038,7 @@ model LeaveRequestDay {
 }
 
 model LeaveDecision {
+  writerTransaction String? @default(dbgenerated("pg_current_xact_id()::text"))
   id         String       @id @default(cuid())
   requestId  String
   request    LeaveRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
@@ -1049,9 +1051,14 @@ model LeaveDecision {
   note       String?      @db.VarChar(2000)
   version    Int
   createdAt  DateTime     @default(now()) @db.Timestamptz(3)
+  operationId String?    @db.Uuid
+  correlationId String?  @db.Uuid
+  actorRoleAtTime Role?
 
   @@unique([requestId, actorId, actionId])
   @@index([requestId, createdAt, id])
+  @@index([createdAt, id])
+  @@index([operationId])
 }
 
 model WorkloadCapacity {
@@ -1200,7 +1207,13 @@ model RefreshToken {
   @@index([sessionId])
 }
 
+enum AttendanceScheduleMode {
+  FLEXIBLE
+  FIXED
+}
+
 model AttendancePolicy {
+  scheduleMode            AttendanceScheduleMode       @default(FLEXIBLE)
   archivedAt              DateTime?                    @db.Timestamptz(3)
   unpaidBreaksEnabled     Boolean                      @default(true)
   overnightRequiresReview Boolean                      @default(false)
@@ -1213,6 +1226,9 @@ model AttendancePolicy {
 }
 
 model AttendancePolicyDay {
+  scheduledStartMinute Int?
+  scheduledEndMinute Int?
+  scheduledUnpaidBreakMinutes Int?
   policyId        String
   policy          AttendancePolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
   weekday         Int
@@ -1223,6 +1239,8 @@ model AttendancePolicyDay {
 }
 
 model AttendancePolicyAssignment {
+  replacedAssignmentId String?
+  replacedUntil        DateTime? @db.Date
   id             String              @id @default(cuid())
   employeeId     String
   employee       Employee            @relation(fields: [employeeId], references: [id], onDelete: Restrict)
@@ -1230,6 +1248,7 @@ model AttendancePolicyAssignment {
   policy         AttendancePolicy    @relation(fields: [policyId], references: [id], onDelete: Restrict)
   effectiveFrom  DateTime            @db.Date
   effectiveUntil DateTime?           @db.Date
+  cancelledAt    DateTime?           @db.Timestamptz(3)
   createdAt      DateTime            @default(now()) @db.Timestamptz(3)
   workdays       AttendanceWorkday[]
   leaveRequestDays LeaveRequestDay[]
@@ -1239,6 +1258,9 @@ model AttendancePolicyAssignment {
 }
 
 model AttendanceWorkday {
+  scheduledStartAt        DateTime?                  @db.Timestamptz(3)
+  scheduledEndAt          DateTime?                  @db.Timestamptz(3)
+  scheduledUnpaidBreakMinutes Int?
   policyName              String
   unpaidBreaksEnabled     Boolean
   overnightRequiresReview Boolean
@@ -1260,6 +1282,7 @@ model AttendanceWorkday {
 }
 
 model AttendanceWorkSession {
+  suspendedAt DateTime? @db.Timestamptz(3)
   adjustments AttendanceAdjustment[]
   id          String                 @id @default(cuid())
   // A BEFORE INSERT trigger selects/creates the starting workday if omitted.
@@ -1286,6 +1309,7 @@ model AttendanceBreak {
 }
 
 model AttendanceAudit {
+  writerTransaction String? @default(dbgenerated("pg_current_xact_id()::text"))
   id         String             @id @default(cuid())
   // Stable entity identity and snapshots also cover policy/rule/assignment changes.
   entityType String
@@ -1302,10 +1326,15 @@ model AttendanceAudit {
   after      Json?
   actionId   String             @unique
   createdAt  DateTime           @default(now()) @db.Timestamptz(3)
+  operationId String?          @db.Uuid
+  correlationId String?        @db.Uuid
+  actorRoleAtTime Role?
 
   @@index([workdayId, createdAt])
   @@index([employeeId, createdAt])
   @@index([entityType, entityId, createdAt])
+  @@index([createdAt, id])
+  @@index([operationId])
 }
 
 enum AttendanceAdjustmentStatus {
@@ -1316,6 +1345,7 @@ enum AttendanceAdjustmentStatus {
 }
 
 model AttendanceAdjustment {
+  verifiedDepartmentId String?
   notifications WorkflowNotification[]
   type              String                     @default("CORRECTION") @db.VarChar(20)
   overtimeMinutes   Int                        @default(0)

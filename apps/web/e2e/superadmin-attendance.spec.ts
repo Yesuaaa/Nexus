@@ -9,10 +9,288 @@ import type {
   AttendanceOverview,
   AttendanceWorkday,
 } from "../src/features/attendance/api/attendance-api"
+import type { LeaveRequest } from "../src/features/leave/api/leave-api"
 
 configureRegressionTest()
 test.skip(live, "Attendance administration uses isolated API fixtures")
 const stamp = "2026-11-14T08:00:00Z"
+const leaveLogMessage = "Approved a leave request for Workforce Employee."
+
+test("Workforce Logs keeps the same cutoff across pages until refreshed", async ({
+  page,
+}) => {
+  await restoreSession(page, "SUPERADMIN")
+  const refreshedAsOf = "2026-11-14T08:01:00Z"
+  const queries: URLSearchParams[] = []
+  let newOperation = false
+  await page.route("**/api/workforce-compliance-logs?**", (route) => {
+    const query = new URL(route.request().url()).searchParams
+    queries.push(query)
+    const pageNumber = Number(query.get("page"))
+    const showNew = newOperation && query.get("asOf") !== stamp
+    const messages = ["Recorded a clock-out.", "Recorded a clock-in."]
+    if (showNew) messages.unshift("Recorded a break.")
+    return route.fulfill({
+      json: {
+        asOf: showNew ? refreshedAsOf : stamp,
+        events: [
+          {
+            id: messages[pageNumber - 1],
+            message: messages[pageNumber - 1],
+            source: "time-logs",
+            event: "CREATED",
+            action: "Created",
+            outcome: "SUCCESS",
+            actor: {
+              id: null,
+              name: "System",
+              role: null,
+              attribution: "SYSTEM",
+            },
+            createdAt: stamp,
+          },
+        ],
+        page: pageNumber,
+        pageSize: 1,
+        total: messages.length,
+      },
+    })
+  })
+
+  await page.goto("/module/attendance-monitoring/logs")
+  await expect(
+    page.getByText("Recorded a clock-out.", { exact: true }),
+  ).toBeVisible()
+  await page.getByLabel("Filter by time").click()
+  await page.getByRole("option", { name: "Last 24 hours" }).click()
+  await expect.poll(() => queries.at(-1)?.get("range")).toBe("24h")
+  expect(queries.at(-1)?.has("asOf")).toBe(false)
+  newOperation = true
+  await page.getByRole("button", { name: "Next page", exact: true }).click()
+  await expect(
+    page.getByText("Recorded a clock-in.", { exact: true }),
+  ).toBeVisible()
+  expect(queries.at(-1)?.get("asOf")).toBe(stamp)
+  expect(queries.at(-1)?.get("range")).toBe("24h")
+  await page.getByRole("button", { name: "Previous page", exact: true }).click()
+  await expect(
+    page.getByText("Recorded a clock-out.", { exact: true }),
+  ).toBeVisible()
+  expect(queries.at(-1)?.get("asOf")).toBe(stamp)
+  await page.getByRole("button", { name: "Refresh logs" }).click()
+  await expect(
+    page.getByText("Recorded a break.", { exact: true }),
+  ).toBeVisible()
+  expect(queries.at(-1)?.has("asOf")).toBe(false)
+  expect(queries.at(-1)?.get("page")).toBe("1")
+})
+
+test("HR can approve transferred leave after the receiving Head verifies", async ({
+  page,
+}) => {
+  await restoreSession(page, "ADMIN")
+  await mockAttendance(page)
+  const request: LeaveRequest = {
+    id: "transferred-leave",
+    employeeId: "employee-1",
+    requestedById: "staff-1",
+    routeDepartmentId: "design",
+    type: "ANNUAL",
+    reason: "Planned personal leave",
+    startDate: stamp,
+    endDate: stamp,
+    status: "VERIFIED",
+    version: 2,
+    createdAt: stamp,
+    updatedAt: stamp,
+    verifiedAt: stamp,
+    employee: {
+      id: "employee-1",
+      employeeId: "EMP-001",
+      fullName: "Workforce Employee",
+      departmentId: "engineering",
+      department: { id: "engineering", name: "Engineering", headId: "head-2" },
+    },
+    days: [
+      {
+        id: "leave-day-1",
+        workDate: stamp,
+        timeZone: "Asia/Manila",
+        policyName: "Flexible policy",
+        baseRequiredMinutes: 480,
+        leaveMinutes: 480,
+      },
+    ],
+    decisions: [],
+    capabilities: {
+      cancel: false,
+      verify: false,
+      approve: false,
+      reject: false,
+      reverse: false,
+      fallback: false,
+      requiresReverification: true,
+    },
+  }
+  await page.route("**/api/leave/requests?**", (route) =>
+    route.fulfill({
+      json: {
+        requests: [request],
+        total: 1,
+        page: 1,
+        pageSize: 10,
+        capabilities: { submit: true },
+      },
+    }),
+  )
+  await page.goto("/attendance/requests/leave")
+  await expect(
+    page.getByText("Awaiting Head verification", { exact: true }),
+  ).toBeVisible()
+  const actions = page.getByRole("button", {
+    name: "More actions for Workforce Employee's leave request",
+  })
+  const approve = page.getByRole("menuitem", { name: "Approve request" })
+  await actions.click()
+  await expect(approve).toHaveCount(0)
+  await page.getByRole("menuitem", { name: "View details" }).click()
+  await expect(
+    page.getByText("The receiving Department Head must verify", {
+      exact: false,
+    }),
+  ).toBeVisible()
+
+  request.routeDepartmentId = request.employee.departmentId
+  request.version++
+  request.capabilities.requiresReverification = false
+  request.capabilities.approve = true
+  await page.reload()
+  await expect(page.getByText("Awaiting HR", { exact: true })).toBeVisible()
+  await actions.click()
+  await expect(approve).toBeVisible()
+})
+
+for (const width of [1440, 390]) {
+  test(`Workforce Compliance uses the shared log viewer at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 950 })
+    await restoreSession(page, "SUPERADMIN")
+    await mockAttendance(page)
+    await page.route("**/api/workforce-compliance-logs?**", (route) => {
+      const query = new URL(route.request().url()).searchParams
+      const events =
+        query.get("source") === "policies"
+          ? []
+          : [
+              {
+                id: "leave-log",
+                operationId: "operation-1",
+                correlationId: "trace-1",
+                source: "leave",
+                event: "APPROVED",
+                action: "Approved",
+                outcome: "SUCCESS",
+                actorId: "superadmin-1",
+                actorRole: "SUPERADMIN",
+                actor: {
+                  id: "superadmin-1",
+                  name: "Superadmin",
+                  role: "SUPERADMIN",
+                  attribution: "CURRENT",
+                },
+                message: leaveLogMessage,
+                summaryDetail: null,
+                target: {
+                  id: "leave-1",
+                  type: "Leave request",
+                  label: "Workforce Employee",
+                },
+                subjectId: "leave-1",
+                changes: [],
+                effects: [
+                  {
+                    id: "leave-change",
+                    action: "Approved",
+                    target: {
+                      id: "leave-1",
+                      type: "Leave request",
+                      label: null,
+                    },
+                    changes: [
+                      {
+                        field: "Status",
+                        before: "SUBMITTED",
+                        after: "APPROVED",
+                      },
+                    ],
+                    notes: [
+                      {
+                        label: "Current employee name",
+                        value: "Workforce Employee",
+                      },
+                    ],
+                  },
+                ],
+                createdAt: stamp,
+              },
+            ]
+      return route.fulfill({
+        json: { events, total: events.length, page: 1, pageSize: 25 },
+      })
+    })
+    await page.goto("/attendance/time-logs/overview")
+    if (width < 768)
+      await page.getByRole("button", { name: "Open navigation menu" }).click()
+    const sidebar = page.locator("#app-sidebar")
+    await expect(
+      sidebar.getByRole("link", { name: "Audit Trail", exact: true }),
+    ).toBeVisible()
+    await sidebar
+      .getByRole("group", { name: "System Tool", exact: true })
+      .getByRole("link", { name: "Workforce Logs", exact: true })
+      .click()
+    await expect(page).toHaveURL(/\/module\/attendance-monitoring\/logs$/)
+    await expect(
+      page.getByRole("heading", {
+        name: "Workforce Logs",
+        exact: true,
+      }),
+    ).toBeVisible()
+    await page.getByLabel("Filter by time").click()
+    await expect(page.getByRole("option")).toHaveText([
+      "Last 30 days",
+      "Last 7 days",
+      "Last 24 hours",
+    ])
+    await page.keyboard.press("Escape")
+    await page.getByLabel("Filter by area").click()
+    await page.getByRole("option", { name: "Policies", exact: true }).click()
+    await expect(
+      page.getByText("No logs match your search and filters."),
+    ).toBeVisible()
+    await page.getByLabel("Filter by area").click()
+    await page.getByRole("option", { name: "Leave", exact: true }).click()
+    await expect(
+      page.getByRole("cell").getByText(leaveLogMessage, { exact: true }),
+    ).toBeVisible()
+    await page
+      .getByRole("button", { name: `View log: ${leaveLogMessage}` })
+      .click()
+    const drawer = page.getByRole("dialog")
+    await expect(
+      drawer.getByRole("heading", { name: "Leave request", exact: true }),
+    ).toBeVisible()
+    await expect(drawer.getByText("SUBMITTED → APPROVED")).toBeVisible()
+    await expect(drawer.getByText("trace-1", { exact: true })).toBeVisible()
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true)
+  })
+}
+
 const employees = [
   {
     id: "design-employee",
@@ -32,6 +310,8 @@ const overview: AttendanceOverview = {
   scope: "ORGANIZATION",
   recordedDays: 2,
   employees: 2,
+  approvedLeaveDays: 1,
+  approvedLeaveHours: 8,
   workedHours: 20,
   requiredHours: 16,
   completeDays: 2,
@@ -45,12 +325,13 @@ const overview: AttendanceOverview = {
     IN_PROGRESS: 0,
     HOURS_MET: 0,
     INCOMPLETE: 0,
-    NOT_REQUIRED: 0,
+    NOT_REQUIRED: 1,
   },
   checkIns: {
     employees: 2,
     total: 2,
     closed: 2,
+    suspended: 0,
     working: 0,
     onBreak: 0,
     recentActivity: [
@@ -98,6 +379,22 @@ const workdays: AttendanceWorkday[] = employees.map((employee, index) => ({
     },
   ],
 }))
+const leaveWorkday: AttendanceWorkday = {
+  ...workdays[0],
+  id: null,
+  workDate: "2026-11-14",
+  requiredMinutes: 0,
+  baseRequiredMinutes: 480,
+  approvedLeaveMinutes: 480,
+  workedMilliseconds: 0,
+  workedHours: 0,
+  excessMinutes: 0,
+  excessRequiresReview: false,
+  progressPercent: null,
+  status: "NOT_REQUIRED",
+  overnightRequiresReview: false,
+  sessions: [],
+}
 const correction: AttendanceAdjustment = {
   id: "correction",
   type: "CORRECTION",
@@ -131,6 +428,9 @@ const overtime: AttendanceAdjustment = {
 async function mockAttendance(page: Page, allowReview = true) {
   const reads: URL[] = []
   const writes: string[] = []
+  await page.route("**/api/leave/overview?**", (route) =>
+    route.fulfill({ json: { groups: [] } }),
+  )
   await page.route("**/api/attendance/**", (route) => {
     const url = new URL(route.request().url())
     if (route.request().method() !== "GET") {
@@ -217,7 +517,7 @@ async function mockAttendance(page: Page, allowReview = true) {
                 }
               : path.endsWith("/assignments")
                 ? {
-                    assignments: employees.map((employee) => ({
+                    assignments: employees.map((employee, index) => ({
                       id: employee.id,
                       employee: {
                         ...employee,
@@ -225,7 +525,7 @@ async function mockAttendance(page: Page, allowReview = true) {
                       },
                       effectiveFrom: "2026-01-01",
                       effectiveUntil: null,
-                      status: "CURRENT",
+                      status: index === 0 ? "CANCELLED" : "CURRENT",
                     })),
                     total: 2,
                     page: 1,
@@ -241,7 +541,13 @@ async function mockAttendance(page: Page, allowReview = true) {
                       actionCounts: [],
                     }
                   : path.endsWith("/records")
-                    ? { asOf: stamp, workdays, total: 2, page: 1, pageSize: 10 }
+                    ? {
+                        asOf: stamp,
+                        workdays: [leaveWorkday, ...workdays],
+                        total: workdays.length + 1,
+                        page: 1,
+                        pageSize: 10,
+                      }
                     : overview
     return route.fulfill({ json })
   })
@@ -273,6 +579,10 @@ for (const width of [1440, 390])
         exact: true,
       }),
     ).toBeVisible()
+    const leaveCoverage = page
+      .getByText("Approved leave days", { exact: true })
+      .locator("..")
+    await expect(leaveCoverage.locator("dd")).toHaveText("1")
     await page.goto("/attendance")
     await expect(page).toHaveURL(/\/attendance\/time-logs\/overview$/)
     await page.goto("/attendance/time-logs/records")
@@ -281,6 +591,10 @@ for (const width of [1440, 390])
       page
         .getByRole("table", { name: "Attendance history", exact: true })
         .getByText("Engineering Employee", { exact: true }),
+    ).toBeVisible()
+    const leaveRow = page.getByRole("row").filter({ hasText: "Approved leave" })
+    await expect(
+      leaveRow.getByText("2026-11-14", { exact: true }),
     ).toBeVisible()
     await page.goto("/attendance/requests/overview")
     await expect(
@@ -342,6 +656,15 @@ for (const width of [1440, 390])
     await expect(
       page.getByText("Engineering Employee", { exact: true }),
     ).toBeVisible()
+    const cancelled = page
+      .getByRole("listitem")
+      .filter({ hasText: "Design Employee" })
+    await expect(
+      cancelled.getByText("Cancelled", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      cancelled.getByRole("button", { name: "Unassign" }),
+    ).toHaveCount(0)
     for (const path of [
       "/attendance/overview",
       "/attendance/check-ins",

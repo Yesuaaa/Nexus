@@ -1904,12 +1904,18 @@ test(
           })),
         })
         const earlierReadAt = new Date("2026-10-01T00:00:00Z")
+        const tiedCreatedAt = new Date("2099-01-01T00:00:00Z")
+        const noticeIds = eventIds.map(
+          (_, index) => `notice-order-${String(index).padStart(2, "0")}`,
+        )
         await prisma!.workflowNotification.createMany({
           data: [
             ...eventIds.map((eventId, index) => ({
+              id: noticeIds[index]!,
               eventId,
               requestId: request.id,
               userId: client.id,
+              createdAt: tiedCreatedAt,
               readAt: index === 45 ? earlierReadAt : null,
             })),
             {
@@ -1930,7 +1936,10 @@ test(
           }
         }
         const before = await list()
-        assert.equal(before.notifications.length, 40)
+        assert.deepEqual(
+          before.notifications.map(({ id }) => id),
+          noticeIds.slice(6, 46).reverse(),
+        )
         assert.ok(before.unreadCount >= 45)
         await prisma!.user.update({
           where: { id: client.id },
@@ -1943,8 +1952,26 @@ test(
           data: { settings: {} },
         })
         const restored = await list()
-        assert.equal(restored.notifications.length, 40)
-        assert.equal(restored.unreadCount, before.unreadCount)
+        assert.deepEqual(restored, before)
+
+        const markRead = (id: string, headers: typeof client.headers) =>
+          fetch(`${endpoint}/${id}/read`, { method: "PATCH", headers })
+        assert.equal(
+          (await markRead(noticeIds[46]!, client.headers)).status,
+          404,
+        )
+        assert.equal(
+          (await markRead(noticeIds[0]!, otherClient.headers)).status,
+          404,
+        )
+        assert.deepEqual(await list(), before)
+        assert.equal(
+          (await markRead(noticeIds[0]!, client.headers)).status,
+          200,
+        )
+        const afterSingle = await list()
+        assert.deepEqual(afterSingle.notifications, before.notifications)
+        assert.equal(afterSingle.unreadCount, before.unreadCount - 1)
 
         assert.equal(
           (await fetch(`${endpoint}/read-all`, { method: "PATCH" })).status,

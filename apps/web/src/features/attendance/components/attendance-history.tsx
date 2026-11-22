@@ -25,10 +25,11 @@ import type {
 import {
   attendanceDate,
   attendanceStatus,
-  attendanceStatusLabels,
+  attendanceStatusLabel,
   attendanceStatusTones,
   duration,
   isOvernight,
+  isSuspendedSession,
 } from "../model/attendance"
 import { AttendanceTableEmpty } from "./attendance-shared"
 import { AttendanceHistoryDetailsPanel } from "./attendance-history-details-panel"
@@ -39,6 +40,7 @@ const historyGrid =
 export function AttendanceHistoryTable({
   days,
   onCorrect,
+  onReconcile,
   asOf,
   loading = false,
   error = "",
@@ -47,11 +49,15 @@ export function AttendanceHistoryTable({
   days: AttendanceWorkday[]
   asOf: number
   onCorrect?: (session: AttendanceSession, day: AttendanceWorkday) => void
+  onReconcile?: (session: AttendanceSession, day: AttendanceWorkday) => void
   loading?: boolean
   error?: string
   onRetry?: () => void
 }) {
   const [detailsDay, setDetailsDay] = useState<AttendanceWorkday | null>(null)
+  const currentDetails = detailsDay?.id
+    ? (days.find((day) => day.id === detailsDay.id) ?? detailsDay)
+    : detailsDay
 
   return (
     <>
@@ -111,25 +117,27 @@ export function AttendanceHistoryTable({
           ) : !days.length ? (
             <AttendanceTableEmpty
               colSpan={6}
-              message="No attendance records. Recorded workdays will appear here. Try another date range."
+              message="No attendance records or approved leave in this date range."
             />
           ) : (
             days.map((day) => {
               const status = attendanceStatus(day)
               const firstSession = day.sessions[0]
               const lastSession = day.sessions.at(-1)
-              const actionId = `attendance-history-actions-${day.id ?? `${day.employeeId}-${day.workDate}`}`
+              const key = day.id ?? `${day.employeeId}-${day.workDate}`
+              const actionId = `attendance-history-actions-${key}`
+              const hasLeave = (day.approvedLeaveMinutes ?? 0) > 0
               const overnight = day.sessions.some((session) =>
                 isOvernight(
                   session.startedAt,
-                  session.endedAt,
+                  session.endedAt ?? session.suspendedAt ?? null,
                   day.timeZone,
                   asOf,
                 ),
               )
               return (
                 <ResponsiveDataTableRow
-                  key={day.id ?? day.workDate}
+                  key={key}
                   className={`${historyGrid} min-h-[68px] min-w-0 border-b border-[#eceef1] px-4 py-3 text-xs last:border-0 @max-[820px]:grid-cols-1 @max-[820px]:gap-y-3.5`}
                 >
                   <ResponsiveDataTableCell className="min-w-0">
@@ -142,18 +150,28 @@ export function AttendanceHistoryTable({
                     {!day.employee && (
                       <span className="text-xs font-medium">My attendance</span>
                     )}
+                    <div className="mt-1 text-[#65718a]">
+                      Work date{" "}
+                      <time dateTime={day.workDate}>{day.workDate}</time>
+                    </div>
                   </ResponsiveDataTableCell>
                   <ResponsiveDataTableCell className="min-w-0 text-xs leading-5 text-[#65718a]">
                     {firstSession
                       ? attendanceDate(firstSession.startedAt, day.timeZone)
-                      : "No clock-in recorded"}
+                      : hasLeave
+                        ? "—"
+                        : "No clock-in recorded"}
                   </ResponsiveDataTableCell>
                   <ResponsiveDataTableCell className="min-w-0 text-xs leading-5 text-[#65718a]">
                     {lastSession?.endedAt
                       ? attendanceDate(lastSession.endedAt, day.timeZone)
                       : lastSession
-                        ? "Still clocked in"
-                        : "No clock-out recorded"}
+                        ? isSuspendedSession(lastSession)
+                          ? "Shift suspended"
+                          : "Still clocked in"
+                        : hasLeave
+                          ? "—"
+                          : "No clock-out recorded"}
                   </ResponsiveDataTableCell>
                   <ResponsiveDataTableCell className="text-xs">
                     <span className="font-semibold tabular-nums">
@@ -163,7 +181,7 @@ export function AttendanceHistoryTable({
                   </ResponsiveDataTableCell>
                   <ResponsiveDataTableCell className="min-w-0">
                     <Pill tone={attendanceStatusTones[status]}>
-                      {attendanceStatusLabels[status]}
+                      {attendanceStatusLabel(day)}
                     </Pill>
                     {day.pendingCorrections > 0 && (
                       <div className="mt-1">
@@ -173,6 +191,16 @@ export function AttendanceHistoryTable({
                     {overnight && (
                       <div className="mt-1">
                         <Pill tone="info">Overnight</Pill>
+                      </div>
+                    )}
+                    {!!day.schedule?.lateArrivalMinutes && (
+                      <div className="mt-1">
+                        <Pill tone="warning">Late arrival</Pill>
+                      </div>
+                    )}
+                    {!!day.schedule?.earlyDepartureMinutes && (
+                      <div className="mt-1">
+                        <Pill tone="warning">Early departure</Pill>
                       </div>
                     )}
                   </ResponsiveDataTableCell>
@@ -200,12 +228,13 @@ export function AttendanceHistoryTable({
           )}
         </ResponsiveDataTableBody>
       </ResponsiveDataTable>
-      {detailsDay && (
+      {currentDetails && (
         <AttendanceHistoryDetailsPanel
-          day={detailsDay}
+          day={currentDetails}
           asOf={asOf}
-          actionId={`attendance-history-actions-${detailsDay.id ?? `${detailsDay.employeeId}-${detailsDay.workDate}`}`}
+          actionId={`attendance-history-actions-${currentDetails.id ?? `${currentDetails.employeeId}-${currentDetails.workDate}`}`}
           onCorrect={onCorrect}
+          onReconcile={onReconcile}
           onClose={() => setDetailsDay(null)}
         />
       )}

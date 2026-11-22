@@ -27,7 +27,7 @@ const actions: Record<
   deactivate: {
     title: "Deactivate account?",
     description:
-      "This immediately signs the employee out and prevents login. You can reactivate the login later.",
+      "This immediately signs the employee out and prevents login. Any open shift stops accruing time and needs a confirmed clock-out in Time Logs.",
     confirmLabel: "Deactivate account",
     pendingLabel: "Deactivating…",
     destructive: true,

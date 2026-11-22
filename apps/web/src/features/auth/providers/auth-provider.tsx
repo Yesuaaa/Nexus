@@ -15,6 +15,7 @@ import {
 } from "@/lib/toast"
 import { getAuthCopy, getStoredAuthLanguage } from "../content/auth-copy"
 import { useLoginTransition } from "../hooks/use-login-transition"
+import type { Role } from "../model/roles"
 import type { AuthMode } from "../model/types"
 
 const ToastViewport = dynamic(
@@ -44,7 +45,7 @@ const AuthRouteLoader = dynamic(
 )
 
 type AuthTransition = {
-  beginLoginTransition: (mode: AuthMode) => void
+  beginLoginTransition: (mode: AuthMode, role: Role) => void
   markDestinationReady: (succeeded: boolean) => void
 }
 
@@ -81,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       {transition.showLoader && (
         <AuthRouteLoader
           destinationReady={transition.destinationReady}
-          onNavigate={transition.navigateToDashboard}
+          onNavigate={transition.navigateToDestination}
           onExited={transition.finishLoginTransition}
           ariaLabel={getAuthCopy(getStoredAuthLanguage()).openingAccount}
         />

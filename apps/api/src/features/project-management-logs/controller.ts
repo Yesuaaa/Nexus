@@ -10,6 +10,7 @@ import {
 import { requireAuth, requireRole } from "../auth/auth.middleware.js"
 import { retentionMs } from "../service-operation-logs/log-retention.js"
 import {
+  describeProjectActivity,
   isProjectLogEvent,
   projectLogEvents,
   readProjectLogChanges,
@@ -198,6 +199,32 @@ projectLogsRouter.get("/", async (req, res) => {
           const details = isProjectLogEvent(row.event)
             ? projectLogEvents[row.event]
             : undefined
+          const safeChanges = readProjectLogChanges(changes)
+          const transition = safeChanges.find(
+            ({ field, before, after }) =>
+              (field === "Status" || field === "Name") &&
+              typeof before === "string" &&
+              typeof after === "string",
+          )
+          const detail = transition
+            ? `${transition.before} → ${transition.after}`
+            : row.event === "PLAN_UPDATED" ||
+                row.event === "DELIVERABLE_UPDATED"
+              ? safeChanges.map(({ field }) => field).join(", ")
+              : null
+          const summaryDetail =
+            row.outcome === "FAILURE"
+              ? row.failureReason
+              : [
+                  row.projectName &&
+                  (row.projectName !== targetLabel ||
+                    row.event.endsWith("_REQUEST_REVIEWED"))
+                    ? `Project “${row.projectName}”`
+                    : null,
+                  detail,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || null
           return {
             ...row,
             action: null,
@@ -217,11 +244,12 @@ projectLogsRouter.get("/", async (req, res) => {
               label: targetLabel,
               type: details?.[1] ?? null,
             },
-            changes: readProjectLogChanges(changes),
+            changes: safeChanges,
             message:
               row.outcome === "FAILURE"
                 ? projectIncidentMessage(row.endpoint)
-                : `${details?.[2] ?? "Recorded project activity"}${targetLabel ? ` · ${targetLabel}` : ""}`,
+                : describeProjectActivity(row.event, targetLabel, safeChanges),
+            summaryDetail,
           }
         },
       )

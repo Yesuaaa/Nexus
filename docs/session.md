@@ -44,7 +44,7 @@ Authentication uses signed JWT access tokens with database-backed sessions and r
 - Logout and confirmed authentication failures clear both stored tokens.
 - Network errors, throttling, and temporary server failures preserve tokens for retry.
 - Session version checks prevent delayed requests, login replies, and refresh replies from restoring a signed-out session or affecting a replacement account.
-- Signed-in users opening login or registration are redirected to the dashboard without being logged out.
+- After sign-in, clients (`USER`) land on `/dashboard`. Workforce accounts (`STAFF`, `ADMIN`, and `SUPERADMIN`) go directly to the workspace selector at `/module`. Signed-in users opening login or registration are sent to the same role-specific destination.
 
 ### Request Protection
 

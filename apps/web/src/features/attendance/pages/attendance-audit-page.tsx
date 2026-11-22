@@ -55,6 +55,7 @@ const snapshotFields = [
   ["workDate", "Work date"],
   ["startedAt", "Started at"],
   ["endedAt", "Ended at"],
+  ["cancelledAt", "Cancelled at"],
   ["createdAt", "Created at"],
   ["reviewedAt", "Reviewed at"],
   ["verifiedAt", "Verified at"],

@@ -13,22 +13,33 @@ import {
   AttendancePagination,
 } from "../components/attendance-shared"
 import { AttendanceHistoryTable } from "../components/attendance-history"
+import { AttendanceReconciliationDialog } from "../components/attendance-reconciliation-dialog"
 import {
   attendanceMonitoring,
   attendanceDepartments,
   attendanceEmployees,
   type AttendanceEmployee,
+  type AttendanceSession,
+  type AttendanceWorkday,
 } from "../api/attendance-api"
 import { EmployeeTable } from "@/features/employees/components/employee-table"
 import { SearchField } from "@/components/ui/search-field"
 import { Button } from "@/components/ui/button"
-import { defaultRange } from "../model/attendance"
+import { defaultRange, isSuspendedSession } from "../model/attendance"
 
 function matchesAttendanceEmployee(item: AttendanceEmployee, query: string) {
   const needle = query.trim().toLocaleLowerCase()
   return [item.fullName, item.employeeId].some((value) =>
     value.toLocaleLowerCase().includes(needle),
   )
+}
+
+function exportSessionStatus(session: AttendanceSession) {
+  if (session.endedAt) return "Closed"
+  if (isSuspendedSession(session)) return "Suspended"
+  return session.breaks.some((pause) => !pause.endedAt && !pause.isPaid)
+    ? "On unpaid break"
+    : "Open"
 }
 
 export function AttendanceRecordsPage() {
@@ -42,9 +53,16 @@ export function AttendanceRecordsPage() {
   const [range, setRange] = useState(defaultRange)
   const [page, setPage] = useState(1)
   const [departmentId, setDepartmentId] = useState("")
+  const [reconciliation, setReconciliation] = useState<{
+    session: AttendanceSession
+    day: AttendanceWorkday
+  } | null>(null)
   const departments = useAsyncResource(attendanceDepartments, [], {
     fallbackError: "Couldn't load departments.",
   })
+  const selectedDepartment = departments.data?.departments.find(
+    (department) => department.id === departmentId,
+  )
   const employees = usePaginatedList({
     params: { search, departmentId },
     load: ({ page, signal }) =>
@@ -89,6 +107,9 @@ export function AttendanceRecordsPage() {
         "Worked hours",
         "Required hours",
         "Review excess",
+        "Approved leave hours",
+        "Suspension timestamps",
+        "Session statuses",
       ],
       ...matching.workdays.map((day) => [
         day.workDate,
@@ -96,10 +117,13 @@ export function AttendanceRecordsPage() {
         day.employee?.department?.name ?? "",
         day.timeZone,
         day.sessions.map((session) => session.startedAt).join("; "),
-        day.sessions.map((session) => session.endedAt ?? "Open").join("; "),
+        day.sessions.map((session) => session.endedAt ?? "").join("; "),
         String(day.workedHours),
         String(day.requiredMinutes / 60),
         String(day.excessRequiresReview),
+        String((day.approvedLeaveMinutes ?? 0) / 60),
+        day.sessions.map((session) => session.suspendedAt ?? "").join("; "),
+        day.sessions.map(exportSessionStatus).join("; "),
       ]),
     ]
     const blob = new Blob(
@@ -239,7 +263,16 @@ export function AttendanceRecordsPage() {
       ) : (
         <>
           <div className="mb-4 flex flex-wrap items-center gap-[10px]">
-            {!selected && departmentFilter}
+            {selected
+              ? departmentId && (
+                  <div className="flex min-h-[34px] min-w-0 items-center gap-2 rounded-md border border-[#e1e4ea] px-3 text-xs">
+                    <span className="text-[#65718a]">Department</span>
+                    <span className="min-w-0 font-medium break-words">
+                      {selectedDepartment?.name ?? "Department unavailable"}
+                    </span>
+                  </div>
+                )
+              : departmentFilter}
             <RangeFields
               {...range}
               onChange={(from, to) => {
@@ -276,6 +309,7 @@ export function AttendanceRecordsPage() {
             loading={history.loading}
             error={history.error}
             onRetry={history.retry}
+            onReconcile={(session, day) => setReconciliation({ session, day })}
           />
           {matching && (
             <AttendancePagination
@@ -285,6 +319,13 @@ export function AttendanceRecordsPage() {
             />
           )}
         </>
+      )}
+      {reconciliation && (
+        <AttendanceReconciliationDialog
+          {...reconciliation}
+          onClose={() => setReconciliation(null)}
+          onSaved={history.retry}
+        />
       )}
     </AttendanceShell>
   )

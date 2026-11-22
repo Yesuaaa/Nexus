@@ -12,6 +12,7 @@ export type CalendarEvent = {
   completed?: boolean
   deadline?: boolean
   unassigned?: boolean
+  timeZone?: string
   allDay?: boolean
   startDate?: string
   endDateExclusive?: string
@@ -68,6 +69,41 @@ export function calendarConflicts(events: CalendarEvent[], now: number) {
       ) {
         conflicts.add(first.id)
         conflicts.add(second.id)
+      }
+    }
+  }
+  const leaveByPerson = new Map<string, CalendarEvent[]>()
+  for (const leave of events) {
+    if (leave.type !== "leave" || !leave.startDate || !leave.timeZone) continue
+    for (const person of leave.staffMembers ?? []) {
+      const days = leaveByPerson.get(person.id) ?? []
+      days.push(leave)
+      leaveByPerson.set(person.id, days)
+    }
+  }
+  const formatters = new Map<string, Intl.DateTimeFormat>()
+  const tasks = events.filter(
+    (event) => event.type === "task" && !event.completed,
+  )
+  for (const item of [...timed, ...tasks]) {
+    for (const person of item.staffMembers ?? []) {
+      for (const leave of leaveByPerson.get(person.id) ?? []) {
+        const zone = leave.timeZone!
+        let formatter = formatters.get(zone)
+        if (!formatter) {
+          formatter = new Intl.DateTimeFormat("sv-SE", { timeZone: zone })
+          formatters.set(zone, formatter)
+        }
+        const start = item.deadline
+          ? calendarEventDate(item)
+          : formatter.format(Date.parse(item.startsAt))
+        const end = item.endsAt
+          ? formatter.format(Date.parse(item.endsAt) - 1)
+          : start
+        if (start <= leave.startDate! && leave.startDate! <= end) {
+          conflicts.add(item.id)
+          conflicts.add(leave.id)
+        }
       }
     }
   }
