@@ -12,7 +12,10 @@ import {
   leadershipCandidateWhere,
 } from "../departments/leadership.policy.js"
 import { lockRows, lockRowsReturning } from "../../shared/db/locks.js"
-import { notifyPendingLeaveAfterHeadChange } from "../leave/leave.repository.js"
+import {
+  notifyPendingLeaveAfterHeadChange,
+  notifyPendingLeaveAfterPlacement,
+} from "../leave/leave.repository.js"
 import { notifyPendingAdjustmentsAfterHeadChange } from "../attendance/attendance.pending-notifications.js"
 import { beginAttendancePlacement } from "./attendance-placement-history.js"
 import { getPrisma } from "../../lib/db.js"
@@ -299,10 +302,15 @@ async function writeEmployee(
       userId: snapshot.userId,
     }
 
-    if (input.status !== undefined) {
+    const movesDepartment =
+      input.departmentId !== undefined &&
+      input.departmentId !== snapshot.departmentId
+    // Department membership routes lock their department before reading member history.
+    if (input.status !== undefined || (movesDepartment && !placementOnly)) {
       const departmentIds = new Set<string>()
       if (snapshot.departmentId) departmentIds.add(snapshot.departmentId)
-      if (snapshot.userId) {
+      if (input.departmentId) departmentIds.add(input.departmentId)
+      if (input.status !== undefined && snapshot.userId) {
         const headedDepartment = await tx.department.findUnique({
           where: { headId: snapshot.userId },
           select: { id: true },
@@ -316,7 +324,12 @@ async function writeEmployee(
           departmentIds.add(department.id)
       }
       // Sorted, one at a time (lockRows), like every Department lock.
-      await lockRows(tx, "Department", [...departmentIds])
+      await lockRows(
+        tx,
+        "Department",
+        [...departmentIds],
+        input.status !== undefined ? "update" : "share",
+      )
     }
 
     await lockRows(tx, "Employee", id)
@@ -324,7 +337,7 @@ async function writeEmployee(
   const existing = id ? await tx.employee.findUnique({ where: { id } }) : null
   if (id && !existing) throw new EmployeeError(404, "Employee not found")
   if (
-    input.status !== undefined &&
+    (input.status !== undefined || input.departmentId !== undefined) &&
     existing &&
     statusSnapshot &&
     (existing.departmentId !== statusSnapshot.departmentId ||
@@ -654,11 +667,9 @@ async function writeEmployee(
     userId: nextUserId,
   }
 
-  if (
-    placementOperation &&
-    existing &&
-    existing.departmentId !== nextDepartmentId
-  )
+  const departmentChanged =
+    existing && existing.departmentId !== nextDepartmentId
+  if (placementOperation && departmentChanged)
     await beginAttendancePlacement(tx, placementOperation)
   let employee = existing
     ? await tx.employee.update({
@@ -755,6 +766,8 @@ async function writeEmployee(
     await notifyPendingLeaveAfterHeadChange(tx, changedHeadDepartment.id)
     await notifyPendingAdjustmentsAfterHeadChange(tx, changedHeadDepartment.id)
   }
+  if (departmentChanged)
+    await notifyPendingLeaveAfterPlacement(tx, [employee.id])
   return employee
 }
 
@@ -907,13 +920,16 @@ export async function syncEmployeeForUser(
   }
 
   if (employee) {
-    if (employee.departmentId !== departmentId)
-      await beginAttendancePlacement(tx, operation)
-    return tx.employee.update({
+    const departmentChanged = employee.departmentId !== departmentId
+    if (departmentChanged) await beginAttendancePlacement(tx, operation)
+    const updated = await tx.employee.update({
       where: { id: employee.id },
       data: assignment,
       include: employeeInclude,
     })
+    if (departmentChanged)
+      await notifyPendingLeaveAfterPlacement(tx, [updated.id])
+    return updated
   }
 
   return tx.employee.create({
@@ -954,11 +970,20 @@ export async function setEmployeeLoginStatus(
       if (employee.user.role !== Role.STAFF) {
         throw new EmployeeError(403, ADMIN_LOGIN_MESSAGE)
       }
-      const updated = await setAccountActive(tx, employee.user.id, isActive, {
-        role: Role.STAFF,
-        isActive: employee.user.isActive,
-        accountDeletedAt: null,
-      },operation.actorAccountId)
+      const updated = await setAccountActive(
+        tx,
+        employee.user.id,
+        isActive,
+        {
+          role: Role.STAFF,
+          isActive: employee.user.isActive,
+          accountDeletedAt: null,
+        },
+        operation,
+        !isActive && !employeeId.startsWith("account:")
+          ? employeeId
+          : undefined,
+      )
       if (!updated)
         throw new EmployeeError(409, "Employee changed; refresh and retry")
       const after = await tx.user.findUniqueOrThrow({
@@ -986,7 +1011,8 @@ export async function setEmployeeLoginStatus(
         })
       }
     },
-    { isolationLevel: "Serializable" },
+    // Suspension must see sessions committed while waiting for the Employee lock.
+    { isolationLevel: isActive ? "Serializable" : "ReadCommitted" },
   )
 }
 

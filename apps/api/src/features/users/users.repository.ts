@@ -69,11 +69,17 @@ export const usersRepository = {
     operation: ManagementOperation,
   ) {
     return getPrisma()!.$transaction(async (tx) => {
-      const updated = await setAccountActive(tx, id, nextIsActive, {
-        role: currentRole,
-        isActive: currentIsActive,
-        accountDeletedAt: null,
-      },operation.actorAccountId)
+      const updated = await setAccountActive(
+        tx,
+        id,
+        nextIsActive,
+        {
+          role: currentRole,
+          isActive: currentIsActive,
+          accountDeletedAt: null,
+        },
+        operation,
+      )
       if (!updated) return null
       const user = await tx.user.findUniqueOrThrow({
         where: { id },

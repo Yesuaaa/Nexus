@@ -34,6 +34,8 @@ History dates are inclusive attendance work dates in `YYYY-MM-DD` format, not fi
 
 Production action timestamps come from the server, captured once after acquiring the employee lock. The app factory accepts an injectable clock for offline tests; HTTP requests cannot access that option. All mutations use ReadCommitted transactions, lock Employee before User, recheck account/employee ownership after locking, and attach transaction-local actor/reason audit context.
 
+Clock-out and HR reconciliation can generate pending overtime. Both take a shared lock on the observed Department before locking Employee and User. They recheck placement before changing the session and return `409` for a stale placement. Pending notices and attendance audit commit with the session and any generated overtime.
+
 - An open session survives midnight. No timer or read operation ends it or splits it into calendar dates.
 - A 20:00 Nov 13 clock-in and 04:00 Nov 14 clock-out in `Asia/Manila` contributes eight hours to Nov 13 when there are no unpaid breaks. It creates no Nov 14 attendance entry.
 - With no explicit workday ID, the database uses the effective policy timezone and starting local date. Additional sessions on that date reuse its existing workday and daily requirement.

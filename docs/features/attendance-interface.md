@@ -79,6 +79,8 @@ During a daylight-saving gap, the form flags the entered local time and asks for
 
 Pending correction and overtime notices follow the current eligible Head or active HR fallback. Head replacement, removal, temporary handoff, restoration, and Head account status changes write the new reviewer's notice in the same transaction. Former reviewers lose inbox and mark-read access when their scope ends. Returning reviewers keep their notice and read timestamp within the same pending stage. When an employee transfer reopens a verified request, the receiving reviewers get an unread notice for the new review cycle. Apply migrations `20261121190000_correction_pending_notifications` and `20261121200000_overtime_pending_notifications` before deploying the API. They backfill missing notices for pending requests.
 
+Explicit overtime submission, clock-out, reconciliation, and Correction approval hold a shared lock on the employee's Department before locking Employee and User. After checking current placement, each transaction routes its new notices using committed leadership and reviewer eligibility. A Head change either commits before recipient selection or scans the request after it commits. Requests for employees without a department use HR fallback.
+
 Requests are separate records until reviewed. Approval updates the existing session or creates the missing session atomically with the decision and audit trail. Rejection records a note without changing attendance. The service prevents:
 
 - Access to another employee's request as an ordinary Staff member.

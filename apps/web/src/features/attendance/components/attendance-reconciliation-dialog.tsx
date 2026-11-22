@@ -3,7 +3,6 @@
 import { useRef, useState } from "react"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { DateInput } from "@/components/ui/date-input"
 import { FormTextarea } from "@/components/ui/form-input"
 import {
   Modal,
@@ -18,6 +17,12 @@ import {
   type AttendanceSession,
   type AttendanceWorkday,
 } from "../api/attendance-api"
+import {
+  AttendanceDateTimeInput,
+  attendanceDateTimeError,
+  initialAttendanceDateTime,
+  resolveAttendanceDateTime,
+} from "./attendance-date-time-input"
 
 export function AttendanceReconciliationDialog({
   day,
@@ -30,18 +35,20 @@ export function AttendanceReconciliationDialog({
   onClose: () => void
   onSaved: () => void
 }) {
-  const [end, setEnd] = useState("")
+  const [end, setEnd] = useState(() => ({
+    ...initialAttendanceDateTime(),
+    zone: "",
+  }))
   const [reason, setReason] = useState("")
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
   const submitting = useRef(false)
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
-  const endedAt = new Date(end)
+  const endField = end.zone === zone ? end : { local: end.local }
+  const endTime = resolveAttendanceDateTime(endField)
+  const endLabel = "Confirmed clock-out"
   const note = reason.trim()
-  const valid =
-    Number.isFinite(endedAt.getTime()) &&
-    note.length >= 5 &&
-    note.length <= 2000
+  const validNote = note.length >= 5 && note.length <= 2000
 
   return (
     <Modal size="md" busy={pending} onClose={onClose}>
@@ -52,7 +59,15 @@ export function AttendanceReconciliationDialog({
       <form
         onSubmit={async (event) => {
           event.preventDefault()
-          if (submitting.current || !valid) return
+          if (submitting.current) return
+          const currentZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+          if (currentZone !== zone) {
+            setError(
+              `Your device timezone changed to ${currentZone}. Review the clock-out time and try again.`,
+            )
+            return
+          }
+          if (!endTime.instant || !validNote) return
           submitting.current = true
           setPending(true)
           setError("")
@@ -60,7 +75,7 @@ export function AttendanceReconciliationDialog({
             await reconcileAttendance(
               day.employeeId,
               session.id,
-              endedAt.toISOString(),
+              endTime.instant.toISOString(),
               note,
             )
             sileo.success({ title: "Shift reconciled" })
@@ -76,16 +91,21 @@ export function AttendanceReconciliationDialog({
       >
         <ModalBody>
           <div className="grid gap-4">
-            <label className="grid gap-2 text-xs">
-              Confirmed clock-out
-              <DateInput
-                type="datetime-local"
-                required
-                disabled={pending}
-                value={end}
-                onChange={(event) => setEnd(event.target.value)}
-              />
-            </label>
+            <AttendanceDateTimeInput
+              label={endLabel}
+              field={endField}
+              time={endTime}
+              disabled={pending}
+              validationMessage={
+                end.local && !endTime.instant
+                  ? attendanceDateTimeError(endLabel, endTime, zone)
+                  : undefined
+              }
+              onChange={(field) => {
+                setEnd({ ...field, zone })
+                setError("")
+              }}
+            />
             <label className="grid gap-2 text-xs">
               Reason (5–2,000 characters)
               <FormTextarea
@@ -109,7 +129,11 @@ export function AttendanceReconciliationDialog({
           >
             Cancel
           </Button>
-          <Button type="submit" variant="brand" disabled={pending || !valid}>
+          <Button
+            type="submit"
+            variant="brand"
+            disabled={pending || !endTime.instant || !validNote}
+          >
             {pending ? "Reconciling…" : "Reconcile shift"}
           </Button>
         </ModalFooter>

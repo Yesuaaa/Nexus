@@ -150,6 +150,10 @@ test(
     assert.equal(suspended.endedAt, null)
     const suspendedTrace = correlation(deactivated)
     const [suspension] = await byCorrelation(suspendedTrace)
+    const statusChange = await prisma.accountManagementChange.findFirstOrThrow({
+      where: { subjectAccountId: staff.id, action: "STATUS_CHANGED" },
+    })
+    assert.equal(suspension.operationId, statusChange.operationId)
     const state = async () => ({
       shift: await prisma.attendanceWorkSession.findUnique({
         where: { id: shift.id },

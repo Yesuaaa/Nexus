@@ -2206,6 +2206,107 @@ test("a reactivated employee can clock in after a manager reconciles a suspended
   ).toBeEnabled()
 })
 
+test.describe("WC-I3-F02 reconciliation timestamps", () => {
+  test.use({ timezoneId: "America/Los_Angeles" })
+
+  for (const { actor, offset, endedAt, workedMinutes } of [
+    {
+      actor: "reconcile-pdt",
+      offset: "UTC-07:00",
+      endedAt: "2026-11-01T08:30:00.000Z",
+      workedMinutes: 20,
+    },
+    {
+      actor: "reconcile-pst",
+      offset: "UTC-08:00",
+      endedAt: "2026-11-01T09:30:00.000Z",
+      workedMinutes: 80,
+    },
+  ]) {
+    test(`submits only the selected ${offset} occurrence`, async ({ page }) => {
+      const { employeeId } = fixture.actors[actor]
+      await clock("2026-11-01T08:10:00Z")
+      const opened = await overtimeFixtureCall(
+        actor,
+        "/attendance/me/clock-in",
+        "POST",
+        {},
+      )
+      expect(opened.status).toBe(201)
+      const { workday } = await opened.json()
+      expect(
+        (
+          await overtimeFixtureCall(
+            "admin",
+            `/employees/${employeeId}/account/status`,
+            "PATCH",
+            { isActive: false },
+          )
+        ).status,
+      ).toBe(204)
+      await page.clock.setFixedTime(new Date("2026-11-13T12:00:00Z"))
+      await signIn(page, "admin")
+      await page.goto("/attendance/time-logs/records")
+      await page
+        .getByRole("button", { name: `View logs for Attendance ${actor}` })
+        .click()
+      await page.getByRole("button", { name: "Actions for 2026-11-01" }).click()
+      await page.getByRole("menuitem", { name: "View details" }).click()
+      await page.getByRole("button", { name: "Reconcile shift" }).click()
+      const dialog = page.getByRole("dialog", {
+        name: "Reconcile suspended shift",
+      })
+      const end = dialog.getByLabel("Confirmed clock-out", { exact: true })
+      const note = "Confirmed the selected occurrence of local time"
+      await dialog.getByLabel("Reason").fill(note)
+      const submit = dialog.getByRole("button", { name: "Reconcile shift" })
+      await end.fill("2026-03-08T02:30")
+      await expect(dialog.getByRole("alert")).toHaveText(
+        /not a valid local time/,
+      )
+      await expect(submit).toBeDisabled()
+      await end.fill("2026-11-01T01:30")
+      await expect(dialog.getByRole("alert")).toHaveText(/Choose a UTC offset/)
+      await expect(submit).toBeDisabled()
+      const occurrence = dialog.getByRole("combobox", {
+        name: "Confirmed clock-out occurrence",
+      })
+      await occurrence.click()
+      await page.getByRole("option", { name: offset, exact: true }).click()
+      await expect(occurrence).toHaveText(offset)
+
+      const reconcile = `/attendance/employees/${employeeId}/sessions/${workday.activeSessionId}/reconcile`
+      const postReconciliation = async () => {
+        const response = page.waitForResponse(
+          (result) => new URL(result.url()).pathname === `/api${reconcile}`,
+        )
+        await submit.click()
+        const result = await response
+        expect(result.request().postDataJSON()).toEqual({ endedAt, note })
+        return result
+      }
+      expect((await postReconciliation()).status()).toBe(400)
+      await expect(dialog.getByRole("alert")).toHaveText(
+        "Clock-out cannot be in the future",
+      )
+      await expect(occurrence).toHaveText(offset)
+      await expect(end).toHaveValue("2026-11-01T01:30")
+      await expect(dialog.getByLabel("Reason")).toHaveValue(note)
+      await clock("2026-11-01T10:00:00Z")
+      expect((await postReconciliation()).status()).toBe(200)
+      await expect(dialog).toHaveCount(0)
+      const history = await overtimeFixtureCall(
+        "admin",
+        `/attendance/employees/${employeeId}/history?from=2026-11-01&to=2026-11-01`,
+      )
+      expect(history.status).toBe(200)
+      expect((await history.json()).workdays).toMatchObject([
+        { workedMinutes, sessions: [{ endedAt }] },
+      ])
+    })
+  }
+})
+
 test.describe("device-zone correction timestamps", () => {
   test.use({ timezoneId: "America/Los_Angeles" })
   const actor = "correction-dst"
@@ -3569,6 +3670,163 @@ async function leaveFixtureCall(actor: string, suffix: string, body?: unknown) {
     body: body === undefined ? undefined : JSON.stringify(body),
   })
 }
+
+test("WC-I3-F01 Employee Directory transfer routes both Leave review stages to the receiving Head", async ({
+  page,
+  context,
+}) => {
+  const subject = "leave-transfer"
+  const formerHead = "wc07-origin-head"
+  const receivingHead = "wc07-destination-head"
+  const employeePath = `/employees/${fixture.actors[subject].employeeId}`
+  const inboxPath = "/request-workflows/notifications"
+  const portal = "/attendance/requests/leave"
+  const inbox = async (actor: string) => {
+    const response = await leaveFixtureCall(actor, inboxPath)
+    expect(response.status).toBe(200)
+    return (await response.json()) as {
+      unreadCount: number
+      notifications: { id: string; entityId: string; readAt: string | null }[]
+    }
+  }
+  const prepared = await overtimeFixtureCall("admin", employeePath, "PUT", {
+    employeeId: "EXP-LEAVE-TRANSFER",
+    contactNumber: "09123456789",
+    position: "QA Specialist",
+    startDate: "2026-01-01",
+    email: "leave-transfer@attendance-browser.test",
+  })
+  expect(prepared.status, await prepared.clone().text()).toBe(200)
+  await clock("2026-11-22T00:00:00Z")
+  async function submit(date: string, reason: string) {
+    const response = await leaveFixtureCall(subject, "/leave/requests", {
+      requestKey: randomUUID(),
+      type: "ANNUAL",
+      reason,
+      startDate: date,
+      endDate: date,
+    })
+    expect(response.status, await response.clone().text()).toBe(201)
+    const { request } = (await response.json()) as { request: { id: string } }
+    return request.id
+  }
+  const pending = await submit("2026-12-03", "Submitted transfer fixture")
+  const verified = await submit("2026-12-04", "Verified transfer fixture")
+  const verifiedPath = `/leave/requests/${verified}`
+  const decision = {
+    actionId: randomUUID(),
+    expectedVersion: 1,
+    note: "Verified by the original Department Head",
+  }
+  expect(
+    (await leaveFixtureCall(formerHead, `${verifiedPath}/verify`, decision))
+      .status,
+  ).toBe(200)
+  const oldNotice = (await inbox(formerHead)).notifications.find(
+    ({ entityId }) => entityId === pending,
+  )
+  expect(oldNotice).toBeDefined()
+  const unreadBefore = (await inbox(receivingHead)).unreadCount
+
+  await signIn(page, "admin")
+  await page.goto("/employees")
+  await page.getByRole("searchbox", { name: "Search employees" }).fill(subject)
+  await page
+    .getByRole("button", { name: "More actions for Attendance leave-transfer" })
+    .click()
+  await page.getByRole("menuitem", { name: "Edit", exact: true }).click()
+  const form = page.getByRole("dialog", { name: "Edit Employee" })
+  await form.getByRole("combobox", { name: "Department", exact: true }).click()
+  await page.getByRole("option", { name: "WC07 transfer destination" }).click()
+  await form.getByRole("combobox", { name: "Team", exact: true }).click()
+  await page.getByRole("option", { name: "No Team", exact: true }).click()
+  const placement = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === `/api${employeePath}` &&
+      response.request().method() === "PUT",
+  )
+  await form.getByRole("button", { name: "Save Employee" }).click()
+  const moved = await placement
+  expect(moved.status(), await moved.text()).toBe(200)
+  await expect(form).toHaveCount(0)
+  const newInbox = await inbox(receivingHead)
+  expect(newInbox.unreadCount).toBe(unreadBefore + 2)
+  expect(newInbox.notifications).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ entityId: pending, readAt: null }),
+      expect.objectContaining({ entityId: verified, readAt: null }),
+    ]),
+  )
+  expect((await leaveFixtureCall(formerHead, verifiedPath)).status).toBe(404)
+  expect(
+    (await leaveFixtureCall(formerHead, `${verifiedPath}/verify`, decision))
+      .status,
+  ).toBe(404)
+  expect(
+    (
+      await overtimeFixtureCall(
+        formerHead,
+        `${inboxPath}/${oldNotice!.id}/read`,
+        "PATCH",
+      )
+    ).status,
+  ).toBe(404)
+
+  const reviewer = await context.newPage()
+  await routeAttendanceApi(reviewer, { realNotifications: true })
+  await signIn(reviewer, receivingHead)
+  await reviewer.goto(new URL(portal, page.url()).href)
+  const bell = reviewer.getByRole("button", {
+    name: /^Notifications, \d+ unread$/,
+  })
+  for (const [id, reason] of [
+    [pending, "Submitted transfer fixture"],
+    [verified, "Verified transfer fixture"],
+  ]) {
+    const link = `${portal}?request=${id}`
+    await bell.click()
+    await reviewer
+      .getByRole("menuitem")
+      .and(reviewer.locator(`[href="${link}"]`))
+      .click()
+    await expect(reviewer).toHaveURL(
+      (url) => url.pathname + url.search === link,
+    )
+    const detail = reviewer.getByRole("dialog", { name: "Leave request" })
+    await expect(detail.getByText(reason, { exact: true })).toBeVisible()
+    await expect
+      .poll(
+        async () =>
+          (await inbox(receivingHead)).notifications.find(
+            ({ entityId }) => entityId === id,
+          )?.readAt,
+      )
+      .toEqual(expect.any(String))
+    await detail.getByRole("button", { name: "Close", exact: true }).click()
+  }
+  expect((await inbox(receivingHead)).unreadCount).toBe(unreadBefore)
+  await reviewer.locator(`[id="leave-actions-${verified}"]`).click()
+  await reviewer.getByRole("menuitem", { name: "Verify request" }).click()
+  const review = reviewer.getByRole("dialog", { name: "Verify request" })
+  await review
+    .getByLabel("Decision note")
+    .fill("Verified by the receiving Department Head")
+  const reviewResponse = reviewer.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === `/api${verifiedPath}/verify`,
+  )
+  await review.getByRole("button", { name: "Verify request" }).click()
+  const result = await reviewResponse
+  expect(result.status()).toBe(200)
+  expect(await result.json()).toMatchObject({
+    request: {
+      status: "VERIFIED",
+      version: 3,
+      routeDepartmentId: fixture.transferDestinationId,
+      capabilities: { requiresReverification: false },
+    },
+  })
+})
 
 async function seedLeaveReview(date: string, verify = true) {
   const result = await leaveFixtureCall("staff", "/leave/requests", {

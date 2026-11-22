@@ -14,9 +14,10 @@ import { selfEmployee } from "../attendance/attendance.service.js"
 import {
   isLeaveSubject,
   leaveDayOverlapsInterval,
+  leaveRequiresReverification,
   leaveReviewHead,
   leaveReviewHeadSelect,
-  notifySubmittedLeave,
+  notifyLeaveReviewers,
   submittedLeaveFallbackScope,
 } from "./leave.repository.js"
 import { workforceLogContext } from "../workforce-compliance-logs/write-context.js"
@@ -174,9 +175,7 @@ function capabilities(
   const departmentHead = user.role === "STAFF" && head?.id === user.id
   const organization = user.role === "ADMIN" || user.role === "SUPERADMIN"
   const reviewer = organization && !own
-  const requiresReverification =
-    request.status === "VERIFIED" &&
-    request.routeDepartmentId !== request.employee.departmentId
+  const requiresReverification = leaveRequiresReverification(request)
   return {
     cancel:
       request.requestedById === user.id &&
@@ -518,7 +517,7 @@ export function createLeaveService(clock: Clock = () => new Date()) {
             },
             include: requestInclude,
           })
-          await notifySubmittedLeave(tx, [created], true)
+          await notifyLeaveReviewers(tx, [created], true)
           return { request: serialize(created, currentUser) }
         },
         { isolationLevel: "ReadCommitted" },

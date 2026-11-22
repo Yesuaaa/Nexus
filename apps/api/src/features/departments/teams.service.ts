@@ -52,6 +52,7 @@ export const teamsService = {
 
     try {
       const team = await prisma.$transaction(async (tx) => {
+        await lockRows(tx, "Department", departmentId, "share")
         const states = new Map<string, MemberState>()
         if (leadId) {
           await assertLeadershipCandidate(tx, leadId, {
@@ -193,6 +194,7 @@ export const teamsService = {
 
     try {
       const updated = await prisma.$transaction(async (tx) => {
+        await lockRows(tx, "Department", departmentId, "share")
         const states = new Map<string, MemberState>()
         if (leadId) {
           await assertLeadershipCandidate(tx, leadId, {

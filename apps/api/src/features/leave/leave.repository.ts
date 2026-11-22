@@ -12,9 +12,13 @@ export const leaveReviewHeadSelect = {
 const leaveRoutingSelect = {
   id: true,
   requestedById: true,
+  status: true,
+  version: true,
+  routeDepartmentId: true,
   employee: {
     select: {
       userId: true,
+      departmentId: true,
       department: { select: { head: { select: leaveReviewHeadSelect } } },
     },
   },
@@ -24,14 +28,16 @@ type LeaveRouting = Prisma.LeaveRequestGetPayload<{
   select: typeof leaveRoutingSelect
 }>
 
+type LeaveSubject = Pick<LeaveRouting, "requestedById" | "employee">
+
 export function isLeaveSubject(
-  { requestedById, employee }: Omit<LeaveRouting, "id">,
+  { requestedById, employee }: LeaveSubject,
   userId: string,
 ) {
   return requestedById === userId || employee.userId === userId
 }
 
-export function leaveReviewHead(request: Omit<LeaveRouting, "id">) {
+export function leaveReviewHead(request: LeaveSubject) {
   const head = request.employee.department?.head
   return head?.role === activeStaff.role &&
     head.isActive === activeStaff.isActive &&
@@ -39,6 +45,15 @@ export function leaveReviewHead(request: Omit<LeaveRouting, "id">) {
     !isLeaveSubject(request, head.id)
     ? head
     : null
+}
+
+export function leaveRequiresReverification(
+  request: Pick<LeaveRouting, "status" | "routeDepartmentId" | "employee">,
+) {
+  return (
+    request.status === "VERIFIED" &&
+    request.routeDepartmentId !== request.employee.departmentId
+  )
 }
 
 export async function submittedLeaveFallbackScope(
@@ -70,7 +85,7 @@ export async function submittedLeaveFallbackScope(
   } satisfies Prisma.LeaveRequestWhereInput
 }
 
-export async function notifySubmittedLeave(
+export async function notifyLeaveReviewers(
   tx: Prisma.TransactionClient,
   requests: LeaveRouting[],
   includeSuperadmins = false,
@@ -85,6 +100,19 @@ export async function notifySubmittedLeave(
   })
   const data = requests.flatMap((request) => {
     const head = leaveReviewHead(request)
+    if (request.status !== "SUBMITTED") {
+      if (!head || !leaveRequiresReverification(request)) return []
+      // This is pending Head work. LEAVE_VERIFIED is reserved for a completed verification.
+      return [
+        {
+          userId: head.id,
+          leaveRequestId: request.id,
+          type: "LEAVE_SUBMITTED",
+          leaveVersion: request.version,
+          summary: "A transferred leave request awaits your verification.",
+        },
+      ]
+    }
     const recipients = administrators.filter(
       ({ id, role }) =>
         (role === "SUPERADMIN" || !head) && !isLeaveSubject(request, id),
@@ -95,6 +123,7 @@ export async function notifySubmittedLeave(
       userId,
       leaveRequestId: request.id,
       type: "LEAVE_SUBMITTED",
+      leaveVersion: 0,
       summary: "A leave request is awaiting review.",
     }))
   })
@@ -102,15 +131,31 @@ export async function notifySubmittedLeave(
     await tx.workflowNotification.createMany({ data, skipDuplicates: true })
 }
 
+const pendingLeaveStatuses = {
+  in: ["SUBMITTED", "VERIFIED"],
+} satisfies Prisma.EnumLeaveStatusFilter
+
 export async function notifyPendingLeaveAfterHeadChange(
   tx: Prisma.TransactionClient,
   departmentId: string,
 ) {
   const requests = await tx.leaveRequest.findMany({
-    where: { status: "SUBMITTED", employee: { departmentId } },
+    where: { status: pendingLeaveStatuses, employee: { departmentId } },
     select: leaveRoutingSelect,
   })
-  await notifySubmittedLeave(tx, requests)
+  await notifyLeaveReviewers(tx, requests)
+}
+
+export async function notifyPendingLeaveAfterPlacement(
+  tx: Prisma.TransactionClient,
+  employeeIds: string[],
+) {
+  if (!employeeIds.length) return
+  const requests = await tx.leaveRequest.findMany({
+    where: { status: pendingLeaveStatuses, employeeId: { in: employeeIds } },
+    select: leaveRoutingSelect,
+  })
+  await notifyLeaveReviewers(tx, requests)
 }
 
 /** An interval ending at midnight stops before the next date. */

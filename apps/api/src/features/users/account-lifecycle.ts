@@ -15,12 +15,16 @@ import type { Prisma, Role, User } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { isForeignKeyViolation } from "../../lib/errors.js"
 import { HttpError } from "../../shared/http-error.js"
+import type { ManagementOperation } from "../../shared/management-history.js"
 import { notifyPendingLeaveAfterHeadChange } from "../leave/leave.repository.js"
 import { notifyPendingAdjustmentsAfterHeadChange } from "../attendance/attendance.pending-notifications.js"
 import { canChangeAccountStatus } from "./users.policy.js"
 
 import { lockRows, lockRowsReturning } from "../../shared/db/locks.js"
-import { setAttendanceAuditContext } from "../workforce-compliance-logs/write-context.js"
+import {
+  setAttendanceAuditContext,
+  workforceLogContext,
+} from "../workforce-compliance-logs/write-context.js"
 type Db = Prisma.TransactionClient
 
 /** No one may change their own role, status or Trash state (403). */
@@ -79,14 +83,16 @@ export function revokeSessions(db: Db, userId: string) {
 
 /**
  * Enables or disables the login while it still matches `guard`; disabling
- * revokes its sessions. Returns false when the account no longer matched.
+ * revokes its sessions. Use ReadCommitted for deactivation so the suspension
+ * sees attendance committed before the Employee lock was acquired.
  */
 export async function setAccountActive(
   db: Db,
   userId: string,
   isActive: boolean,
   guard: Prisma.UserWhereInput,
-  actorId:string,
+  operation: ManagementOperation,
+  expectedEmployeeId?: string,
 ) {
   const headEligibilityChanged =
     guard.role === "STAFF" && guard.isActive !== isActive
@@ -97,15 +103,48 @@ export async function setAccountActive(
       })
     : null
   await lockRows(db, "Department", headedDepartment?.id)
-  const employees=!isActive ? await lockRowsReturning(db,"Employee",userId,"update","userId") : []
+  const employees = !isActive
+    ? await lockRowsReturning(db, "Employee", userId, "update", "userId")
+    : []
+  if (
+    expectedEmployeeId &&
+    !employees.some(({ id }) => id === expectedEmployeeId)
+  )
+    return false
   const { count } = await db.user.updateMany({
     where: { ...guard, id: userId },
     data: { isActive },
   })
   if (count && !isActive) {
-    if(employees.length){
-      await setAttendanceAuditContext(db,actorId,"Open shift suspended at account deactivation")
-      await db.attendanceWorkSession.updateMany({where:{employeeId:{in:employees.map(row=>row.id)},endedAt:null,suspendedAt:null},data:{suspendedAt:new Date()}})
+    // A profile can appear after an account-only lookup found nothing to lock.
+    // With User locked, reject that change so a retry can lock Employee first.
+    if (
+      !employees.length &&
+      (await db.employee.findUnique({
+        where: { userId },
+        select: { id: true },
+      }))
+    )
+      throw new HttpError(409, "Employee assignment changed; refresh and retry")
+    if (employees.length) {
+      const actorId = operation.actorAccountId
+      await setAttendanceAuditContext(
+        db,
+        actorId,
+        "Open shift suspended at account deactivation",
+        {
+          ...workforceLogContext(actorId, operation.operationId),
+          actorRoleAtTime: operation.actorRoleAtTime,
+        },
+      )
+      await db.attendanceWorkSession.updateMany({
+        where: {
+          employeeId: { in: employees.map(({ id }) => id) },
+          endedAt: null,
+          suspendedAt: null,
+        },
+        data: { suspendedAt: new Date() },
+      })
     }
     await revokeSessions(db, userId)
   }

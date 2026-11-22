@@ -13,7 +13,7 @@ import {
   Role,
   type Prisma,
 } from "../../generated/prisma/client.js"
-import { lockRows } from "../../shared/db/locks.js"
+import { lockRows, lockRowsReturning } from "../../shared/db/locks.js"
 import { activeStaff } from "../../shared/query/accounts.js"
 import { HttpError } from "../../shared/http-error.js"
 
@@ -140,7 +140,7 @@ const messages: Record<LeadershipKind, Messages> = {
 }
 
 /**
- * Locks `userId` and verifies it may take the `kind` leadership role in
+ * Locks the Employee before `userId` and verifies eligibility for the `kind` role in
  * `departmentId` (null when the department is being created). Throws an
  * `HttpError` describing the first failed rule.
  *
@@ -165,6 +165,7 @@ export async function assertLeadershipCandidate(
   },
 ) {
   const text = messages[kind]
+  await lockRowsReturning(tx, "Employee", userId, "update", "userId")
   await lockRows(tx, "User", userId)
   const candidate = await tx.user.findUnique({
     where: { id: userId },

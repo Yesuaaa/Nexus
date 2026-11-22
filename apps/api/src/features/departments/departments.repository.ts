@@ -20,7 +20,10 @@ import { readTransaction } from "../../lib/database-read.js"
 import { lockRows } from "../../shared/db/locks.js"
 import { paginate } from "../../shared/query/pagination.js"
 import { departmentSummarySelect } from "../../shared/query/selects.js"
-import { notifyPendingLeaveAfterHeadChange } from "../leave/leave.repository.js"
+import {
+  notifyPendingLeaveAfterHeadChange,
+  notifyPendingLeaveAfterPlacement,
+} from "../leave/leave.repository.js"
 import { notifyPendingAdjustmentsAfterHeadChange } from "../attendance/attendance.pending-notifications.js"
 import { beginAttendancePlacement } from "../employees/attendance-placement-history.js"
 import {
@@ -461,15 +464,20 @@ export const departmentsRepository = {
         data: { departmentId: null, teamId: null },
       })
       await beginAttendancePlacement(tx, operation)
-      await tx.employee.updateMany({
+      const movedEmployees = await tx.employee.updateManyAndReturn({
         where: { departmentId: id },
         data: { departmentId: null, teamId: null },
+        select: { id: true },
       })
       for (const userId of before.syncUserIds) {
         await syncEmployeeForUser(tx, userId, operation)
       }
       await tx.department.delete({ where: { id } })
       await writeDepartmentDeletionWorkforce(tx, operation, before)
+      await notifyPendingLeaveAfterPlacement(
+        tx,
+        movedEmployees.map(({ id }) => id),
+      )
     })
   },
 
@@ -481,6 +489,7 @@ export const departmentsRepository = {
   ) {
     const prisma = getPrisma()!
     return prisma.$transaction(async (tx) => {
+      await lockRows(tx, "Department", departmentId, "share")
       const beforeStates = new Map<string, MemberState>()
       const remember = (state: MemberState) => {
         const key = state.user
@@ -571,20 +580,20 @@ export const departmentsRepository = {
       }
 
       for (const employeeId of requestedEmployeeIds) {
-        const employee = await tx.employee.findUnique({
-          where: { id: employeeId },
-          select: { id: true, departmentId: true, teamId: true },
-        })
-        if (!employee) {
-          throw new EmployeeError(404, "Employee not found")
-        }
+        const before = await readEmployeeMemberState(tx, employeeId)
+        const employee = before.employee!
+        if (employee.departmentId && employee.departmentId !== departmentId)
+          throw new EmployeeError(
+            409,
+            "Employee assignment changed; refresh and retry",
+          )
         const currentTeam = employee.teamId
           ? await tx.team.findUnique({
               where: { id: employee.teamId },
               select: { departmentId: true },
             })
           : null
-        remember(await readEmployeeMemberState(tx, employee.id))
+        remember(before)
         await updateEmployee(
           tx,
           employee.id,
@@ -599,14 +608,18 @@ export const departmentsRepository = {
       }
 
       for (const userId of requestedUserIds) {
-        const user = await tx.user.findUnique({
-          where: { id: userId },
-          select: { id: true, teamId: true },
-        })
-        if (!user) {
-          throw new EmployeeError(404, "User not found")
-        }
-        remember(await readUserMemberState(tx, user.id, false))
+        const before = await readUserMemberState(tx, userId, false)
+        const user = before.user!
+        if (
+          [user.departmentId, before.employee?.departmentId].some(
+            (id) => id && id !== departmentId,
+          )
+        )
+          throw new EmployeeError(
+            409,
+            "Employee assignment changed; refresh and retry",
+          )
+        remember(before)
         await syncEmployeeForUser(tx, user.id, operation)
         const employee = await tx.employee.findUnique({
           where: { userId: user.id },

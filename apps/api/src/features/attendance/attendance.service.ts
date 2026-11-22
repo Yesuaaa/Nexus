@@ -57,6 +57,25 @@ export async function selfEmployee(
   return employee
 }
 
+export async function selfEmployeeWithDepartmentLock(
+  tx: Prisma.TransactionClient,
+  userId: string,
+) {
+  const placement = await tx.employee.findUnique({
+    where: { userId },
+    select: { id: true, departmentId: true },
+  })
+  // Take the Department lock first so Head changes cannot race notice routing.
+  await lockRows(tx, "Department", placement?.departmentId, "share")
+  const employee = await selfEmployee(tx, userId, true)
+  if (
+    placement?.id !== employee.id ||
+    placement.departmentId !== employee.departmentId
+  )
+    fail(409, "Employee placement changed; refresh and try again")
+  return employee
+}
+
 export async function policyAt(
   tx: Prisma.TransactionClient,
   employeeId: string,
@@ -232,23 +251,52 @@ async function closeRecordedSession(tx:Prisma.TransactionClient,employeeId:strin
 
 export function createAttendanceService(clock: Clock = () => new Date()) {
   return {
-    async reconcile(userId:string,employeeId:string,sessionId:string,endedAt:Date,note:string){
-      return getPrisma()!.$transaction(async tx=>{
-        await lockRows(tx,"Employee",employeeId)
-        await lockRows(tx,"User",userId,"share")
-        const reviewer=await actor(tx,userId)
-        if(!hasPermission(reviewer.role,Permission.EMPLOYEES_MANAGE)) fail(403,"Attendance management access is required")
-        const employee=await tx.employee.findUnique({where:{id:employeeId},select:{userId:true}})
-        if(!employee)fail(404,"Employee not found")
-        if(employee.userId===userId)fail(403,"You cannot reconcile your own shift")
-        const session=await repository.session(tx,employeeId,sessionId)
-        if(!session)fail(404,"Session not found")
-        if(session.endedAt || !session.suspendedAt)fail(409,"Only an open suspended shift can be reconciled")
-        if(endedAt>serverTime(clock))fail(400,"Clock-out cannot be in the future")
-        await setAttendanceAuditContext(tx,userId,note)
-        await closeRecordedSession(tx,employeeId,employee.userId,session,endedAt)
-        return {closed:true}
-      })
+    async reconcile(
+      userId: string,
+      employeeId: string,
+      sessionId: string,
+      endedAt: Date,
+      note: string,
+    ) {
+      return getPrisma()!.$transaction(
+        async (tx) => {
+          const placement = await tx.employee.findUnique({
+            where: { id: employeeId },
+            select: { departmentId: true },
+          })
+          await lockRows(tx, "Department", placement?.departmentId, "share")
+          await lockRows(tx, "Employee", employeeId)
+          await lockRows(tx, "User", userId, "share")
+          const reviewer = await actor(tx, userId)
+          if (!hasPermission(reviewer.role, Permission.EMPLOYEES_MANAGE))
+            fail(403, "Attendance management access is required")
+          const employee = await tx.employee.findUnique({
+            where: { id: employeeId },
+            select: { userId: true, departmentId: true },
+          })
+          if (!employee) fail(404, "Employee not found")
+          if (placement?.departmentId !== employee.departmentId)
+            fail(409, "Employee placement changed; refresh and try again")
+          if (employee.userId === userId)
+            fail(403, "You cannot reconcile your own shift")
+          const session = await repository.session(tx, employeeId, sessionId)
+          if (!session) fail(404, "Session not found")
+          if (session.endedAt || !session.suspendedAt)
+            fail(409, "Only an open suspended shift can be reconciled")
+          if (endedAt > serverTime(clock))
+            fail(400, "Clock-out cannot be in the future")
+          await setAttendanceAuditContext(tx, userId, note)
+          await closeRecordedSession(
+            tx,
+            employeeId,
+            employee.userId,
+            session,
+            endedAt,
+          )
+          return { closed: true }
+        },
+        { isolationLevel: "ReadCommitted" },
+      )
     },
     async act(
       userId: string,
@@ -257,7 +305,10 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
     ) {
       return getPrisma()!.$transaction(
         async (tx) => {
-          const employee = await selfEmployee(tx, userId, true)
+          const employee =
+            action === "clock-out"
+              ? await selfEmployeeWithDepartmentLock(tx, userId)
+              : await selfEmployee(tx, userId, true)
           // Capture once, after serialization. Callers cannot supply/backdate punches.
           const now = serverTime(clock)
           await setAttendanceAuditContext(tx, userId, `Employee ${action}`)

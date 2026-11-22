@@ -13,7 +13,12 @@ import {
 } from "../../shared/query/pagination.js"
 import { parseQueryString } from "../../shared/query-helpers.js"
 import { isPlainObject, isRecordId, isUuidV4 } from "../../shared/validation.js"
-import { actor, selfEmployee, policyAt } from "./attendance.service.js"
+import {
+  actor,
+  selfEmployee,
+  selfEmployeeWithDepartmentLock,
+  policyAt,
+} from "./attendance.service.js"
 import { hasPermission, Permission } from "../auth/auth.permissions.js"
 import {
   hasOperationalCapability,
@@ -1451,22 +1456,7 @@ export function createAttendanceManagement(clock: () => Date) {
       const reason = text(input.reason, 5)
       return getPrisma()!.$transaction(
         async (tx) => {
-          const placement =
-            type === "CORRECTION"
-              ? await tx.employee.findUnique({
-                  where: { userId },
-                  select: { id: true, departmentId: true },
-                })
-              : null
-          // Head changes lock the department before changing review authority.
-          await lockRows(tx, "Department", placement?.departmentId, "share")
-          const employee = await selfEmployee(tx, userId, true)
-          if (
-            type === "CORRECTION" &&
-            (placement?.id !== employee.id ||
-              placement.departmentId !== employee.departmentId)
-          )
-            fail(409, "Employee placement changed; refresh and try again")
+          const employee = await selfEmployeeWithDepartmentLock(tx, userId)
           const existing = await tx.attendanceAdjustment.findUnique({
             where: { requestKey },
           })
@@ -1702,6 +1692,7 @@ export function createAttendanceManagement(clock: () => Date) {
             include: adjustmentInclude,
           })
           if (!overtime && currentEmployee.userId) {
+            // The Department and Employee locks also cover automatic overtime routing.
             const policy = request.sessionId
               ? null
               : await policyAt(
