@@ -11,6 +11,8 @@ const permissionsByRole = {
     Permissions.EMPLOYEES_READ,
     Permissions.SERVICES_READ,
     Permissions.CLIENTS_READ,
+    "payroll:read",
+    "payroll:manage",
   ],
   SUPERADMIN: [
     Permissions.MODULES_ACCESS_ALL,
@@ -18,6 +20,7 @@ const permissionsByRole = {
     Permissions.SERVICES_READ,
     Permissions.EMPLOYEES_READ,
     Permissions.DEPARTMENTS_READ,
+    "payroll:read",
   ],
 }
 
@@ -49,7 +52,7 @@ test("clients do not receive workspace selector entries", () => {
   assert.deepEqual(moduleEntries(account("USER")), [])
 })
 
-test("Staff receive project and personal attendance workspaces", () => {
+test("Staff receive project and Workforce Compliance workspaces", () => {
   assert.deepEqual(moduleEntries(account("STAFF")), [
     ["Project Management", "/project-workspace"],
     ["Workforce Compliance", "/attendance/check-ins"],

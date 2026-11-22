@@ -1,5 +1,10 @@
 "use client"
 
+import {
+  SettingsSection,
+  SettingsSwitchRow,
+} from "@/components/ui/settings-section"
+
 import { Form } from "@/components/ui/form"
 import { useEffect, useState, type FormEvent } from "react"
 import {
@@ -305,59 +310,33 @@ export function SettingsPage() {
             </TabsContent>
             <TabsContent value="notifications" className="m-0">
               <Form onSubmit={save} className="grid gap-6">
-                <section
+                <SettingsSection
                   id="notification-settings"
                   tabIndex={-1}
-                  className="rounded-xl border border-[#dfe6f0] bg-[#f8faff] p-5 focus-visible:outline-2 focus-visible:outline-[#294a9b]"
+                  title="In-app notifications"
+                  description="Choose whether request and project updates appear in your notification bell."
+                  tone="tinted"
                 >
-                  <h2 className="m-0 text-base font-semibold">
-                    In-app notifications
-                  </h2>
-                  <p className="mt-2 mb-5 text-xs leading-5 text-[#738096]">
-                    Choose whether request and project updates appear in your
-                    notification bell.
-                  </p>
-                  <label className="flex cursor-pointer items-start justify-between gap-5 border-t border-[#e1e6ee] pt-5">
-                    <span>
-                      <span className="block text-sm font-medium">
-                        Workflow updates
-                      </span>
-                      <span className="mt-1 block text-xs leading-5 text-[#738096]">
-                        Updates to requests, quotations, agreements, payments,
-                        and project activation relevant to your account.
-                      </span>
-                    </span>
-                    <span className="relative mt-1 inline-flex shrink-0">
-                      <input
-                        type="checkbox"
-                        role="switch"
-                        aria-label="Workflow updates"
-                        checked={
-                          draft?.workflowNotifications ??
-                          preferences.workflowNotifications
-                        }
-                        disabled={!draft || saving}
-                        onChange={(event) =>
-                          setDraft((current) =>
-                            current
-                              ? {
-                                  ...current,
-                                  workflowNotifications: event.target.checked,
-                                }
-                              : current,
-                          )
-                        }
-                        className="peer absolute inset-0 z-10 m-0 h-full w-full cursor-pointer opacity-0"
-                      />
-                      <span
-                        aria-hidden="true"
-                        className="inline-flex h-6 w-10 items-center rounded-full bg-[#cbd5e3] p-1 transition-colors peer-checked:bg-[#203f8c] peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[#294a9b] peer-checked:[&>span]:translate-x-4"
-                      >
-                        <span className="size-4 rounded-full bg-white transition-transform motion-reduce:transition-none" />
-                      </span>
-                    </span>
-                  </label>
-                </section>
+                  <SettingsSwitchRow
+                    label="Workflow updates"
+                    description="Updates to requests, quotations, agreements, payments, and project activation relevant to your account."
+                    checked={
+                      draft?.workflowNotifications ??
+                      preferences.workflowNotifications
+                    }
+                    disabled={!draft || saving}
+                    onChange={(event) =>
+                      setDraft((current) =>
+                        current
+                          ? {
+                              ...current,
+                              workflowNotifications: event.target.checked,
+                            }
+                          : current,
+                      )
+                    }
+                  />
+                </SettingsSection>
 
                 <div className="flex justify-end">
                   <Button

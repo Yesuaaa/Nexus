@@ -17,6 +17,8 @@ export const Permissions = {
   DEPARTMENTS_DELETE: "departments:delete",
   EMPLOYEES_READ: "employees:read",
   EMPLOYEES_MANAGE: "employees:manage",
+  PAYROLL_READ: "payroll:read",
+  PAYROLL_MANAGE: "payroll:manage",
   SERVICES_READ: "services:read",
   SERVICES_MANAGE: "services:manage",
   CLIENTS_READ: "clients:read",
@@ -60,6 +62,30 @@ export function canAccessEmployeeManagement(account: Account): boolean {
   return (
     isPrivileged(account.role) &&
     hasPermission(account, Permissions.EMPLOYEES_READ)
+  )
+}
+
+export function canAccessMyPayroll(account: Account): boolean {
+  return Boolean(
+    account.isActive && !account.accountDeletedAt && account.role === "STAFF",
+  )
+}
+
+export function canAccessPayroll(account: Account): boolean {
+  return (
+    Boolean(account.isActive) &&
+    !account.accountDeletedAt &&
+    (account.role === "ADMIN" || account.role === "SUPERADMIN") &&
+    hasPermission(account, Permissions.PAYROLL_READ)
+  )
+}
+
+export function canManagePayroll(account: Account): boolean {
+  return (
+    Boolean(account.isActive) &&
+    !account.accountDeletedAt &&
+    account.role === "ADMIN" &&
+    hasPermission(account, Permissions.PAYROLL_MANAGE)
   )
 }
 

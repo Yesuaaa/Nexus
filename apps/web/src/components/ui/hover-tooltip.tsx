@@ -3,6 +3,8 @@ import { cn } from "@/lib/utils"
 
 const sideClasses = {
   top: "bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 translate-y-1 group-hover:translate-y-0 group-focus-visible:translate-y-0 group-focus-within:translate-y-0",
+  "top-end":
+    "bottom-[calc(100%+8px)] right-0 translate-y-1 group-hover:translate-y-0 group-focus-visible:translate-y-0 group-focus-within:translate-y-0",
   right:
     "top-1/2 left-[calc(100%+10px)] -translate-y-1/2 translate-x-1 group-hover:translate-x-0 group-focus-visible:translate-x-0 group-focus-within:translate-x-0",
 } as const
