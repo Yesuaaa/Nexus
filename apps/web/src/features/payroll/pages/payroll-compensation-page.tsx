@@ -254,11 +254,11 @@ export function PayrollCompensationPage() {
             {hasFilters && (
               <Button
                 type="button"
-                variant="ghost"
-                size="panel"
+                variant="outline"
+                className="h-[34px] text-xs text-[#244993]"
                 onClick={clearFilters}
               >
-                <X size={13} aria-hidden="true" /> Clear filters
+                Clear filters
               </Button>
             )}
           </div>
@@ -416,7 +416,7 @@ export function PayrollCompensationPage() {
                           onClick={() => setSelectedEmployeeId(row.employee.id)}
                         >
                           <Eye size={14} aria-hidden="true" />
-                          <HoverTooltip>
+                          <HoverTooltip side="top-end">
                             {canManage &&
                             row.configurationStatus === "NOT_CONFIGURED"
                               ? "Configure compensation"
