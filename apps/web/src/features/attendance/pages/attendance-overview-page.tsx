@@ -171,7 +171,7 @@ export function AttendanceOverviewPage() {
       <div className="mt-9 grid gap-x-12 gap-y-9 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <Section title="Personal attendance">
           {result.loading ? (
-            <RowsSkeleton rows={3} />
+            <RowsSkeleton rows={4} />
           ) : (
             <dl className="m-0 grid gap-2 text-xs">
               <div className="flex gap-4 max-[560px]:flex-col max-[560px]:gap-0.5">
@@ -193,6 +193,14 @@ export function AttendanceOverviewPage() {
                   Sessions per day
                 </dt>
                 <dd className="m-0 text-[#182235]">{sessionsPerDay}</dd>
+              </div>
+              <div className="flex gap-4 max-[560px]:flex-col max-[560px]:gap-0.5">
+                <dt className="w-32 shrink-0 text-[#738096]">
+                  Approved leave days
+                </dt>
+                <dd className="m-0 text-[#182235]">
+                  {figuresUnavailable ? "—" : (data?.approvedLeaveDays ?? 0)}
+                </dd>
               </div>
               {data && (
                 <div className="flex gap-4 max-[560px]:flex-col max-[560px]:gap-0.5">

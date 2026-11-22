@@ -7,6 +7,7 @@ import {
   DataTableErrorRow,
   ResponsiveDataTable,
   ResponsiveDataTableBody,
+  ResponsiveDataTableCell,
   ResponsiveDataTableColumnHeader,
   ResponsiveDataTableHeader,
 } from "@/components/ui/responsive-data-table"
@@ -14,10 +15,16 @@ import { rowActionButton } from "@/components/ui/row-action-styles"
 import { roleLabels } from "@/features/auth/model/roles"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import { cn } from "@/lib/utils"
-import type { AuditLog } from "../api/audit-logs-api"
+import type { AuditLog, AuditLogActor } from "../api/audit-logs-api"
+
+export function auditActorRole(actor: AuditLogActor) {
+  if (actor.role) return roleLabels[actor.role]
+  if (actor.attribution === "SYSTEM") return "Automated process"
+  return actor.id ? "Role unavailable" : "Unknown"
+}
 
 const grid =
-  "grid grid-cols-[minmax(250px,2fr)_minmax(170px,1.15fr)_120px_150px_52px] items-center gap-3.5 @max-[850px]:grid-cols-[minmax(0,1fr)_auto]"
+  "grid grid-cols-[minmax(220px,2fr)_minmax(145px,1.15fr)_100px_130px_78px_42px] items-center gap-3.5 @max-[850px]:grid-cols-[minmax(0,1fr)_auto]"
 
 function rowClass(_log: AuditLog, _index: number, isLast: boolean) {
   return cn(
@@ -29,10 +36,33 @@ function rowClass(_log: AuditLog, _index: number, isLast: boolean) {
 
 const logKey = (log: AuditLog) => log.id
 
+function AuditLogSummaryCell({ log }: { log: AuditLog }) {
+  const count = log.effects?.length ?? 0
+  const changeCount = count > 1 ? `${count} recorded changes` : null
+  const detail = [log.summaryDetail, changeCount].filter(Boolean).join(" · ")
+
+  return (
+    <ResponsiveDataTableCell className="grid min-w-0 gap-1 @max-[850px]:col-span-2">
+      <strong
+        className="line-clamp-2 min-w-0 font-medium wrap-anywhere text-foreground"
+        title={log.message}
+      >
+        {log.message}
+      </strong>
+      {detail && (
+        <span className="truncate text-[11px] text-[#738096]" title={detail}>
+          {detail}
+        </span>
+      )}
+    </ResponsiveDataTableCell>
+  )
+}
+
 export function matchesAuditLogSearch(log: AuditLog, query: string) {
   const needle = query.trim().toLocaleLowerCase()
   return [
     log.message,
+    log.summaryDetail,
     log.target.label,
     log.target.type,
     ...log.changes.flatMap(({ field, before, after }) => [
@@ -42,6 +72,14 @@ export function matchesAuditLogSearch(log: AuditLog, query: string) {
     ]),
     log.actor.name,
     log.actor.id,
+    log.operationId,
+    ...(log.effects?.flatMap(({ action, target, notes }) => [
+      action,
+      target.id,
+      target.type,
+      target.label,
+      ...notes.map(({ value }) => value),
+    ]) ?? []),
     log.event,
     log.action,
     log.source,
@@ -96,6 +134,9 @@ export function AuditLogsTable({
         </ResponsiveDataTableColumnHeader>
         <ResponsiveDataTableColumnHeader>Area</ResponsiveDataTableColumnHeader>
         <ResponsiveDataTableColumnHeader>Time</ResponsiveDataTableColumnHeader>
+        <ResponsiveDataTableColumnHeader>
+          Status
+        </ResponsiveDataTableColumnHeader>
         <ResponsiveDataTableColumnHeader className="text-right">
           View
         </ResponsiveDataTableColumnHeader>
@@ -115,6 +156,7 @@ export function AuditLogsTable({
                 "@max-[850px]:col-start-1",
                 "@max-[850px]:col-start-1",
                 "@max-[850px]:col-start-1",
+                "@max-[850px]:col-start-2 @max-[850px]:row-start-4 @max-[850px]:justify-self-end",
                 "@max-[850px]:col-start-2 @max-[850px]:row-start-2",
               ]}
               cellSkeletonClassNames={[
@@ -122,11 +164,12 @@ export function AuditLogsTable({
                 "h-8 w-3/4",
                 "h-4 w-20",
                 "h-4 w-24",
+                "h-4 w-12",
                 "size-8",
               ]}
             />
           ) : (
-            <DataTableErrorRow message={error} colSpan={5} onRetry={onRetry} />
+            <DataTableErrorRow message={error} colSpan={6} onRetry={onRetry} />
           )}
         </ResponsiveDataTableBody>
       ) : (
@@ -145,53 +188,41 @@ export function AuditLogsTable({
           className="relative min-w-0"
           renderRow={(log) => (
             <>
-              <div className="grid min-w-0 gap-1 @max-[850px]:col-span-2">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Pill tone={log.outcome === "SUCCESS" ? "success" : "danger"}>
-                    {log.outcome === "SUCCESS" ? "Success" : "Failed"}
-                  </Pill>
-                  <strong className="min-w-0 truncate font-medium text-foreground @max-[850px]:whitespace-normal">
-                    {log.message}
-                  </strong>
-                </div>
-                <span className="truncate text-[11px] text-[#738096]">
-                  {log.action ?? log.event}
-                </span>
-              </div>
-              <div className="flex min-w-0 items-center gap-2.5 @max-[850px]:col-start-1">
+              <AuditLogSummaryCell log={log} />
+              <ResponsiveDataTableCell className="flex min-w-0 items-center gap-2.5 @max-[850px]:col-start-1">
                 <Avatar name={log.actor.name} className="size-8" fallback="S" />
                 <div className="grid min-w-0 gap-0.5">
                   <span className="truncate font-medium">{log.actor.name}</span>
                   <span className="text-[11px] text-[#738096]">
-                    {log.actor.role
-                      ? roleLabels[log.actor.role]
-                      : log.actor.attribution === "UNKNOWN"
-                        ? "Unknown"
-                        : "Automated process"}
+                    {auditActorRole(log.actor)}
                   </span>
                 </div>
-              </div>
-              <div className="min-w-0 @max-[850px]:col-start-1">
+              </ResponsiveDataTableCell>
+              <ResponsiveDataTableCell className="min-w-0 @max-[850px]:col-start-1">
                 <span className="mr-1.5 hidden text-[#738096] @max-[850px]:inline">
                   Area
                 </span>
                 <span>{sourceLabels[log.source] ?? log.source}</span>
-              </div>
-              <div className="min-w-0 text-[11px] text-[#738096] @max-[850px]:col-start-1">
+              </ResponsiveDataTableCell>
+              <ResponsiveDataTableCell className="min-w-0 text-[11px] text-[#738096] @max-[850px]:col-start-1">
                 <span className="mr-1.5 hidden @max-[850px]:inline">Time</span>
                 {formatDateTime(log.createdAt)}
-              </div>
-              <button
-                type="button"
-                className={cn(
-                  rowActionButton,
-                  "justify-self-end @max-[850px]:col-start-2 @max-[850px]:row-start-2",
-                )}
-                aria-label={`View log: ${log.message}`}
-                onClick={() => onView(log)}
-              >
-                <Eye className="size-4" aria-hidden="true" />
-              </button>
+              </ResponsiveDataTableCell>
+              <ResponsiveDataTableCell className="@max-[850px]:col-start-2 @max-[850px]:row-start-4 @max-[850px]:justify-self-end">
+                <Pill tone={log.outcome === "SUCCESS" ? "success" : "danger"}>
+                  {log.outcome === "SUCCESS" ? "Success" : "Failed"}
+                </Pill>
+              </ResponsiveDataTableCell>
+              <ResponsiveDataTableCell className="justify-self-end @max-[850px]:col-start-2 @max-[850px]:row-start-2">
+                <button
+                  type="button"
+                  className={rowActionButton}
+                  aria-label={`View log: ${log.message}`}
+                  onClick={() => onView(log)}
+                >
+                  <Eye className="size-4" aria-hidden="true" />
+                </button>
+              </ResponsiveDataTableCell>
             </>
           )}
         />

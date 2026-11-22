@@ -898,11 +898,11 @@ model CompensationComponent {
 }
 
 model PayrollPreferences {
-  id                              String  @id
-  revision                        Int
-  showCompanyLogo                 Boolean
-  showEmployeeId                  Boolean
-  requirePublicationConfirmation  Boolean
+  id                             String  @id
+  revision                       Int
+  showCompanyLogo                Boolean
+  showEmployeeId                 Boolean
+  requirePublicationConfirmation Boolean
   requireSimulationConfirmation  Boolean
 }
 
@@ -959,25 +959,25 @@ model PayrollRun {
 
 model PayrollRunCalculation {
   reconciliationExceptions PayrollReconciliationException[]
-  disbursement        PayrollDisbursementBatch?
-  id                  String                    @id @default(cuid())
-  runId               String
-  run                 PayrollRun                @relation(fields: [runId], references: [id], onDelete: Restrict)
-  revision            Int
-  status              PayrollCalculationStatus
-  calculatedAt        DateTime                  @default(now()) @db.Timestamptz(3)
-  createdById         String
-  createdBy           User                      @relation("PayrollCalculationCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  currency            String                    @default("PHP") @db.Char(3)
-  grossTotal          Decimal                   @default(0) @db.Decimal(14, 2)
-  deductionsTotal     Decimal                   @default(0) @db.Decimal(14, 2)
-  netTotal            Decimal                   @default(0) @db.Decimal(14, 2)
-  calculatedItemCount Int                       @default(0)
-  reviewItemCount     Int                       @default(0)
-  blockedItemCount    Int                       @default(0)
-  inputSnapshot       Json
-  items               PayrollRunItem[]
-  approvalEvents      PayrollApprovalEvent[]
+  disbursement             PayrollDisbursementBatch?
+  id                       String                           @id @default(cuid())
+  runId                    String
+  run                      PayrollRun                       @relation(fields: [runId], references: [id], onDelete: Restrict)
+  revision                 Int
+  status                   PayrollCalculationStatus
+  calculatedAt             DateTime                         @default(now()) @db.Timestamptz(3)
+  createdById              String
+  createdBy                User                             @relation("PayrollCalculationCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  currency                 String                           @default("PHP") @db.Char(3)
+  grossTotal               Decimal                          @default(0) @db.Decimal(14, 2)
+  deductionsTotal          Decimal                          @default(0) @db.Decimal(14, 2)
+  netTotal                 Decimal                          @default(0) @db.Decimal(14, 2)
+  calculatedItemCount      Int                              @default(0)
+  reviewItemCount          Int                              @default(0)
+  blockedItemCount         Int                              @default(0)
+  inputSnapshot            Json
+  items                    PayrollRunItem[]
+  approvalEvents           PayrollApprovalEvent[]
 
   @@unique([runId, revision], map: "payroll_run_calculation_revision_uq")
   @@index([runId, revision], map: "payroll_run_calculation_history_idx")
@@ -1236,6 +1236,7 @@ model WorkflowNotification {
   attendanceAdjustment   AttendanceAdjustment? @relation(fields: [attendanceAdjustmentId], references: [id], onDelete: Restrict)
   leaveRequestId         String?
   leaveRequest           LeaveRequest?         @relation(fields: [leaveRequestId], references: [id], onDelete: Restrict)
+  leaveVersion           Int                   @default(0)
   type                   String?
   summary                String?
   readAt                 DateTime?
@@ -1243,7 +1244,7 @@ model WorkflowNotification {
 
   @@unique([userId, eventId])
   @@unique([userId, attendanceAdjustmentId, type])
-  @@unique([userId, leaveRequestId, type])
+  @@unique([userId, leaveRequestId, type, leaveVersion], map: "WorkflowNotification_leave_version_key")
   @@index([userId, readAt, createdAt])
 }
 
@@ -1296,21 +1297,27 @@ model LeaveRequestDay {
 }
 
 model LeaveDecision {
-  id         String       @id @default(cuid())
-  requestId  String
-  request    LeaveRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
-  actorId    String
-  actor      User         @relation(fields: [actorId], references: [id], onDelete: Restrict)
-  actionId   String       @db.Uuid
-  action     LeaveAction
-  fromStatus LeaveStatus?
-  toStatus   LeaveStatus
-  note       String?      @db.VarChar(2000)
-  version    Int
-  createdAt  DateTime     @default(now()) @db.Timestamptz(3)
+  writerTransaction String?      @default(dbgenerated("pg_current_xact_id()::text"))
+  id                String       @id @default(cuid())
+  requestId         String
+  request           LeaveRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  actorId           String
+  actor             User         @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  actionId          String       @db.Uuid
+  action            LeaveAction
+  fromStatus        LeaveStatus?
+  toStatus          LeaveStatus
+  note              String?      @db.VarChar(2000)
+  version           Int
+  createdAt         DateTime     @default(now()) @db.Timestamptz(3)
+  operationId       String?      @db.Uuid
+  correlationId     String?      @db.Uuid
+  actorRoleAtTime   Role?
 
   @@unique([requestId, actorId, actionId])
   @@index([requestId, createdAt, id])
+  @@index([createdAt, id])
+  @@index([operationId])
 }
 
 model WorkloadCapacity {
@@ -1459,7 +1466,13 @@ model RefreshToken {
   @@index([sessionId])
 }
 
+enum AttendanceScheduleMode {
+  FLEXIBLE
+  FIXED
+}
+
 model AttendancePolicy {
+  scheduleMode            AttendanceScheduleMode       @default(FLEXIBLE)
   archivedAt              DateTime?                    @db.Timestamptz(3)
   unpaidBreaksEnabled     Boolean                      @default(true)
   overnightRequiresReview Boolean                      @default(false)
@@ -1472,53 +1485,63 @@ model AttendancePolicy {
 }
 
 model AttendancePolicyDay {
-  policyId        String
-  policy          AttendancePolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
-  weekday         Int
-  isWorkingDay    Boolean
-  requiredMinutes Int
+  scheduledStartMinute        Int?
+  scheduledEndMinute          Int?
+  scheduledUnpaidBreakMinutes Int?
+  policyId                    String
+  policy                      AttendancePolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  weekday                     Int
+  isWorkingDay                Boolean
+  requiredMinutes             Int
 
   @@id([policyId, weekday])
 }
 
 model AttendancePolicyAssignment {
-  id               String              @id @default(cuid())
-  employeeId       String
-  employee         Employee            @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  policyId         String
-  policy           AttendancePolicy    @relation(fields: [policyId], references: [id], onDelete: Restrict)
-  effectiveFrom    DateTime            @db.Date
-  effectiveUntil   DateTime?           @db.Date
-  createdAt        DateTime            @default(now()) @db.Timestamptz(3)
-  workdays         AttendanceWorkday[]
-  leaveRequestDays LeaveRequestDay[]
+  replacedAssignmentId String?
+  replacedUntil        DateTime?           @db.Date
+  id                   String              @id @default(cuid())
+  employeeId           String
+  employee             Employee            @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  policyId             String
+  policy               AttendancePolicy    @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  effectiveFrom        DateTime            @db.Date
+  effectiveUntil       DateTime?           @db.Date
+  cancelledAt          DateTime?           @db.Timestamptz(3)
+  createdAt            DateTime            @default(now()) @db.Timestamptz(3)
+  workdays             AttendanceWorkday[]
+  leaveRequestDays     LeaveRequestDay[]
 
   @@unique([id, employeeId])
   @@index([employeeId, effectiveFrom])
 }
 
 model AttendanceWorkday {
-  policyName              String
-  unpaidBreaksEnabled     Boolean
-  overnightRequiresReview Boolean
-  id                      String                     @id @default(cuid())
-  employeeId              String
-  employee                Employee                   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  assignmentId            String
-  assignment              AttendancePolicyAssignment @relation(fields: [assignmentId, employeeId], references: [id, employeeId], onDelete: Restrict)
-  workDate                DateTime                   @db.Date
-  timeZone                String
-  isWorkingDay            Boolean
-  requiredMinutes         Int
-  createdAt               DateTime                   @default(now()) @db.Timestamptz(3)
-  sessions                AttendanceWorkSession[]
-  audit                   AttendanceAudit[]
+  scheduledStartAt            DateTime?                  @db.Timestamptz(3)
+  scheduledEndAt              DateTime?                  @db.Timestamptz(3)
+  scheduledUnpaidBreakMinutes Int?
+  policyName                  String
+  unpaidBreaksEnabled         Boolean
+  overnightRequiresReview     Boolean
+  id                          String                     @id @default(cuid())
+  employeeId                  String
+  employee                    Employee                   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  assignmentId                String
+  assignment                  AttendancePolicyAssignment @relation(fields: [assignmentId, employeeId], references: [id, employeeId], onDelete: Restrict)
+  workDate                    DateTime                   @db.Date
+  timeZone                    String
+  isWorkingDay                Boolean
+  requiredMinutes             Int
+  createdAt                   DateTime                   @default(now()) @db.Timestamptz(3)
+  sessions                    AttendanceWorkSession[]
+  audit                       AttendanceAudit[]
 
   @@unique([employeeId, workDate])
   @@unique([id, employeeId])
 }
 
 model AttendanceWorkSession {
+  suspendedAt DateTime?              @db.Timestamptz(3)
   adjustments AttendanceAdjustment[]
   id          String                 @id @default(cuid())
   // A BEFORE INSERT trigger selects/creates the starting workday if omitted.
@@ -1545,26 +1568,32 @@ model AttendanceBreak {
 }
 
 model AttendanceAudit {
-  id         String             @id @default(cuid())
+  writerTransaction String?            @default(dbgenerated("pg_current_xact_id()::text"))
+  id                String             @id @default(cuid())
   // Stable entity identity and snapshots also cover policy/rule/assignment changes.
-  entityType String
-  entityId   String
-  employeeId String?
-  employee   Employee?          @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  workdayId  String?
-  workday    AttendanceWorkday? @relation(fields: [workdayId], references: [id], onDelete: Restrict)
-  actorId    String?
-  actor      User?              @relation(fields: [actorId], references: [id], onDelete: Restrict)
-  action     String
-  reason     String
-  before     Json?
-  after      Json?
-  actionId   String             @unique
-  createdAt  DateTime           @default(now()) @db.Timestamptz(3)
+  entityType        String
+  entityId          String
+  employeeId        String?
+  employee          Employee?          @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  workdayId         String?
+  workday           AttendanceWorkday? @relation(fields: [workdayId], references: [id], onDelete: Restrict)
+  actorId           String?
+  actor             User?              @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  action            String
+  reason            String
+  before            Json?
+  after             Json?
+  actionId          String             @unique
+  createdAt         DateTime           @default(now()) @db.Timestamptz(3)
+  operationId       String?            @db.Uuid
+  correlationId     String?            @db.Uuid
+  actorRoleAtTime   Role?
 
   @@index([workdayId, createdAt])
   @@index([employeeId, createdAt])
   @@index([entityType, entityId, createdAt])
+  @@index([createdAt, id])
+  @@index([operationId])
 }
 
 enum AttendanceAdjustmentStatus {
@@ -1575,31 +1604,32 @@ enum AttendanceAdjustmentStatus {
 }
 
 model AttendanceAdjustment {
-  notifications     WorkflowNotification[]
-  type              String                     @default("CORRECTION") @db.VarChar(20)
-  overtimeMinutes   Int                        @default(0)
-  verifiedById      String?
-  verifiedBy        User?                      @relation("AttendanceVerifier", fields: [verifiedById], references: [id], onDelete: Restrict)
-  verifiedAt        DateTime?                  @db.Timestamptz(3)
-  verificationNote  String?                    @db.VarChar(2000)
-  id                String                     @id @default(cuid())
-  requestKey        String                     @unique
-  employeeId        String
-  employee          Employee                   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  sessionId         String?
-  session           AttendanceWorkSession?     @relation(fields: [sessionId], references: [id], onDelete: Restrict)
-  originalSession   Json?
-  proposedStartedAt DateTime                   @db.Timestamptz(3)
-  proposedEndedAt   DateTime                   @db.Timestamptz(3)
-  reason            String                     @db.VarChar(2000)
-  status            AttendanceAdjustmentStatus @default(PENDING)
-  requestedById     String
-  requestedBy       User                       @relation("AttendanceRequester", fields: [requestedById], references: [id], onDelete: Restrict)
-  reviewedById      String?
-  reviewedBy        User?                      @relation("AttendanceReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
-  reviewNote        String?                    @db.VarChar(2000)
-  createdAt         DateTime                   @default(now()) @db.Timestamptz(3)
-  reviewedAt        DateTime?                  @db.Timestamptz(3)
+  verifiedDepartmentId String?
+  notifications        WorkflowNotification[]
+  type                 String                     @default("CORRECTION") @db.VarChar(20)
+  overtimeMinutes      Int                        @default(0)
+  verifiedById         String?
+  verifiedBy           User?                      @relation("AttendanceVerifier", fields: [verifiedById], references: [id], onDelete: Restrict)
+  verifiedAt           DateTime?                  @db.Timestamptz(3)
+  verificationNote     String?                    @db.VarChar(2000)
+  id                   String                     @id @default(cuid())
+  requestKey           String                     @unique
+  employeeId           String
+  employee             Employee                   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  sessionId            String?
+  session              AttendanceWorkSession?     @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  originalSession      Json?
+  proposedStartedAt    DateTime                   @db.Timestamptz(3)
+  proposedEndedAt      DateTime                   @db.Timestamptz(3)
+  reason               String                     @db.VarChar(2000)
+  status               AttendanceAdjustmentStatus @default(PENDING)
+  requestedById        String
+  requestedBy          User                       @relation("AttendanceRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  reviewedById         String?
+  reviewedBy           User?                      @relation("AttendanceReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+  reviewNote           String?                    @db.VarChar(2000)
+  createdAt            DateTime                   @default(now()) @db.Timestamptz(3)
+  reviewedAt           DateTime?                  @db.Timestamptz(3)
 
   @@index([employeeId, createdAt, id])
   @@index([status, createdAt, id])
@@ -1738,40 +1768,40 @@ enum PayrollReconciliationExceptionStatus {
 }
 
 model PayrollReconciliationException {
-  calculationId  String
-  calculation    PayrollRunCalculation @relation(fields: [calculationId], references: [id], onDelete: Restrict)
-  category       String
-  subjectId      String
-  status         PayrollReconciliationExceptionStatus @default(OPEN)
-  firstEvidence  Json
-  lastEvidence   Json
-  firstDetectedAt DateTime @db.Timestamptz(3)
-  lastObservedAt  DateTime @db.Timestamptz(3)
+  calculationId   String
+  calculation     PayrollRunCalculation                @relation(fields: [calculationId], references: [id], onDelete: Restrict)
+  category        String
+  subjectId       String
+  status          PayrollReconciliationExceptionStatus @default(OPEN)
+  firstEvidence   Json
+  lastEvidence    Json
+  firstDetectedAt DateTime                             @db.Timestamptz(3)
+  lastObservedAt  DateTime                             @db.Timestamptz(3)
 
-  version        Int @default(0)
-  observed       Boolean @default(true)
-  decisions      PayrollReconciliationDecision[]
+  version   Int                             @default(0)
+  observed  Boolean                         @default(true)
+  decisions PayrollReconciliationDecision[]
 
   @@id([calculationId, category, subjectId])
 }
 
 model PayrollReconciliationDecision {
-  id             String   @id @default(cuid())
+  id             String                               @id @default(cuid())
   calculationId  String
   category       String
   subjectId      String
-  exception      PayrollReconciliationException @relation(fields: [calculationId, category, subjectId], references: [calculationId, category, subjectId], onDelete: Restrict, map: "payroll_reconcile_decision_exception_fk")
-  requestId      String   @db.Uuid
+  exception      PayrollReconciliationException       @relation(fields: [calculationId, category, subjectId], references: [calculationId, category, subjectId], onDelete: Restrict, map: "payroll_reconcile_decision_exception_fk")
+  requestId      String                               @db.Uuid
   version        Int
   actorId        String
   action         String
   previous       PayrollReconciliationExceptionStatus
   next           PayrollReconciliationExceptionStatus
-  reason         String   @db.VarChar(500)
+  reason         String                               @db.VarChar(500)
   classification String?
   assessment     String?
   evidence       Json
-  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  createdAt      DateTime                             @default(now()) @db.Timestamptz(3)
 
   @@unique([calculationId, category, subjectId, requestId], map: "payroll_reconcile_decision_request_uq")
   @@unique([calculationId, category, subjectId, version], map: "payroll_reconcile_decision_version_uq")

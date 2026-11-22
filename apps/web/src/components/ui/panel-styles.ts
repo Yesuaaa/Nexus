@@ -9,6 +9,7 @@ export const panelAssignButton = `${button} ${buttonTones.brand} ${focusRing}`
 export const panelSecondaryButton = `${button} border-[#e1e4ea] text-foreground hover:bg-[#f1f5fc] ${focusRing}`
 export const panelDangerSolidButton = `${button} ${buttonTones.danger} disabled:opacity-50 ${focusRing}`
 export const panelIconButton = `group relative grid size-8 flex-none cursor-pointer place-items-center rounded-[7px] border border-[#e1e4ea] bg-background text-[#65718a] hover:bg-[#f1f5fc] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`
+export const panelDangerIcon = `${panelIconButton} border-0 bg-transparent text-[#bc3649] hover:bg-[#fff0f1] hover:text-[#a72d3f]`
 export const panelDangerButton = `group relative grid size-8 flex-none cursor-pointer place-items-center rounded-[7px] border border-[#bc3649] bg-[#bc3649] text-white hover:border-[#a72d3f] hover:bg-[#a72d3f] hover:text-white disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`
 export const panelInput = `h-[34px] min-w-0 rounded-lg border-[#e1e4ea] bg-background px-[11px] text-xs shadow-none placeholder:text-[#8a9ab1] focus-visible:ring-0 md:text-xs ${focusRing}`
 export const panelSelectTrigger = `h-[34px] min-w-0 rounded-lg border-[#e1e4ea] bg-background px-[11px] text-xs text-foreground shadow-none data-[placeholder]:text-foreground [&>span]:truncate ${focusRing}`

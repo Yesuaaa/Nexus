@@ -69,11 +69,17 @@ export const usersRepository = {
     operation: ManagementOperation,
   ) {
     return getPrisma()!.$transaction(async (tx) => {
-      const updated = await setAccountActive(tx, id, nextIsActive, {
-        role: currentRole,
-        isActive: currentIsActive,
-        accountDeletedAt: null,
-      })
+      const updated = await setAccountActive(
+        tx,
+        id,
+        nextIsActive,
+        {
+          role: currentRole,
+          isActive: currentIsActive,
+          accountDeletedAt: null,
+        },
+        operation,
+      )
       if (!updated) return null
       const user = await tx.user.findUniqueOrThrow({
         where: { id },
@@ -222,6 +228,7 @@ export const usersRepository = {
     syncEmployee: (
       tx: Prisma.TransactionClient,
       userId: string,
+      operation: ManagementOperation,
     ) => Promise<unknown>,
     operation: ManagementOperation,
   ) {
@@ -268,6 +275,7 @@ export const usersRepository = {
     syncEmployee: (
       tx: Prisma.TransactionClient,
       userId: string,
+      operation: ManagementOperation,
     ) => Promise<unknown>,
     operation: ManagementOperation,
     profile?: { fullName: string; email: string; contactNumber: string | null },

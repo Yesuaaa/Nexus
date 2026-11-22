@@ -97,6 +97,7 @@ export async function syncAccountWorkforce(
   syncEmployee: (
     tx: Prisma.TransactionClient,
     userId: string,
+    operation: ManagementOperation,
   ) => Promise<unknown>,
   createdAccount = false,
 ) {
@@ -116,7 +117,7 @@ export async function syncAccountWorkforce(
     where: { id: userId },
     select: userSelect,
   })
-  await syncEmployee(tx, userId)
+  await syncEmployee(tx, userId, operation)
   const after = await tx.employee.findUnique({
     where: { userId },
     select: employeeSelect,

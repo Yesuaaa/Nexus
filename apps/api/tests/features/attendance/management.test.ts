@@ -904,6 +904,7 @@ test(
         const closed = await account("checkin-closed", "STAFF")
         const working = await account("checkin-working", "STAFF")
         const paused = await account("checkin-paused", "STAFF")
+        const suspended = await account("checkin-suspended", "STAFF")
         await prisma.attendanceWorkSession.create({
           data: {
             employeeId: closed.employee.id,
@@ -945,6 +946,20 @@ test(
             isPaid: false,
           },
         })
+        const suspendedSession = await prisma.attendanceWorkSession.create({
+          data: {
+            employeeId: suspended.employee.id,
+            startedAt: new Date("2026-11-10T07:00:00+08:00"),
+            suspendedAt: new Date("2026-11-10T08:00:00+08:00"),
+          },
+        })
+        await prisma.attendanceBreak.create({
+          data: {
+            sessionId: suspendedSession.id,
+            startedAt: new Date("2026-11-10T07:30:00+08:00"),
+            isPaid: false,
+          },
+        })
         await prisma.attendanceWorkSession.create({
           data: {
             employeeId: other.employee.id,
@@ -959,6 +974,7 @@ test(
             closed: number
             working: number
             onBreak: number
+            suspended: number
             recentActivity: {
               id: string
               action: string
@@ -976,11 +992,12 @@ test(
         assert.deepEqual(
           { ...checkIns, recentActivity: undefined },
           {
-            employees: 3,
-            total: 4,
+            employees: 4,
+            total: 5,
             closed: 2,
             working: 1,
             onBreak: 1,
+            suspended: 1,
             recentActivity: undefined,
           },
         )
@@ -1014,6 +1031,7 @@ test(
           closed: 0,
           working: 0,
           onBreak: 0,
+          suspended: 0,
           recentActivity: [],
         })
         assert.equal(

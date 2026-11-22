@@ -538,3 +538,47 @@ test("attendance validation handles flexible durations, timezones, and explicit 
     3600000,
   )
 })
+
+test("report work dates reuse validated formatters across instants and isolate zones", () => {
+  const formatters = new Map<string, Intl.DateTimeFormat>()
+  const workDates = [
+    ["Asia/Manila", "2026-11-13T15:59:59Z", "2026-11-13"],
+    ["Asia/Manila", "2026-11-13T16:00:00Z", "2026-11-14"],
+    ["America/New_York", "2026-03-08T01:59:59-05:00", "2026-03-08"],
+    ["America/New_York", "2026-03-08T03:00:00-04:00", "2026-03-08"],
+    ["America/New_York", "2026-11-01T01:30:00-04:00", "2026-11-01"],
+    ["America/New_York", "2026-11-01T01:30:00-05:00", "2026-11-01"],
+    ["Pacific/Auckland", "2026-11-13T16:00:00Z", "2026-11-14"],
+  ]
+  for (const [zone, timestamp, date] of workDates) {
+    const previous = formatters.get(zone)
+    assert.equal(attendanceWorkDate(instant(timestamp), zone, formatters), date)
+    if (previous) assert.equal(formatters.get(zone), previous)
+  }
+  assert.equal(formatters.size, 3)
+  assert.notEqual(
+    formatters.get("Asia/Manila"),
+    formatters.get("America/New_York"),
+  )
+  const valid = instant("2026-11-13T16:00:00Z")
+  for (const invalid of ["No/Such_Zone", " Asia/Manila", ""]) {
+    for (const date of [valid, new Date(NaN)]) {
+      assert.throws(
+        () => attendanceWorkDate(date, invalid),
+        (error) => {
+          assert.ok(error instanceof RangeError)
+          assert.throws(() => attendanceWorkDate(date, invalid, formatters), {
+            name: error.name,
+            message: error.message,
+          })
+          return true
+        },
+      )
+    }
+  }
+  assert.throws(
+    () => attendanceWorkDate(new Date(NaN), "Asia/Manila", formatters),
+    { name: "RangeError", message: "Invalid timestamp" },
+  )
+  assert.equal(formatters.size, 3)
+})

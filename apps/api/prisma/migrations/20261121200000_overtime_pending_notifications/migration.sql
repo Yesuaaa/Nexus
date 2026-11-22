@@ -1,0 +1,66 @@
+BEGIN;
+
+-- Corrections and overtime have the same pending reviewer eligibility.
+CREATE FUNCTION attendance_notify_pending_adjustments(
+    request_ids text[],
+    include_superadmins boolean,
+    reopened_ids text[] DEFAULT '{}'::text[]
+) RETURNS void LANGUAGE sql AS $$
+    INSERT INTO "WorkflowNotification" AS n
+        (id, "userId", "attendanceAdjustmentId", type, summary)
+    SELECT gen_random_uuid()::text, u.id, a.id, 'ATTENDANCE_' || a.type || '_PENDING',
+        e."fullName" || ': ' ||
+        CASE WHEN a.type = 'OVERTIME' THEN a."overtimeMinutes" || ' overtime minutes'
+            ELSE 'attendance correction' END ||
+        CASE WHEN h.id IS NULL THEN ' awaiting HR review.' ELSE ' awaiting department verification.' END
+    FROM "AttendanceAdjustment" a
+    JOIN "Employee" e ON e.id = a."employeeId"
+    LEFT JOIN "Department" d ON d.id = e."departmentId"
+    LEFT JOIN "User" h ON h.id = d."headId" AND h.role = 'STAFF' AND h."isActive"
+        AND h."accountDeletedAt" IS NULL AND h.id <> a."requestedById" AND h.id IS DISTINCT FROM e."userId"
+    JOIN "User" u ON u.id = h.id OR (h.id IS NULL AND u.role = 'ADMIN')
+        OR (include_superadmins AND u.role = 'SUPERADMIN')
+    WHERE a.id = ANY(request_ids) AND a.status = 'PENDING' AND a.type IN ('CORRECTION', 'OVERTIME')
+        AND u."isActive" AND u."accountDeletedAt" IS NULL
+        AND u.id <> a."requestedById" AND u.id IS DISTINCT FROM e."userId"
+    ON CONFLICT ("userId", "attendanceAdjustmentId", type) DO UPDATE
+    SET "readAt" = NULL, "createdAt" = CURRENT_TIMESTAMP, summary = EXCLUDED.summary
+    WHERE n."attendanceAdjustmentId" = ANY(reopened_ids);
+$$;
+
+-- Keep the previous entry point available to API instances during deployment.
+CREATE OR REPLACE FUNCTION attendance_notify_pending_corrections(
+    request_ids text[],
+    include_superadmins boolean,
+    reopened_ids text[] DEFAULT '{}'::text[]
+) RETURNS void LANGUAGE sql AS $$
+    SELECT attendance_notify_pending_adjustments(ARRAY(
+        SELECT id FROM "AttendanceAdjustment" WHERE id = ANY(request_ids) AND type = 'CORRECTION'
+    ), include_superadmins, reopened_ids);
+$$;
+
+CREATE OR REPLACE FUNCTION attendance_transfer_review() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE reopened_ids text[];
+BEGIN
+    WITH reopened AS (
+        UPDATE "AttendanceAdjustment" SET status = 'PENDING', "verifiedById" = NULL,
+            "verifiedAt" = NULL, "verificationNote" = NULL, "verifiedDepartmentId" = NULL
+        WHERE "employeeId" = NEW.id AND status = 'VERIFIED'
+        RETURNING id
+    )
+    SELECT COALESCE(array_agg(id), '{}'::text[]) INTO reopened_ids FROM reopened;
+
+    -- Moving a pending request is the same review stage. Reopening a verified
+    -- request renews pending notices for the receiving reviewers.
+    PERFORM attendance_notify_pending_adjustments(ARRAY(
+        SELECT id FROM "AttendanceAdjustment" WHERE "employeeId" = NEW.id AND status = 'PENDING'
+    ), true, reopened_ids);
+    RETURN NEW;
+END $$;
+
+-- Fill missing current-reviewer notices without modifying existing reads or decisions.
+SELECT attendance_notify_pending_adjustments(ARRAY(
+    SELECT id FROM "AttendanceAdjustment" WHERE status = 'PENDING' AND type = 'OVERTIME'
+), false);
+
+COMMIT;

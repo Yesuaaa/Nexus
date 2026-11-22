@@ -95,9 +95,15 @@ const routeLabels: Record<string, string> = {
 const contextualRouteLabels: Record<string, Record<string, string>> = {
   module: {
     "project-management": moduleRegistry["project-management"].title,
+    "people-hr": moduleRegistry["people-hr"].title,
+    "attendance-monitoring": moduleRegistry["attendance-monitoring"].title,
   },
   "project-management": { logs: getModuleLogsLabel("project-management") },
   "service-operations": { logs: getModuleLogsLabel("service-operations") },
+  "people-hr": { logs: getModuleLogsLabel("people-hr") },
+  "attendance-monitoring": {
+    logs: getModuleLogsLabel("attendance-monitoring"),
+  },
   attendance: {
     my: "Check-Ins",
     "check-ins": "Check-Ins",

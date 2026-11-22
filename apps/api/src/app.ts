@@ -2,6 +2,8 @@ import cors from "cors"
 import { serviceLogContext } from "./features/service-operation-logs/log-context.js"
 import { serviceLogsRouter } from "./features/service-operation-logs/log-controller.js"
 import { projectLogsRouter } from "./features/project-management-logs/controller.js"
+import { peopleHrLogsRouter } from "./features/people-hr-logs/controller.js"
+import { workforceComplianceLogsRouter } from "./features/workforce-compliance-logs/controller.js"
 import { trustedProxyAddresses } from "./features/auth/session-location.js"
 import { requireAuth } from "./features/auth/auth.middleware.js"
 import { authRateLimit } from "./features/auth/auth.limiter.js"
@@ -11,7 +13,10 @@ import { departmentsRouter } from "./features/departments/departments.controller
 import { employeesRouter } from "./features/employees/employees.controller.js"
 import { staffPayrollRouter } from "./features/payroll/payroll-documents.controller.js"
 import { payrollRouter } from "./features/payroll/payroll.controller.js"
-import { createHealthRouter } from "./features/health/health.controller.js"
+import {
+  createHealthRouter,
+  requireReadyDatabase,
+} from "./features/health/health.controller.js"
 import { usersRouter } from "./features/users/users.controller.js"
 import { servicesRouter } from "./features/services/services.controller.js"
 import { clientsRouter } from "./features/clients/clients.controller.js"
@@ -42,6 +47,7 @@ export function createApp(
     conversationRealtime?: ConversationRealtime
     attendanceClock?: () => Date
     isShuttingDown?: () => boolean
+    requireReadyDatabase?: boolean
   } = {},
 ) {
   const app = express()
@@ -50,10 +56,19 @@ export function createApp(
   app.use(securityHeaders)
   app.use(cors({ origin: process.env.WEB_ORIGIN || "http://localhost:5173" }))
   app.use("/api", noStore)
+  app.use("/api", createHealthRouter(options.isShuttingDown))
+  if (options.requireReadyDatabase) {
+    app.use(
+      "/api",
+      requireReadyDatabase(options.isShuttingDown ?? (() => false)),
+    )
+  }
   app.use(devErrorInterceptor)
   app.use(serviceLogContext)
   app.use("/api/service-operation-logs", serviceLogsRouter)
   app.use("/api/project-management-logs", projectLogsRouter)
+  app.use("/api/people-hr-logs", peopleHrLogsRouter)
+  app.use("/api/workforce-compliance-logs", workforceComplianceLogsRouter)
   app.use("/api/services", servicesRouter)
   app.use(
     "/api/service-requests",
@@ -124,7 +139,6 @@ export function createApp(
     express.json({ limit: "16kb" }),
     internalConversationsRouter,
   )
-  app.use("/api", createHealthRouter(options.isShuttingDown))
   app.use(handleError)
   return app
 }
