@@ -1,3 +1,5 @@
+import { parsePage } from "../../shared/query/pagination.js"
+import { listClientOutstandingActions } from "./workflow.client-actions.js"
 import { json, Router } from "express"
 import { recordIdParam } from "../../shared/validation.js"
 import { requireAuth } from "../auth/auth.middleware.js"
@@ -14,6 +16,19 @@ import { listClientBillingPayments } from "./workflow.billing.js"
 
 export const requestWorkflowRouter = Router()
 requestWorkflowRouter.use(requireAuth)
+requestWorkflowRouter.get("/outstanding-actions", async (request, response) => {
+  const user = request.auth!.user
+  if (user.role !== "USER") {
+    response.status(403).json({ error: "Client access required" })
+    return
+  }
+  const page = parsePage(request.query.page)
+  if (page === null) {
+    response.status(400).json({ error: "Invalid page" })
+    return
+  }
+  response.json(await listClientOutstandingActions(user.id, page))
+})
 requestWorkflowRouter.get("/billing", async (request, response) => {
   if (request.auth!.user.role !== "USER")
     return response

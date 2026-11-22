@@ -710,6 +710,37 @@ export async function mockApi(
       await route.fulfill({ json: { services } })
       return
     }
+    if (
+      method === "GET" &&
+      (pathname === "/api/projects" || pathname === "/api/projects/calendar")
+    ) {
+      return route.fulfill({ json: [] })
+    }
+    if (
+      method === "GET" &&
+      pathname === "/api/request-workflows/outstanding-actions"
+    ) {
+      return route.fulfill({
+        json: { actions: [], total: 0, page: 1, pageSize: 10 },
+      })
+    }
+    if (method === "GET" && pathname === "/api/client/service-requests") {
+      return route.fulfill({
+        json: {
+          requests: [],
+          page: 1,
+          pageSize: 10,
+          total: 0,
+          summary: {
+            total: 0,
+            pending: 0,
+            inProgress: 0,
+            completed: 0,
+            cancelled: 0,
+          },
+        },
+      })
+    }
     if (pathname === "/api/client/services" && method === "GET") {
       await route.fulfill({
         json: { services: services.filter((service) => service.isActive) },

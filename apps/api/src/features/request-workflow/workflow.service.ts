@@ -1,3 +1,10 @@
+import {
+  canSubmitAgreement,
+  closedRequestStatuses,
+  financialWorkflowStates,
+  isPublishedSentQuotation,
+  terminalWorkflowStates as terminal,
+} from "./workflow.eligibility.js"
 import { createHash, randomUUID } from "node:crypto"
 import { writeServiceLog } from "../service-operation-logs/log-writer.js"
 import type { RequestWorkflowState } from "../../generated/prisma/client.js"
@@ -22,7 +29,6 @@ import {
   type WorkflowCommand,
 } from "./workflow.validation.js"
 
-const terminal = ["CANCELLED", "DECLINED", "ACTIVE_PROJECT"] as const
 const consultationStates: readonly RequestWorkflowState[] = [
   "CONSULTATION",
   "QUOTATION_PENDING",
@@ -161,7 +167,7 @@ async function runAction(
   const head = request.acceptedDepartment?.head
   if (!head?.isActive || head.accountDeletedAt || head.role !== "STAFF")
     fail("An active department head must be assigned before continuing", 409)
-  if (["CANCELLED", "CLOSED", "CONCLUDED"].includes(request.status))
+  if (closedRequestStatuses.some((status) => status === request.status))
     fail("This service request is closed", 409)
 
   switch (command.type) {
@@ -556,8 +562,7 @@ async function runAction(
       if (
         !quote ||
         quote.id !== command.quotationId ||
-        quote.status !== "SENT" ||
-        !quote.publishedAt
+        !isPublishedSentQuotation(quote)
       )
         fail("Only the latest valid quotation can receive a decision", 409)
       if (quote.validUntil <= new Date())
@@ -673,7 +678,7 @@ async function runAction(
     case "ATTACH_AGREEMENT": {
       if (!permissions.manage && !permissions.verifyPayment)
         fail("Agreement management requires an assigned authorization", 403)
-      requireStage("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION")
+      requireStage(...financialWorkflowStates)
       const agreement = await tx.workflowAgreement.findUnique({
         where: { requestId },
       })
@@ -697,11 +702,11 @@ async function runAction(
     }
     case "SIGN_AGREEMENT": {
       requireClient()
-      requireStage("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION")
+      requireStage(...financialWorkflowStates)
       const agreement = await tx.workflowAgreement.findUnique({
         where: { requestId },
       })
-      if (!agreement?.documentFileId || agreement.status !== "PENDING")
+      if (!agreement || !canSubmitAgreement(agreement))
         fail(
           "An agreement document must be available before submitting the signed copy",
           409,
@@ -722,7 +727,7 @@ async function runAction(
     }
     case "REVIEW_AGREEMENT": {
       requireManager()
-      requireStage("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION")
+      requireStage(...financialWorkflowStates)
       const agreement = await tx.workflowAgreement.findUnique({
         where: { requestId },
       })
@@ -745,7 +750,7 @@ async function runAction(
     }
     case "COMPLETE_SANDBOX_PAYMENT": {
       requireClient()
-      requireStage("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION")
+      requireStage(...financialWorkflowStates)
       const payment = await tx.workflowPayment.findUnique({
         where: { requestId },
       })
@@ -802,7 +807,7 @@ async function runAction(
     }
     case "SUBMIT_PAYMENT": {
       requireClient()
-      requireStage("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION")
+      requireStage(...financialWorkflowStates)
       const payment = await tx.workflowPayment.findUnique({
         where: { requestId },
       })
@@ -834,7 +839,7 @@ async function runAction(
           "Only the department head or assigned payment verifier can review payment",
           403,
         )
-      requireStage("AGREEMENT_PAYMENT_PENDING", "READY_FOR_ACTIVATION")
+      requireStage(...financialWorkflowStates)
       if (!command.approve && !command.note.trim())
         fail("A reason is required when rejecting payment")
       const payment = await tx.workflowPayment.findUnique({

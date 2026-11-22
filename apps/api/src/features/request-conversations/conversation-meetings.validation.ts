@@ -1,3 +1,4 @@
+import { hasValidCalendarDay } from "../../shared/calendar-date.js"
 import { isPlainObject, isRecordId, isUuidV4 } from "../../shared/validation.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 
@@ -25,6 +26,7 @@ function date(value: unknown) {
   if (
     typeof value !== "string" ||
     !/^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:\d{2})$/.test(value) ||
+    !hasValidCalendarDay(value) ||
     !Number.isFinite(Date.parse(value))
   )
     invalid("Enter a valid meeting date and time")

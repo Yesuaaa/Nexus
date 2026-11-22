@@ -231,3 +231,17 @@ export type WorkflowAction =
   | { type: "ACTIVATE_PROJECT"; projectName?: string }
   | { type: "HOLD" | "RESUME" | "CANCEL"; note: string }
   | { type: "INTERNAL_NOTE"; note: string }
+
+export function canRespondToQuotation(
+  workflow: Workflow,
+  quotation: WorkflowQuotation,
+  now: number,
+) {
+  return (
+    workflow.permissions.isClient &&
+    quotation.id === workflow.quotations.at(-1)?.id &&
+    Date.parse(quotation.validUntil) > now &&
+    quotation.status === "SENT" &&
+    workflow.state === "CLIENT_APPROVAL"
+  )
+}

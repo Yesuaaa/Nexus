@@ -87,3 +87,26 @@ export async function createWorkflowFilePreviewUrl(
   )
   return URL.createObjectURL(await response.blob())
 }
+
+export type ClientOutstandingAction = {
+  id: string
+  requestId: string | null
+  destination?: string
+  reference: string | null
+  service: string
+  title: string
+  reason: string
+  deadline?: string
+}
+export function listClientOutstandingActions(
+  page: number,
+  signal?: AbortSignal,
+) {
+  const params = new URLSearchParams({ page: String(page) })
+  return apiRequest<{
+    actions: ClientOutstandingAction[]
+    total: number
+    page: number
+    pageSize: number
+  }>("/api/request-workflows/outstanding-actions?" + params, { signal })
+}

@@ -1,3 +1,4 @@
+import { hasValidCalendarDay } from "../../shared/calendar-date.js"
 import { isPlainObject, isUuidV4 } from "../../shared/validation.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 
@@ -131,7 +132,11 @@ function bool(value: unknown): boolean {
 
 function date(value: unknown): string {
   const result = textField(value, "date", 40)
-  if (!/^\d{4}-\d\d-\d\dT/.test(result) || !Number.isFinite(Date.parse(result)))
+  if (
+    !/^\d{4}-\d\d-\d\dT/.test(result) ||
+    !hasValidCalendarDay(result) ||
+    !Number.isFinite(Date.parse(result))
+  )
     fail("Invalid date")
   return new Date(result).toISOString()
 }

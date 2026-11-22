@@ -1,4 +1,5 @@
 "use client"
+import { WorkflowNotificationProvider } from "@/features/workflow-notifications/components/workflow-notification-provider"
 
 import { useEffect, useState, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
@@ -100,13 +101,15 @@ export function AppLayout({
           collapsed ? "ml-[72px]" : "ml-[240px]",
         )}
       >
-        <Topbar
-          drawerOpen={drawerOpen}
-          onOpenMenu={() => setDrawerOpen(true)}
-          onSignOut={onSignOut}
-          showMessages={canAccessMessages(account)}
-        />
-        {children}
+        <WorkflowNotificationProvider key={account.id}>
+          <Topbar
+            drawerOpen={drawerOpen}
+            onOpenMenu={() => setDrawerOpen(true)}
+            onSignOut={onSignOut}
+            showMessages={canAccessMessages(account)}
+          />
+          {children}
+        </WorkflowNotificationProvider>
       </div>
     </div>
   )

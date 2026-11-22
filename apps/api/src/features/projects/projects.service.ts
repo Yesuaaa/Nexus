@@ -14,7 +14,9 @@ import { writeProjectLog } from "../project-management-logs/writer.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 import { lockRows } from "../../shared/db/locks.js"
 
-const clientProjectScope = (userId: string): Prisma.ProjectWhereInput => ({
+export const clientProjectScope = (
+  userId: string,
+): Prisma.ProjectWhereInput => ({
   clientId: userId,
   client: { ...activeAccount, role: "USER" },
   OR: [
