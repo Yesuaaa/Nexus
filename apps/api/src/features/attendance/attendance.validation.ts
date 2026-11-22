@@ -4,12 +4,21 @@ import { isPlainObject } from "../../shared/validation.js"
 const minutesPerDay = 1440
 
 /** Date attribution uses the policy zone, never the browser or server zone. */
-export function attendanceWorkDate(startedAt: Date, timeZone: string): string {
+export function attendanceWorkDate(
+  startedAt: Date,
+  timeZone: string,
+  formatters?: Map<string, Intl.DateTimeFormat>,
+): string {
   if (!Number.isFinite(startedAt.getTime()))
     throw new RangeError("Invalid timestamp")
-  return new Intl.DateTimeFormat("sv-SE", {
-    timeZone: attendanceTimeZone(timeZone),
-  }).format(startedAt)
+  let formatter = formatters?.get(timeZone)
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("sv-SE", {
+      timeZone: attendanceTimeZone(timeZone),
+    })
+    formatters?.set(timeZone, formatter)
+  }
+  return formatter.format(startedAt)
 }
 
 export function attendanceTimeZone(value: unknown): string {

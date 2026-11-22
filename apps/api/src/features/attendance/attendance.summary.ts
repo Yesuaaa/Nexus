@@ -23,11 +23,22 @@ type SummarySource = Pick<
 > & { id: string | null; approvedLeaveMinutes?: number }
 
 /** Count elapsed instants against the attributed workday, never split at midnight. */
-export function summarizeAttendance(day: SummarySource, asOf: Date) {
+export function summarizeAttendance(
+  day: SummarySource,
+  asOf: Date,
+  workDateFormatters?: Map<string, Intl.DateTimeFormat>,
+) {
+  const localDate = (instant: Date) =>
+    attendanceWorkDate(instant, day.timeZone, workDateFormatters)
   let unpaidBreakMilliseconds = 0
   const intervals = day.sessions.flatMap((session) => {
     const end = new Date(
-      Math.min(session.endedAt?.getTime() ?? session.suspendedAt?.getTime() ?? asOf.getTime(), asOf.getTime()),
+      Math.min(
+        session.endedAt?.getTime() ??
+          session.suspendedAt?.getTime() ??
+          asOf.getTime(),
+        asOf.getTime(),
+      ),
     )
     if (end <= session.startedAt) return []
     const breaks = session.breaks.flatMap((pause) => {
@@ -64,7 +75,7 @@ export function summarizeAttendance(day: SummarySource, asOf: Date) {
   )
   const workDate = day.workDate.toISOString().slice(0, 10)
   const scheduledEndDate = day.scheduledEndAt
-    ? attendanceWorkDate(day.scheduledEndAt, day.timeZone)
+    ? localDate(day.scheduledEndAt)
     : workDate
   const firstStart = day.sessions[0]?.startedAt
   const lastEnd = day.sessions.at(-1)?.endedAt
@@ -123,16 +134,14 @@ export function summarizeAttendance(day: SummarySource, asOf: Date) {
     hasOvernightSessions: day.sessions.some(
       (session) =>
         session.endedAt &&
-        attendanceWorkDate(session.startedAt, day.timeZone) !==
-          attendanceWorkDate(session.endedAt, day.timeZone),
+        localDate(session.startedAt) !== localDate(session.endedAt),
     ),
     overnightRequiresReview:
       day.overnightRequiresReview &&
       day.sessions.some((session) => {
-        const startDate = attendanceWorkDate(session.startedAt, day.timeZone)
-        const endDate = attendanceWorkDate(
+        const startDate = localDate(session.startedAt)
+        const endDate = localDate(
           session.endedAt ?? session.suspendedAt ?? asOf,
-          day.timeZone,
         )
         return (
           startDate !== endDate &&

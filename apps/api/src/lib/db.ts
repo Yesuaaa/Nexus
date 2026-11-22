@@ -19,7 +19,7 @@ const trustedDatabaseCas = [
   ]),
 ]
 
-function databasePoolConfig(connectionString: string): pg.PoolConfig {
+export function databasePoolConfig(connectionString: string): pg.PoolConfig {
   let url: URL
   try {
     url = new URL(connectionString)

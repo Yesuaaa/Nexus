@@ -50,6 +50,7 @@ async function loadReportDays(
   tx: Prisma.TransactionClient,
   keys: ReportKey[],
   asOf: Date,
+  workDateFormatters?: Map<string, Intl.DateTimeFormat>,
 ) {
   const workdayIds = keys.flatMap(({ workdayId }) =>
     workdayId ? [workdayId] : [],
@@ -95,6 +96,7 @@ async function loadReportDays(
         day: summarizeAttendance(
           { ...recorded, approvedLeaveMinutes: leave?.leaveMinutes },
           asOf,
+          workDateFormatters,
         ),
       }
     }
@@ -117,6 +119,7 @@ async function loadReportDays(
             leave.assignment.policy.overnightRequiresReview,
         },
         asOf,
+        workDateFormatters,
       ),
     }
   })
@@ -164,5 +167,6 @@ export async function attendanceReportOverview(
   `
   if (keys.length > 10000)
     fail(400, "Narrow the overview date range to at most 10,000 records")
-  return loadReportDays(tx, keys, asOf)
+  // Share validated formatters across the days in this Overview request.
+  return loadReportDays(tx, keys, asOf, new Map())
 }

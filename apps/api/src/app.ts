@@ -11,7 +11,10 @@ import express from "express"
 import { authRouter } from "./features/auth/auth.controller.js"
 import { departmentsRouter } from "./features/departments/departments.controller.js"
 import { employeesRouter } from "./features/employees/employees.controller.js"
-import { createHealthRouter } from "./features/health/health.controller.js"
+import {
+  createHealthRouter,
+  requireReadyDatabase,
+} from "./features/health/health.controller.js"
 import { usersRouter } from "./features/users/users.controller.js"
 import { servicesRouter } from "./features/services/services.controller.js"
 import { clientsRouter } from "./features/clients/clients.controller.js"
@@ -42,6 +45,7 @@ export function createApp(
     conversationRealtime?: ConversationRealtime
     attendanceClock?: () => Date
     isShuttingDown?: () => boolean
+    requireReadyDatabase?: boolean
   } = {},
 ) {
   const app = express()
@@ -50,6 +54,13 @@ export function createApp(
   app.use(securityHeaders)
   app.use(cors({ origin: process.env.WEB_ORIGIN || "http://localhost:5173" }))
   app.use("/api", noStore)
+  app.use("/api", createHealthRouter(options.isShuttingDown))
+  if (options.requireReadyDatabase) {
+    app.use(
+      "/api",
+      requireReadyDatabase(options.isShuttingDown ?? (() => false)),
+    )
+  }
   app.use(devErrorInterceptor)
   app.use(serviceLogContext)
   app.use("/api/service-operation-logs", serviceLogsRouter)
@@ -124,7 +135,6 @@ export function createApp(
     express.json({ limit: "16kb" }),
     internalConversationsRouter,
   )
-  app.use("/api", createHealthRouter(options.isShuttingDown))
   app.use(handleError)
   return app
 }

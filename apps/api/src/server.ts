@@ -7,6 +7,7 @@ import { conversationRealtime } from "./features/request-conversations/request-c
 import { purgeExpiredConversationMessages } from "./features/request-conversations/request-conversations.service.js"
 import { getPrisma } from "./lib/db.js"
 import { createGracefulShutdown } from "./graceful-shutdown.js"
+import { checkSchemaReadiness } from "./features/health/schema-readiness.js"
 
 type DatabaseEnvironment = {
   NODE_ENV?: string
@@ -52,16 +53,29 @@ export function startApi(): {
   jwtKey()
 
   const port = Number(process.env.PORT || 3001)
+  const production = process.env.NODE_ENV === "production"
   let isShuttingDown = false
   const server = createServer(
-    createApp({ isShuttingDown: () => isShuttingDown }),
+    createApp({
+      isShuttingDown: () => isShuttingDown,
+      requireReadyDatabase: production,
+    }),
   )
   server.listen(port, () =>
     console.log(`API listening on http://localhost:${port}`),
   )
 
-  function purgeExpiredMessages() {
-    void purgeExpiredConversationMessages().catch(() => {
+  async function canRunMaintenance() {
+    return (
+      !isShuttingDown &&
+      (!production || (await checkSchemaReadiness())) &&
+      !isShuttingDown
+    )
+  }
+
+  async function purgeExpiredMessages() {
+    if (!(await canRunMaintenance())) return
+    await purgeExpiredConversationMessages().catch(() => {
       console.error("Unable to purge expired conversation messages")
     })
   }
@@ -71,16 +85,21 @@ export function startApi(): {
   const purgeLogs = () => {
     if (logsPurging) return
     logsPurging = true
-    void Promise.all([
-      purgeServiceLogs().catch(() =>
-        console.error("Unable to purge expired Service Operations logs"),
-      ),
-      purgeProjectLogs().catch(() =>
-        console.error("Unable to purge expired Project Management logs"),
-      ),
-    ]).finally(() => {
-      logsPurging = false
-    })
+    void canRunMaintenance()
+      .then(async (ready) => {
+        if (!ready) return
+        await Promise.all([
+          purgeServiceLogs().catch(() =>
+            console.error("Unable to purge expired Service Operations logs"),
+          ),
+          purgeProjectLogs().catch(() =>
+            console.error("Unable to purge expired Project Management logs"),
+          ),
+        ])
+      })
+      .finally(() => {
+        logsPurging = false
+      })
   }
   purgeLogs()
   const logPurgeTimer = setInterval(purgeLogs, 60 * 60 * 1000)

@@ -36,6 +36,14 @@ FROM deps AS api-build
 COPY apps/api apps/api
 RUN pnpm --filter @nexus/api build
 
+FROM api-build AS migrate
+ENV NODE_ENV=production
+ENV NODE_EXTRA_CA_CERTS=/workspace/certs/supabase-root-2021.crt
+COPY certs/supabase-root-2021.crt /workspace/certs/supabase-root-2021.crt
+WORKDIR /workspace/apps/api
+USER node
+CMD ["node", "scripts/deploy-migrations.mjs"]
+
 FROM deps AS web-build
 COPY apps/web apps/web
 COPY apps/api/src/features/modules/module-registry.json apps/api/src/features/modules/module-registry.json
@@ -56,6 +64,7 @@ COPY apps/web/package.json apps/web/package.json
 RUN pnpm --filter @nexus/api install --prod --frozen-lockfile
 COPY certs/supabase-root-2021.crt /workspace/certs/supabase-root-2021.crt
 COPY --from=api-build /workspace/apps/api/dist /workspace/apps/api/dist
+COPY --from=api-build /workspace/apps/api/prisma/migrations /workspace/apps/api/prisma/migrations
 WORKDIR /workspace/apps/api
 EXPOSE 3001
 USER node
