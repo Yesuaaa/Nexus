@@ -35,6 +35,7 @@ export function StatStrip({
   columns = 4,
   compact = false,
   wrapCaption = false,
+  hoverEffects = true,
   className,
 }: {
   items: StatStripItem[]
@@ -44,6 +45,7 @@ export function StatStrip({
   columns?: 2 | 4
   compact?: boolean
   wrapCaption?: boolean
+  hoverEffects?: boolean
   className?: string
 }) {
   return (
@@ -77,7 +79,7 @@ export function StatStrip({
               <h2
                 className={cn(
                   "m-0 truncate text-xs font-medium text-[#65718a]",
-                  href && "group-hover:text-[#203f8c]",
+                  href && hoverEffects && "group-hover:text-[#203f8c]",
                 )}
               >
                 {item.label}
@@ -132,7 +134,8 @@ export function StatStrip({
                 }
                 className={cn(
                   surfaceClass,
-                  "group no-underline hover:bg-[#f8fafb] focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#203f8c]",
+                  "group no-underline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#203f8c]",
+                  hoverEffects && "hover:bg-[#f8fafb]",
                 )}
               >
                 {content}

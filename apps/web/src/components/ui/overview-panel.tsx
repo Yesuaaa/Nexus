@@ -17,6 +17,7 @@ export function OverviewPanel({
   description,
   action,
   titleClassName,
+  variant = "default",
   className,
   children,
 }: {
@@ -24,6 +25,7 @@ export function OverviewPanel({
   description?: string
   action?: ReactNode
   titleClassName?: string
+  variant?: "default" | "table"
   className?: string
   children: ReactNode
 }) {
@@ -32,16 +34,30 @@ export function OverviewPanel({
     <section
       aria-labelledby={headingId}
       className={cn(
-        "min-w-0 rounded-xl border border-[#eceef1] p-5 max-[560px]:p-4",
+        "min-w-0 border",
+        variant === "table" ? "rounded-lg" : "rounded-xl",
+        variant === "table"
+          ? "overflow-hidden border-[#e8ebef] bg-background"
+          : "border-[#eceef1] p-5 max-[560px]:p-4",
         className,
       )}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div
+        className={cn(
+          "flex justify-between gap-3",
+          variant === "table"
+            ? "min-h-[39px] items-center border-b border-[#dfe6eb] bg-[#e8eef2] px-4"
+            : "items-start",
+        )}
+      >
         <div className="min-w-0">
           <h2
             id={headingId}
             className={cn(
-              "m-0 text-sm font-semibold text-[#101d35]",
+              "m-0 font-semibold",
+              variant === "table"
+                ? "text-xs text-foreground"
+                : "text-sm text-[#101d35]",
               titleClassName,
             )}
           >
@@ -55,7 +71,7 @@ export function OverviewPanel({
         </div>
         {action}
       </div>
-      <div className="mt-4">{children}</div>
+      <div className={variant === "table" ? "p-4" : "mt-4"}>{children}</div>
     </section>
   )
 }

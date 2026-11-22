@@ -21,6 +21,7 @@ import {
   PageHeaderButton,
 } from "@/components/layout/page-header"
 import { ProjectSummary } from "../components/project-summary"
+import { ProjectSummarySkeleton } from "../components/project-summary-skeleton"
 import { WorkspaceOverview } from "../components/workspace-overview"
 import { WorkspaceNotes } from "../components/workspace-notes"
 import { WorkspaceRequests } from "../components/workspace-requests"
@@ -242,13 +243,17 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
       )}
       {!workspace ? (
         project.loading ? (
-          <>
-            <PageHeader title="Project workspace" />
-            <div className="mt-5" role="status">
-              <span className="sr-only">Loading project…</span>
-              <RowsSkeleton />
-            </div>
-          </>
+          tab === "overview" ? (
+            <ProjectSummarySkeleton />
+          ) : (
+            <>
+              <PageHeader title="Project workspace" />
+              <div className="mt-5" role="status">
+                <span className="sr-only">Loading project…</span>
+                <RowsSkeleton />
+              </div>
+            </>
+          )
         ) : loadError ? null : (
           <EmptyState title="Project workspace not found" role="status" />
         )
