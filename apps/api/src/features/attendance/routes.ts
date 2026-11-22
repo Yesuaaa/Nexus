@@ -94,6 +94,7 @@ export function createAttendanceRouter(clock: () => Date = () => new Date()) {
       await management.unassignPolicy(
         req.auth!.user.id,
         String(req.params.assignmentId),
+        req.body,
       ),
     )
   })

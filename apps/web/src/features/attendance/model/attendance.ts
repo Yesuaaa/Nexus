@@ -26,6 +26,17 @@ export const attendanceStatusTones: Record<
   NOT_REQUIRED: "neutral",
 }
 
+export function scheduledClockTime(minutes: number | null) {
+  if (minutes === null) return ""
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`
+}
+
+export function scheduledClockMinute(value: string) {
+  if (!value) return null
+  const [hours, minutes] = value.split(":").map(Number)
+  return hours * 60 + minutes
+}
+
 /** Also used with the live worked-time value between server refreshes. */
 export function attendanceStatus(
   day: AttendanceWorkday,

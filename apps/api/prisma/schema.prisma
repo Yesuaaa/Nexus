@@ -1207,7 +1207,13 @@ model RefreshToken {
   @@index([sessionId])
 }
 
+enum AttendanceScheduleMode {
+  FLEXIBLE
+  FIXED
+}
+
 model AttendancePolicy {
+  scheduleMode            AttendanceScheduleMode       @default(FLEXIBLE)
   archivedAt              DateTime?                    @db.Timestamptz(3)
   unpaidBreaksEnabled     Boolean                      @default(true)
   overnightRequiresReview Boolean                      @default(false)
@@ -1220,6 +1226,9 @@ model AttendancePolicy {
 }
 
 model AttendancePolicyDay {
+  scheduledStartMinute Int?
+  scheduledEndMinute Int?
+  scheduledUnpaidBreakMinutes Int?
   policyId        String
   policy          AttendancePolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
   weekday         Int
@@ -1249,6 +1258,9 @@ model AttendancePolicyAssignment {
 }
 
 model AttendanceWorkday {
+  scheduledStartAt        DateTime?                  @db.Timestamptz(3)
+  scheduledEndAt          DateTime?                  @db.Timestamptz(3)
+  scheduledUnpaidBreakMinutes Int?
   policyName              String
   unpaidBreaksEnabled     Boolean
   overnightRequiresReview Boolean

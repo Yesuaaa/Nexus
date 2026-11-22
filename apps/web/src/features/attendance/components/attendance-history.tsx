@@ -192,6 +192,16 @@ export function AttendanceHistoryTable({
                         <Pill tone="info">Overnight</Pill>
                       </div>
                     )}
+                    {!!day.schedule?.lateArrivalMinutes && (
+                      <div className="mt-1">
+                        <Pill tone="warning">Late arrival</Pill>
+                      </div>
+                    )}
+                    {!!day.schedule?.earlyDepartureMinutes && (
+                      <div className="mt-1">
+                        <Pill tone="warning">Early departure</Pill>
+                      </div>
+                    )}
                   </ResponsiveDataTableCell>
                   <ResponsiveDataTableCell className="flex min-w-0 justify-start @max-[820px]:justify-self-end">
                     <RowActionsMenu

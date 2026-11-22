@@ -23,6 +23,7 @@ import {
   RangeFields,
 } from "../components/attendance-shared"
 import { AttendanceHistoryTable } from "../components/attendance-history"
+import { AttendanceScheduleDetails } from "../components/attendance-schedule-details"
 import { AdjustmentDialog } from "../components/adjustment-dialog"
 import { useAttendanceClock } from "../hooks/use-attendance-clock"
 import {
@@ -316,6 +317,7 @@ export function MyAttendancePage() {
                 <DetailItem label="Unpaid breaks">
                   {day.policy.unpaidBreaksEnabled ? "Enabled" : "Disabled"}
                 </DetailItem>
+                <AttendanceScheduleDetails day={day} />
               </DetailList>
               {clock.state?.leaveConflict && (
                 <Alert>
@@ -325,7 +327,7 @@ export function MyAttendancePage() {
               )}
               {day.overnightRequiresReview && (
                 <p className="text-xs text-[#805316]">
-                  This policy requires overnight work to be reviewed.
+                  Overnight work requires review.
                 </p>
               )}
             </OverviewPanel>

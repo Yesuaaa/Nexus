@@ -1,6 +1,8 @@
 import type { AttendanceWorkdayRecord } from "./attendance.repository.js"
-import { attendanceWorkedMilliseconds } from "./attendance.validation.js"
-import { attendanceWorkDate } from "./attendance.validation.js"
+import {
+  attendanceWorkDate,
+  attendanceWorkedMilliseconds,
+} from "./attendance.validation.js"
 
 type SummarySource = Pick<
   AttendanceWorkdayRecord,
@@ -10,6 +12,9 @@ type SummarySource = Pick<
   | "timeZone"
   | "isWorkingDay"
   | "requiredMinutes"
+  | "scheduledStartAt"
+  | "scheduledEndAt"
+  | "scheduledUnpaidBreakMinutes"
   | "policyName"
   | "unpaidBreaksEnabled"
   | "overnightRequiresReview"
@@ -54,7 +59,41 @@ export function summarizeAttendance(day: SummarySource, asOf: Date) {
     0,
     workedMilliseconds - requiredMilliseconds,
   )
-  const activeSession = day.sessions.find((session) => session.endedAt === null && !session.suspendedAt)
+  const activeSession = day.sessions.find(
+    (session) => session.endedAt === null && !session.suspendedAt,
+  )
+  const workDate = day.workDate.toISOString().slice(0, 10)
+  const scheduledEndDate = day.scheduledEndAt
+    ? attendanceWorkDate(day.scheduledEndAt, day.timeZone)
+    : workDate
+  const firstStart = day.sessions[0]?.startedAt
+  const lastEnd = day.sessions.at(-1)?.endedAt
+  const schedule =
+    day.scheduledStartAt && day.scheduledEndAt
+      ? {
+          startsAt: day.scheduledStartAt,
+          endsAt: day.scheduledEndAt,
+          unpaidBreakMinutes: day.scheduledUnpaidBreakMinutes ?? 0,
+          lateArrivalMinutes: firstStart
+            ? Math.max(
+                0,
+                Math.floor(
+                  (firstStart.getTime() - day.scheduledStartAt.getTime()) /
+                    60000,
+                ),
+              )
+            : 0,
+          earlyDepartureMinutes:
+            lastEnd && asOf >= day.scheduledEndAt
+              ? Math.max(
+                  0,
+                  Math.floor(
+                    (day.scheduledEndAt.getTime() - lastEnd.getTime()) / 60000,
+                  ),
+                )
+              : 0,
+        }
+      : null
   const status =
     effectiveRequiredMinutes === 0
       ? "NOT_REQUIRED"
@@ -71,7 +110,8 @@ export function summarizeAttendance(day: SummarySource, asOf: Date) {
     id: day.id,
     employeeId: day.employeeId,
     assignmentId: day.assignmentId,
-    workDate: day.workDate.toISOString().slice(0, 10),
+    workDate,
+    schedule,
     timeZone: day.timeZone,
     isWorkingDay: day.isWorkingDay,
     policy: {
@@ -88,11 +128,17 @@ export function summarizeAttendance(day: SummarySource, asOf: Date) {
     ),
     overnightRequiresReview:
       day.overnightRequiresReview &&
-      day.sessions.some(
-        (session) =>
-          attendanceWorkDate(session.startedAt, day.timeZone) !==
-          attendanceWorkDate(session.endedAt ?? session.suspendedAt ?? asOf, day.timeZone),
-      ),
+      day.sessions.some((session) => {
+        const startDate = attendanceWorkDate(session.startedAt, day.timeZone)
+        const endDate = attendanceWorkDate(
+          session.endedAt ?? session.suspendedAt ?? asOf,
+          day.timeZone,
+        )
+        return (
+          startDate !== endDate &&
+          (startDate !== workDate || endDate > scheduledEndDate)
+        )
+      }),
     baseRequiredMinutes: day.requiredMinutes,
     approvedLeaveMinutes,
     requiredMinutes: effectiveRequiredMinutes,

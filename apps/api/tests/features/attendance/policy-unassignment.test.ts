@@ -123,11 +123,16 @@ test(
       return { staff, employee, original, replacement }
     }
 
-    function unassign(assignmentId: string, token: string | null) {
+    function unassign(
+      assignmentId: string,
+      token: string | null,
+      expectedStatus?: "CURRENT" | "SCHEDULED",
+    ) {
       return request(
         `/attendance/assignments/${assignmentId}/unassign`,
         token,
         "POST",
+        expectedStatus ? { expectedStatus } : undefined,
       )
     }
 
@@ -182,7 +187,7 @@ test(
           "CURRENT",
         )
 
-        const response = await unassign(replacement, admin.token)
+        const response = await unassign(replacement, admin.token, "SCHEDULED")
         assert.equal(response.status, 200, await response.clone().text())
         assert.equal(
           await assignmentStatus(replacementPolicy.id, replacement),
@@ -362,7 +367,11 @@ test(
           await assignmentStatus(replacementPolicy.id, replacement),
           "CURRENT",
         )
-        const response = await unassign(replacement, admin.token)
+        assert.equal(
+          (await unassign(replacement, admin.token, "SCHEDULED")).status,
+          409,
+        )
+        const response = await unassign(replacement, admin.token, "CURRENT")
         assert.equal(response.status, 200, await response.clone().text())
         assert.equal(
           await assignmentStatus(replacementPolicy.id, replacement),
@@ -396,6 +405,64 @@ test(
           ended.effectiveUntil?.toISOString().slice(0, 10),
           "2026-11-02",
         )
+      },
+    )
+
+    await t.test(
+      "blocked policy changes identify the latest recorded workday and leave the assignment audit unchanged",
+      async () => {
+        const { employee, replacement } = await replacementFor("Recorded")
+        for (const workDate of ["2026-11-02", "2026-11-04"]) {
+          await prisma.attendanceWorkSession.create({
+            data: {
+              employeeId: employee.id,
+              startedAt: new Date(`${workDate}T13:00:00Z`),
+              endedAt: new Date(`${workDate}T14:00:00Z`),
+            },
+          })
+        }
+        now = new Date(cutoff)
+        const auditCount = () =>
+          prisma.attendanceAudit.count({
+            where: {
+              entityType: "AttendancePolicyAssignment",
+              entityId: replacement,
+            },
+          })
+        const before = await auditCount()
+        const ended = await unassign(replacement, admin.token, "CURRENT")
+        assert.equal(ended.status, 409)
+        assert.match(
+          await ended.text(),
+          /2026-11-04.*2026-11-02.*America\/Havana.*Time Logs/,
+        )
+        const reassigned = await request(
+          "/attendance/assignments",
+          admin.token,
+          "POST",
+          {
+            employeeId: employee.id,
+            policyId: nextPolicy.id,
+            effectiveFrom: "2026-11-03",
+            replacesAssignmentId: replacement,
+          },
+        )
+        assert.equal(reassigned.status, 409)
+        assert.match(
+          await reassigned.text(),
+          /2026-11-04.*Choose an effective date after that workday/,
+        )
+        assert.equal(await auditCount(), before)
+        assert.equal(
+          await assignmentStatus(replacementPolicy.id, replacement),
+          "CURRENT",
+        )
+        const records = await request(
+          `/attendance/records?employeeId=${employee.id}&from=2026-11-04&to=2026-11-04`,
+          admin.token,
+        )
+        assert.equal(records.status, 200)
+        assert.match(await records.text(), /"workDate":"2026-11-04"/)
       },
     )
   },

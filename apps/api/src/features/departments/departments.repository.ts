@@ -22,6 +22,7 @@ import { paginate } from "../../shared/query/pagination.js"
 import { departmentSummarySelect } from "../../shared/query/selects.js"
 import { notifyPendingLeaveAfterHeadChange } from "../leave/leave.repository.js"
 import { notifyPendingAdjustmentsAfterHeadChange } from "../attendance/attendance.pending-notifications.js"
+import { beginAttendancePlacement } from "../employees/attendance-placement-history.js"
 import {
   employeeInclude,
   clearFormerDepartmentHeadTitle,
@@ -459,12 +460,13 @@ export const departmentsRepository = {
         where: { departmentId: id },
         data: { departmentId: null, teamId: null },
       })
+      await beginAttendancePlacement(tx, operation)
       await tx.employee.updateMany({
         where: { departmentId: id },
         data: { departmentId: null, teamId: null },
       })
       for (const userId of before.syncUserIds) {
-        await syncEmployeeForUser(tx, userId)
+        await syncEmployeeForUser(tx, userId, operation)
       }
       await tx.department.delete({ where: { id } })
       await writeDepartmentDeletionWorkforce(tx, operation, before)
@@ -583,12 +585,17 @@ export const departmentsRepository = {
             })
           : null
         remember(await readEmployeeMemberState(tx, employee.id))
-        await updateEmployee(tx, employee.id, {
-          departmentId,
-          ...(currentTeam?.departmentId !== departmentId
-            ? { teamId: null }
-            : {}),
-        })
+        await updateEmployee(
+          tx,
+          employee.id,
+          {
+            departmentId,
+            ...(currentTeam?.departmentId !== departmentId
+              ? { teamId: null }
+              : {}),
+          },
+          { operation, placementOnly: true },
+        )
       }
 
       for (const userId of requestedUserIds) {
@@ -600,7 +607,7 @@ export const departmentsRepository = {
           throw new EmployeeError(404, "User not found")
         }
         remember(await readUserMemberState(tx, user.id, false))
-        await syncEmployeeForUser(tx, user.id)
+        await syncEmployeeForUser(tx, user.id, operation)
         const employee = await tx.employee.findUnique({
           where: { userId: user.id },
           select: { id: true, departmentId: true, teamId: true },
@@ -621,7 +628,7 @@ export const departmentsRepository = {
                 : {}),
             },
           })
-          await syncEmployeeForUser(tx, user.id)
+          await syncEmployeeForUser(tx, user.id, operation)
         } else {
           const currentTeam = employee.teamId
             ? await tx.team.findUnique({
@@ -629,12 +636,17 @@ export const departmentsRepository = {
                 select: { departmentId: true },
               })
             : null
-          await updateEmployee(tx, employee.id, {
-            departmentId,
-            ...(currentTeam?.departmentId !== departmentId
-              ? { teamId: null }
-              : {}),
-          })
+          await updateEmployee(
+            tx,
+            employee.id,
+            {
+              departmentId,
+              ...(currentTeam?.departmentId !== departmentId
+                ? { teamId: null }
+                : {}),
+            },
+            { operation, placementOnly: true },
+          )
         }
       }
 

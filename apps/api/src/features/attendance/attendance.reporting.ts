@@ -108,6 +108,9 @@ async function loadReportDays(
           isWorkingDay: true,
           sessions: [],
           requiredMinutes: leave.baseRequiredMinutes,
+          scheduledStartAt: null,
+          scheduledEndAt: null,
+          scheduledUnpaidBreakMinutes: null,
           approvedLeaveMinutes: leave.leaveMinutes,
           unpaidBreaksEnabled: leave.assignment.policy.unpaidBreaksEnabled,
           overnightRequiresReview:

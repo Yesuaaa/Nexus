@@ -350,10 +350,15 @@ export const departmentsService = {
       }
       await prisma.$transaction(async (tx) => {
         const before = await readEmployeeMemberState(tx, employee.id)
-        await updateEmployee(tx, employee.id, {
-          departmentId: null,
-          teamId: null,
-        })
+        await updateEmployee(
+          tx,
+          employee.id,
+          {
+            departmentId: null,
+            teamId: null,
+          },
+          { operation, placementOnly: true },
+        )
         await writeDepartmentMemberChanges(tx, operation, before)
       })
       return { message: "Employee removed from department" }
@@ -379,7 +384,7 @@ export const departmentsService = {
         where: { id: user.id },
         data: { departmentId: null, teamId: null },
       })
-      await syncEmployeeForUser(tx, user.id)
+      await syncEmployeeForUser(tx, user.id, operation)
       await writeDepartmentMemberChanges(tx, operation, before)
     })
     return { message: "Employee removed from department" }
@@ -511,7 +516,7 @@ export const departmentsService = {
         },
         include: publicUserInclude,
       })
-      await syncEmployeeForUser(tx, saved.id)
+      await syncEmployeeForUser(tx, saved.id, operation)
       await writeDepartmentMemberChanges(tx, operation, before)
       return saved
     })

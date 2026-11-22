@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Pill } from "@/components/ui/pill"
+import { AttendanceScheduleDetails } from "./attendance-schedule-details"
 import {
   DetailItem,
   DetailList,
@@ -72,6 +73,7 @@ export function AttendanceHistoryDetailsPanel({
             )}
             <DetailItem label="Timezone">{day.timeZone}</DetailItem>
             <DetailItem label="Policy">{day.policy.name}</DetailItem>
+            <AttendanceScheduleDetails day={day} />
             <DetailItem label="Worked / required">
               {duration(day.workedMilliseconds)} / {day.requiredMinutes / 60}h
             </DetailItem>

@@ -19,6 +19,12 @@ test("attendance browser API fixture", { timeout: 1800000 }, async (t) => {
   const requestsDepartment = await prisma.department.create({
     data: { name: "WC06 request summaries" },
   })
+  const transferOrigin = await prisma.department.create({
+    data: { name: "WC07 transfer origin" },
+  })
+  const transferDestination = await prisma.department.create({
+    data: { name: "WC07 transfer destination" },
+  })
   const policy = await prisma.attendancePolicy.create({
     data: {
       name: "Browser flexible policy",
@@ -47,6 +53,10 @@ test("attendance browser API fixture", { timeout: 1800000 }, async (t) => {
     ["overtime-staff", "STAFF"],
     ["wc06-head", "STAFF", requestsDepartment],
     ["wc06-requester", "STAFF", requestsDepartment],
+    ["wc07-requester", "STAFF", transferOrigin],
+    ["wc07-origin-head", "STAFF", transferOrigin],
+    ["wc07-destination-head", "STAFF", transferDestination],
+    ["wc07-reconcile", "STAFF"],
   ] as const) {
     const user = await prisma.user.create({
       data: {
@@ -80,7 +90,7 @@ test("attendance browser API fixture", { timeout: 1800000 }, async (t) => {
       employeeId: employee.id,
       userId: user.id,
     }
-    if (name === "head" || name === "wc06-head")
+    if (name.endsWith("head"))
       await prisma.department.update({
         where: { id: placement.id },
         data: { headId: user.id },
@@ -138,6 +148,32 @@ test("attendance browser API fixture", { timeout: 1800000 }, async (t) => {
       })
     }
   }
+  const { id: pagingEmployeeId } = await prisma.employee.create({
+    data: {
+      employeeId: "EXP-WC07-PAGING-NEWEST",
+      fullName: "Workforce Paging Needle",
+    },
+  })
+  const { id: pagingRestId } = await prisma.employee.create({
+    data: {
+      employeeId: "EXP-WC07-PAGING-REST",
+      fullName: "Workforce Paging Needle",
+    },
+  })
+  const pagingStamp = Date.now() - 60_000
+  await prisma.attendanceAudit.createMany({
+    data: Array.from({ length: 27 }, (_, index) => ({
+      id: `browser-wc07-page-${index}`,
+      actionId: `browser-wc07-action-${index}`,
+      entityId: `browser-wc07-session-${index}`,
+      entityType: "AttendanceWorkSession",
+      employeeId: index === 0 ? pagingEmployeeId : pagingRestId,
+      action: "INSERT",
+      reason: "Isolated paging fixture",
+      after: { startedAt: new Date(pagingStamp).toISOString(), endedAt: null },
+      createdAt: new Date(pagingStamp - index * 1000),
+    })),
+  })
   const proxy = createServer(async (req, res) => {
     try {
       if (req.url === "/__attendance_clock") {
@@ -172,6 +208,7 @@ test("attendance browser API fixture", { timeout: 1800000 }, async (t) => {
       res.writeHead(response.status, {
         "content-type":
           response.headers.get("content-type") ?? "application/json",
+        "x-correlation-id": response.headers.get("x-correlation-id") ?? "",
       })
       res.end(Buffer.from(await response.arrayBuffer()))
     } catch {
@@ -186,6 +223,8 @@ test("attendance browser API fixture", { timeout: 1800000 }, async (t) => {
     proxy.closeAllConnections()
     proxy.close()
   })
-  console.log(`ATTENDANCE_READY:${JSON.stringify({ secret, actors })}`)
+  console.log(
+    `ATTENDANCE_READY:${JSON.stringify({ secret, actors, transferDestinationId: transferDestination.id, pagingEmployeeId })}`,
+  )
   await new Promise<void>((resolve) => process.once("SIGTERM", resolve))
 })

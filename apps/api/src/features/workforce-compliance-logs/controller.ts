@@ -48,22 +48,18 @@ workforceComplianceLogsRouter.get("/", async (request, response) => {
     if (
       !filters.has(key) ||
       typeof value !== "string" ||
-      value.length > (key === "snapshot" ? 8192 : 80) ||
+      value.length > 80 ||
       value.includes("\0")
     )
       fail(400, "Invalid log filters")
     query[key] = value
   }
 
-  if (query.snapshot !== undefined) {
-    const match = /^(\d{1,20}):(\d{1,20}):((?:\d{1,20}(?:,\d{1,20})*)?)$/.exec(query.snapshot)
-    if (!match) fail(400, "Invalid log snapshot")
-    const min = BigInt(match[1]), max = BigInt(match[2])
-    const active = match[3] ? match[3].split(",").map(value => BigInt(value)) : []
-    if (min < 1n || max < min || max > 18446744073709551615n ||
-        active.some((xid, index) => xid < min || xid >= max || (index > 0 && xid <= active[index - 1])))
-      fail(400, "Invalid log snapshot")
-  }
+  if (
+    query.snapshot !== undefined &&
+    (!isUuidV4(query.snapshot) || !query.asOf)
+  )
+    fail(400, "Invalid log snapshot. Refresh logs to start again.")
   const to = query.to ? new Date(query.to) : undefined
   const from = query.from ? new Date(query.from) : undefined
   const asOf = query.asOf ? new Date(query.asOf) : undefined
@@ -87,7 +83,7 @@ workforceComplianceLogsRouter.get("/", async (request, response) => {
     fail(400, "Invalid log filters")
 
   response.json({
-    ...(await listWorkforceComplianceLogs({
+    ...(await listWorkforceComplianceLogs(request.auth!.sessionId, {
       ...query,
       from,
       to,

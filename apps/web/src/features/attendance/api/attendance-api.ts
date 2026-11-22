@@ -49,6 +49,13 @@ export type AttendanceWorkday = {
     overnightRequiresReview: boolean
   }
   overnightRequiresReview: boolean
+  schedule?: {
+    startsAt: string
+    endsAt: string
+    unpaidBreakMinutes: number
+    lateArrivalMinutes: number
+    earlyDepartureMinutes: number
+  } | null
 }
 export type AttendanceState = {
   clockInBlockedReason?: string | null
@@ -94,12 +101,17 @@ export type PolicyDay = {
   weekday: number
   isWorkingDay: boolean
   requiredMinutes: number
+  scheduledStartMinute: number | null
+  scheduledEndMinute: number | null
+  scheduledUnpaidBreakMinutes: number | null
 }
+export type AttendanceScheduleMode = "FLEXIBLE" | "FIXED"
 export type AttendancePolicy = {
   id: string
   archivedAt?: string | null
   name: string
   timeZone: string
+  scheduleMode: AttendanceScheduleMode
   unpaidBreaksEnabled: boolean
   overnightRequiresReview: boolean
   days: PolicyDay[]
@@ -286,10 +298,29 @@ export const createAttendancePolicy = (input: AttendancePolicyInput) =>
     method: "POST",
     body: JSON.stringify(input),
   })
-export type AttendancePolicyInput = Omit<
+type PolicyDayInput = Pick<PolicyDay, "weekday" | "isWorkingDay">
+export type AttendancePolicyInput = Pick<
   AttendancePolicy,
-  "id" | "_count" | "archivedAt"
->
+  "name" | "timeZone" | "unpaidBreaksEnabled" | "overnightRequiresReview"
+> &
+  (
+    | {
+        scheduleMode: "FLEXIBLE"
+        days: (PolicyDayInput & { requiredMinutes: number })[]
+      }
+    | {
+        scheduleMode: "FIXED"
+        days: (PolicyDayInput &
+          Partial<
+            Pick<
+              PolicyDay,
+              | "scheduledStartMinute"
+              | "scheduledEndMinute"
+              | "scheduledUnpaidBreakMinutes"
+            >
+          >)[]
+      }
+  )
 export const updateAttendancePolicy = (
   id: string,
   input: AttendancePolicyInput,
@@ -325,14 +356,19 @@ export const assignAttendancePolicy = (input: {
   employeeId: string
   policyId: string
   effectiveFrom: string
+  replacesAssignmentId?: string
 }) =>
   apiRequest(`${root}/assignments`, {
     method: "POST",
     body: JSON.stringify(input),
   })
-export const unassignAttendancePolicy = (id: string) =>
+export const unassignAttendancePolicy = (
+  id: string,
+  expectedStatus: "CURRENT" | "SCHEDULED",
+) =>
   apiRequest(`${root}/assignments/${encodeURIComponent(id)}/unassign`, {
     method: "POST",
+    body: JSON.stringify({ expectedStatus }),
   })
 export const attendanceAdjustmentDetail = (id:string,signal?:AbortSignal)=>apiRequest<{adjustment:AttendanceAdjustment}>(`${root}/adjustments/${encodeURIComponent(id)}`,{signal})
 

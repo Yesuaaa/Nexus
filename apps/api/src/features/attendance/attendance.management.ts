@@ -1,4 +1,7 @@
-import { Prisma } from "../../generated/prisma/client.js"
+import {
+  Prisma,
+  type AttendanceScheduleMode,
+} from "../../generated/prisma/client.js"
 import { isDeepStrictEqual } from "node:util"
 import { getPrisma } from "../../lib/db.js"
 import { lockRows } from "../../shared/db/locks.js"
@@ -123,6 +126,7 @@ function policyInput(body: unknown) {
   const input = object(body, [
     "name",
     "timeZone",
+    "scheduleMode",
     "days",
     "unpaidBreaksEnabled",
     "overnightRequiresReview",
@@ -132,12 +136,27 @@ function policyInput(body: unknown) {
     typeof input.overnightRequiresReview !== "boolean"
   )
     fail(400, "Choose break and overnight policy options")
+  const requestedMode = input.scheduleMode
+  if (
+    requestedMode !== undefined &&
+    requestedMode !== "FLEXIBLE" &&
+    requestedMode !== "FIXED"
+  )
+    fail(400, "Choose a flexible or fixed schedule")
+  const scheduleMode: AttendanceScheduleMode = requestedMode ?? "FLEXIBLE"
+  const unpaidBreaksEnabled = input.unpaidBreaksEnabled
   return {
-    name: text(input.name, 1, 100),
-    timeZone: validated(() => attendanceTimeZone(input.timeZone)),
-    days: validated(() => attendancePolicyDays(input.days)),
-    unpaidBreaksEnabled: input.unpaidBreaksEnabled,
-    overnightRequiresReview: input.overnightRequiresReview,
+    explicitMode: requestedMode !== undefined,
+    rules: {
+      name: text(input.name, 1, 100),
+      timeZone: validated(() => attendanceTimeZone(input.timeZone)),
+      scheduleMode,
+      unpaidBreaksEnabled,
+      overnightRequiresReview: input.overnightRequiresReview,
+    },
+    days: validated(() =>
+      attendancePolicyDays(input.days, scheduleMode, unpaidBreaksEnabled),
+    ),
   }
 }
 async function lockedPolicy(tx: Prisma.TransactionClient, policyId: string) {
@@ -196,7 +215,7 @@ async function validateCorrection(
     : null
   const workDate = day
     ? day.workDate.toISOString().slice(0, 10)
-    : (await policyAt(tx, employeeId, start))?.workDate
+    : (await policyAt(tx, employeeId, start, true))?.workDate
   if (!workDate)
     fail(409, "No policy is assigned for the missing session's starting date")
   if (
@@ -818,7 +837,7 @@ export function createAttendanceManagement(clock: () => Date) {
       }, {isolationLevel: "RepeatableRead"})
     },
     async createPolicy(userId: string, body: unknown) {
-      const { days, ...input } = policyInput(body)
+      const { days, rules: input } = policyInput(body)
       return getPrisma()!.$transaction(async (tx) => {
         await managementScope(tx, userId, true)
         const zones = await tx.$queryRaw<
@@ -839,10 +858,15 @@ export function createAttendanceManagement(clock: () => Date) {
       })
     },
     async updatePolicy(userId: string, policyId: string, body: unknown) {
-      const { days, ...input } = policyInput(body)
+      const { days, explicitMode, rules: input } = policyInput(body)
       return getPrisma()!.$transaction(async (tx) => {
         await managementScope(tx, userId, true)
         const policy = await lockedPolicy(tx, policyId)
+        if (policy.scheduleMode === "FIXED" && !explicitMode)
+          fail(
+            409,
+            "Choose a schedule type when editing a fixed attendance policy",
+          )
         if (policy.archivedAt)
           fail(409, "Restore the archived policy before editing it")
         const futureLeave = await tx.leaveRequestDay.findFirst({
@@ -1003,7 +1027,14 @@ export function createAttendanceManagement(clock: () => Date) {
         { isolationLevel: "RepeatableRead" },
       )
     },
-    async unassignPolicy(userId: string, assignmentId: string) {
+    async unassignPolicy(userId: string, assignmentId: string, body?: unknown) {
+      const { expectedStatus } = object(body ?? {}, ["expectedStatus"])
+      if (
+        expectedStatus !== undefined &&
+        expectedStatus !== "CURRENT" &&
+        expectedStatus !== "SCHEDULED"
+      )
+        fail(400, "Choose an active or scheduled assignment")
       return getPrisma()!.$transaction(async (tx) => {
         await managementScope(tx, userId, true)
         const initial = await tx.attendancePolicyAssignment.findUnique({
@@ -1016,7 +1047,8 @@ export function createAttendanceManagement(clock: () => Date) {
             where: { id: assignmentId },
             include: { policy: true },
           })
-        if (assignment.cancelledAt) return { unassigned: true }
+        if (assignment.cancelledAt && expectedStatus === undefined)
+          return { unassigned: true }
         const now = clock()
         const [{ status }] = await tx.$queryRaw<
           { status: PolicyAssignmentStatus }[]
@@ -1025,6 +1057,11 @@ export function createAttendanceManagement(clock: () => Date) {
           FROM "AttendancePolicyAssignment"
           WHERE id = ${assignmentId}
         `
+        if (expectedStatus && status !== expectedStatus)
+          fail(
+            409,
+            "The assignment status changed. Refresh and choose an action again.",
+          )
         const scheduled = status === "SCHEDULED"
         const today = attendanceWorkDate(now, assignment.policy.timeZone)
         const tomorrow = new Date(today)
@@ -1051,7 +1088,13 @@ export function createAttendanceManagement(clock: () => Date) {
             assignment.effectiveUntil <= tomorrow)
         )
           fail(409, "This assignment has already ended or is already ending")
-        await context(tx, userId, "Unassigned attendance policy")
+        await context(
+          tx,
+          userId,
+          scheduled
+            ? "Cancelled scheduled attendance assignment"
+            : "Ended attendance assignment",
+        )
         if (scheduled) {
           if (await tx.attendanceWorkday.findFirst({ where: { assignmentId } }))
             fail(
@@ -1108,15 +1151,21 @@ export function createAttendanceManagement(clock: () => Date) {
             })
           }
         } else {
-          if (
-            await tx.attendanceWorkday.findFirst({
-              where: { assignmentId, workDate: { gte: tomorrow } },
-            })
-          )
+          const lastRecordedDay = await tx.attendanceWorkday.findFirst({
+            where: { assignmentId, workDate: { gte: tomorrow } },
+            orderBy: { workDate: "desc" },
+            select: { workDate: true },
+          })
+          if (lastRecordedDay) {
+            const blockedDate = lastRecordedDay.workDate
+              .toISOString()
+              .slice(0, 10)
+            const endDate = tomorrow.toISOString().slice(0, 10)
             fail(
               409,
-              "This assignment has future attendance records and cannot end tomorrow",
+              `Attendance is already recorded for ${blockedDate} under this policy. Ending coverage on ${endDate} in ${assignment.policy.timeZone} would exclude that workday. Find it in Time Logs → Records by selecting this employee and filtering by work date.`,
             )
+          }
           await tx.attendancePolicyAssignment.update({
             where: { id: assignmentId },
             data: { effectiveUntil: tomorrow },
@@ -1126,9 +1175,18 @@ export function createAttendanceManagement(clock: () => Date) {
       })
     },
     async assignPolicy(userId: string, body: unknown) {
-      const input = object(body, ["employeeId", "policyId", "effectiveFrom"])
+      const input = object(body, [
+        "employeeId",
+        "policyId",
+        "effectiveFrom",
+        "replacesAssignmentId",
+      ])
       const employeeId = id(input.employeeId),
         policyId = id(input.policyId)
+      const replacesAssignmentId =
+        input.replacesAssignmentId === undefined
+          ? undefined
+          : id(input.replacesAssignmentId)
       const from = parseAttendanceHistory(
         { from: input.effectiveFrom, to: input.effectiveFrom },
         clock(),
@@ -1176,12 +1234,30 @@ export function createAttendanceManagement(clock: () => Date) {
             )
           if (overlapping.some((item) => item.effectiveFrom >= from))
             fail(409, "An assignment already starts on or after that date")
-          if (
-            await tx.attendanceWorkday.findFirst({
-              where: { employeeId, workDate: { gte: from } },
-            })
-          )
-            fail(409, "Choose a date after existing attendance records")
+          if (replacesAssignmentId) {
+            const previous = overlapping.find(
+              (item) => item.id === replacesAssignmentId,
+            )
+            if (!previous || previous.policyId === policyId)
+              fail(
+                409,
+                "Choose a different policy and a date covered by the assignment you are replacing",
+              )
+          }
+          const lastRecordedDay = await tx.attendanceWorkday.findFirst({
+            where: { employeeId, workDate: { gte: from } },
+            orderBy: { workDate: "desc" },
+            select: { workDate: true },
+          })
+          if (lastRecordedDay) {
+            const blockedDate = lastRecordedDay.workDate
+              .toISOString()
+              .slice(0, 10)
+            fail(
+              409,
+              `Attendance is already recorded for ${blockedDate}. Choose an effective date after that workday. Find it in Time Logs → Records by selecting this employee and filtering by work date.`,
+            )
+          }
           // The new policy supplies the cutoff even for a period already ending on this date.
           const [{ conflict }] = await tx.$queryRaw<{ conflict: boolean }[]>`
             SELECT EXISTS (

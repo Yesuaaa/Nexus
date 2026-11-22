@@ -14,6 +14,7 @@ import {
 import { lockRows, lockRowsReturning } from "../../shared/db/locks.js"
 import { notifyPendingLeaveAfterHeadChange } from "../leave/leave.repository.js"
 import { notifyPendingAdjustmentsAfterHeadChange } from "../attendance/attendance.pending-notifications.js"
+import { beginAttendancePlacement } from "./attendance-placement-history.js"
 import { getPrisma } from "../../lib/db.js"
 import {
   assertNotSelf,
@@ -274,12 +275,18 @@ async function assertNoProtectedAssignmentChange(
   }
 }
 
+type EmployeeUpdateOptions = {
+  operation?: ManagementOperation
+  placementOnly?: boolean
+}
+
 async function writeEmployee(
   tx: Prisma.TransactionClient,
   id: string | null,
   input: EmployeeWriteInput,
-  operation?: ManagementOperation,
+  { operation: placementOperation, placementOnly }: EmployeeUpdateOptions = {},
 ) {
+  const operation = placementOnly ? undefined : placementOperation
   let statusSnapshot: {
     departmentId: string | null
     userId: string | null
@@ -647,6 +654,12 @@ async function writeEmployee(
     userId: nextUserId,
   }
 
+  if (
+    placementOperation &&
+    existing &&
+    existing.departmentId !== nextDepartmentId
+  )
+    await beginAttendancePlacement(tx, placementOperation)
   let employee = existing
     ? await tx.employee.update({
         where: { id: existing.id },
@@ -820,14 +833,15 @@ export async function updateEmployee(
   tx: Prisma.TransactionClient,
   id: string,
   data: EmployeeWriteInput,
-  operation?: ManagementOperation,
+  options?: EmployeeUpdateOptions,
 ) {
-  return writeEmployee(tx, id, data, operation)
+  return writeEmployee(tx, id, data, options)
 }
 
 export async function syncEmployeeForUser(
   tx: Prisma.TransactionClient,
   userId: string,
+  operation: ManagementOperation,
 ): Promise<Prisma.EmployeeGetPayload<{
   include: typeof employeeInclude
 }> | null> {
@@ -856,7 +870,7 @@ export async function syncEmployeeForUser(
 
   const employee = await tx.employee.findUnique({
     where: { userId },
-    select: { id: true },
+    select: { id: true, departmentId: true },
   })
   if (
     !employee &&
@@ -893,6 +907,8 @@ export async function syncEmployeeForUser(
   }
 
   if (employee) {
+    if (employee.departmentId !== departmentId)
+      await beginAttendancePlacement(tx, operation)
     return tx.employee.update({
       where: { id: employee.id },
       data: assignment,

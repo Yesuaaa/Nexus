@@ -222,6 +222,7 @@ export const usersRepository = {
     syncEmployee: (
       tx: Prisma.TransactionClient,
       userId: string,
+      operation: ManagementOperation,
     ) => Promise<unknown>,
     operation: ManagementOperation,
   ) {
@@ -268,6 +269,7 @@ export const usersRepository = {
     syncEmployee: (
       tx: Prisma.TransactionClient,
       userId: string,
+      operation: ManagementOperation,
     ) => Promise<unknown>,
     operation: ManagementOperation,
     profile?: { fullName: string; email: string; contactNumber: string | null },

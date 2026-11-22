@@ -47,6 +47,19 @@ const zone = (value: unknown) =>
 const number = (value: unknown) =>
   typeof value === "number" && Number.isFinite(value) ? value : null
 const boolean = (value: unknown) => (typeof value === "boolean" ? value : null)
+const scheduleMode = (value: unknown) =>
+  value === "FIXED"
+    ? "Fixed schedule"
+    : value === "FLEXIBLE"
+      ? "Flexible"
+      : null
+const clockTime = (value: unknown) =>
+  typeof value === "number" &&
+  Number.isInteger(value) &&
+  value >= 0 &&
+  value < 1440
+    ? `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`
+    : null
 const statuses = new Set([
   "PENDING",
   "SUBMITTED",
@@ -68,17 +81,33 @@ const scheduleFields: Field[] = [
   ["requiredMinutes", "Required minutes", number],
 ]
 const fieldsByEntity: Record<string, Field[]> = {
-  AttendanceWorkday: [["workDate", "Work date", isoDate], ...scheduleFields],
-  AttendanceWorkSession: sessionFields,
+  AttendanceWorkday: [
+    ["workDate", "Work date", isoDate],
+    ...scheduleFields,
+    ["scheduledStartAt", "Scheduled start", isoDate],
+    ["scheduledEndAt", "Scheduled end", isoDate],
+    ["scheduledUnpaidBreakMinutes", "Scheduled unpaid break minutes", number],
+  ],
+  AttendanceWorkSession: [
+    ...sessionFields,
+    ["suspendedAt", "Suspension time", isoDate],
+  ],
   AttendanceBreak: [...sessionFields, ["isPaid", "Paid break", boolean]],
   AttendancePolicy: [
     ["name", "Policy name"],
     ["timeZone", "Time zone", zone],
+    ["scheduleMode", "Schedule type", scheduleMode],
     ["archivedAt", "Archived at", isoDate],
     ["unpaidBreaksEnabled", "Unpaid breaks enabled", boolean],
     ["overnightRequiresReview", "Overnight review required", boolean],
   ],
-  AttendancePolicyDay: [["weekday", "Weekday", number], ...scheduleFields],
+  AttendancePolicyDay: [
+    ["weekday", "Weekday", number],
+    ...scheduleFields,
+    ["scheduledStartMinute", "Scheduled start", clockTime],
+    ["scheduledEndMinute", "Scheduled end", clockTime],
+    ["scheduledUnpaidBreakMinutes", "Scheduled unpaid break minutes", number],
+  ],
   AttendancePolicyAssignment: [
     ["policyId", "Policy ID", recordId],
     ["effectiveFrom", "Effective from", isoDate],
@@ -90,6 +119,7 @@ const fieldsByEntity: Record<string, Field[]> = {
     ["proposedStartedAt", "Proposed start", isoDate],
     ["proposedEndedAt", "Proposed end", isoDate],
   ],
+  EmployeeDepartmentPlacement: [["departmentId", "Department ID", recordId]],
   LeaveRequest: [["status", "Status", status]],
 }
 
@@ -100,6 +130,7 @@ const entityLabels: Record<string, string> = {
   AttendancePolicy: "Attendance policy",
   AttendancePolicyDay: "Policy weekday",
   AttendancePolicyAssignment: "Policy assignment",
+  EmployeeDepartmentPlacement: "Employee department placement",
   LeaveRequest: "Leave request",
 }
 
@@ -120,7 +151,7 @@ function presentEffect(row: ComplianceHistoryRow) {
       : entityLabels[row.entityType]
   const changes = (fieldsByEntity[row.entityType] ?? []).flatMap(
     ([key, field, parse]) => {
-      if (isDeepStrictEqual(previous[key], next[key])) return []
+      if (isDeepStrictEqual(previous[key] ?? null, next[key] ?? null)) return []
       const before = parse?.(previous[key]) ?? null
       const after = parse?.(next[key]) ?? null
       return [before !== after ? { field, before, after } : { field }]
@@ -143,6 +174,7 @@ function presentEffect(row: ComplianceHistoryRow) {
 }
 
 function priority(row: ComplianceHistoryRow) {
+  if (row.entityType === "EmployeeDepartmentPlacement") return -1
   if (row.source === "corrections") return 0
   if (
     row.entityType === "AttendancePolicy" ||
@@ -163,6 +195,8 @@ function describeWorkforceActivity(row: ComplianceHistoryRow, type: string) {
   const next = snapshot(row.after)
   const employee = row.employeeName?.trim()
   const forEmployee = employee ? ` for ${employee}` : ""
+  if (row.entityType === "EmployeeDepartmentPlacement")
+    return `Changed department placement${forEmployee}.`
   const started = row.event === "CREATED" && next.endedAt === null
   const ended =
     row.event === "UPDATED" &&
@@ -171,8 +205,39 @@ function describeWorkforceActivity(row: ComplianceHistoryRow, type: string) {
   if (row.entityType === "AttendanceWorkSession") {
     if (started)
       return `${row.operationId ? "Recorded clock-in" : "Started an attendance session"}${forEmployee}.`
-    if (ended)
-      return `${row.operationId ? "Recorded clock-out" : "Ended an attendance session"}${forEmployee}.`
+    if (
+      row.event === "UPDATED" &&
+      previous.endedAt === null &&
+      next.endedAt === null &&
+      previous.suspendedAt == null &&
+      isoDate(next.suspendedAt)
+    )
+      return `Suspended an open attendance session${forEmployee}.`
+    if (ended) {
+      // Correction effects take precedence as the primary row. Both punch paths
+      // leave the start and suspension fields unchanged when closing a session.
+      if (
+        row.actorId &&
+        row.operationId &&
+        row.correlationId &&
+        isoDate(previous.startedAt) &&
+        previous.startedAt === next.startedAt &&
+        previous.suspendedAt === next.suspendedAt
+      ) {
+        if (
+          isoDate(previous.suspendedAt) &&
+          (row.actorRoleAtTime === "ADMIN" ||
+            row.actorRoleAtTime === "SUPERADMIN")
+        )
+          return `Reconciled a suspended attendance session${forEmployee}.`
+        if (
+          previous.suspendedAt === null &&
+          (row.actorRoleAtTime === "STAFF" || row.actorRoleAtTime === "ADMIN")
+        )
+          return `Recorded clock-out${forEmployee}.`
+      }
+      return `Ended an attendance session${forEmployee}.`
+    }
   }
   if (row.entityType === "AttendanceBreak") {
     if (started) return `Started a break${forEmployee}.`

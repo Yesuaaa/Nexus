@@ -47,6 +47,7 @@ import {
   archiveAttendancePolicy,
   deleteAttendancePolicy,
   type AttendancePolicy,
+  type AttendancePolicyAssignment,
 } from "../api/attendance-api"
 
 const policyGrid =
@@ -94,6 +95,7 @@ export function AttendanceSettingsPage() {
   const [panel, setPanel] = useState<{
     mode: "create" | "assign"
     template?: AttendancePolicy
+    replacement?: AttendancePolicyAssignment
   } | null>(null)
   const [detailsPolicy, setDetailsPolicy] = useState<AttendancePolicy | null>(
     null,
@@ -263,6 +265,11 @@ export function AttendanceSettingsPage() {
                   className="min-w-0 truncate font-medium @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-1"
                 >
                   {policy.name}
+                  <div className="text-xs font-normal text-[#738096]">
+                    {policy.scheduleMode === "FIXED"
+                      ? "Fixed schedule"
+                      : "Flexible"}
+                  </div>
                 </div>
                 <div
                   role="cell"
@@ -364,13 +371,13 @@ export function AttendanceSettingsPage() {
           onPageChange={policies.setPage}
         />
       )}
-      {panel?.mode === "assign" && choices.error && <ResourceStatus loading={false} error={choices.error} retry={choices.retry} />}
       {panel && (
         <AttendancePolicyPanel
           {...panel}
           policies={(choices.data?.policies ?? []).filter(
             (policy) => !policy.archivedAt,
           )}
+          policyChoices={choices}
           onClose={() => setPanel(null)}
           onSaved={() => {
             setPanel(null)
@@ -382,6 +389,13 @@ export function AttendanceSettingsPage() {
         <AttendancePolicyDetailsPanel
           policy={detailsPolicy}
           onClose={() => setDetailsPolicy(null)}
+          onReplace={(assignment) =>
+            setPanel({
+              mode: "assign",
+              template: detailsPolicy,
+              replacement: assignment,
+            })
+          }
         />
       )}
       {confirmation && (

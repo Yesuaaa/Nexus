@@ -55,6 +55,16 @@ Read records under `docs/features/`: `client-service-requests.md`, `department-r
 
 ## Attendance and calendar
 
+Department placement writes reuse the authenticated management operation in the transaction-local attendance audit context. The transfer trigger groups the department ID change with any verification resets for active correction and overtime reviews. See `docs/features/workforce-compliance-logs.md`.
+
+Workforce Logs text search keeps the original ordered group membership in short-lived, session-bound paging windows. Each response resolves current display names. See the Workforce Logs contract for window limits and refresh behavior.
+
+Workforce Logs text search accepts literal area codes and their spaced names, including `time-logs` and `Time Logs`.
+
+Workforce Logs projects suspension time and distinguishes manager reconciliation from employee clock-out using the recorded session transitions and authenticated audit context. Correction decisions continue to describe their grouped writes.
+
+Attendance policies support flexible weekly targets and fixed shifts. Fixed targets use scheduled duration minus scheduled unpaid breaks. PostgreSQL resolves and snapshots shift boundaries, and attendance details compare them against recorded punches. Leave and workload continue consuming the existing required-minute targets. See migration `20261122120000_attendance_fixed_schedule` and `docs/features/attendance-interface.md`.
+
 Implemented: attendance policies/assignments, workdays/sessions/breaks, adjustments/review/audit, whole-day leave requests, attendance web screens, and role-aware calendar composition. Sources: API `src/features/attendance` and `src/features/leave`, web `src/features/attendance`, `leave`, and `calendar`. Trace calendar API composition before assuming a dedicated backend calendar router.
 
 Leave requests (2026-11-17) use immutable request/day records and audited decisions. Linked employees submit annual, sick, emergency, unpaid, or other leave; current eligible Heads verify department requests, HR/Admin decides verified or Headless exception-routed requests, and Superadmin retains organization oversight without gaining Employee self-service identity. Self-review is denied. Approved policy snapshots reduce required attendance minutes, block covered clock-ins/corrections, generate private all-day calendar projections, and appear separately in workload planning without mutating manual capacity or `Employee.status`. See migration `20261117120000_leave_requests` and `docs/features/leave-requests-plan.md`.

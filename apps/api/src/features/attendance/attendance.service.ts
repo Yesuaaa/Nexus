@@ -61,7 +61,18 @@ export async function policyAt(
   tx: Prisma.TransactionClient,
   employeeId: string,
   now: Date,
+  lockPolicy = false,
 ) {
+  if (lockPolicy) {
+    // Stabilize schedule attribution through validation and session insertion.
+    await tx.$queryRaw`
+      SELECT policy.id
+      FROM attendance_policy_at(${employeeId}, ${now.toISOString()}::timestamptz) selected
+      JOIN "AttendancePolicyAssignment" assignment ON assignment.id = selected."assignmentId"
+      JOIN "AttendancePolicy" policy ON policy.id = assignment."policyId"
+      FOR SHARE OF policy
+    `
+  }
   const [selected] = await tx.$queryRaw<
     { assignmentId: string; workDate: Date }[]
   >`SELECT * FROM attendance_policy_at(${employeeId}, ${now.toISOString()}::timestamptz)`
@@ -252,7 +263,7 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
           await setAttendanceAuditContext(tx, userId, `Employee ${action}`)
           if (action === "clock-in") {
             const latest = await repository.latestSession(tx, employee.id)
-            const policy = await policyAt(tx, employee.id, now)
+            const policy = await policyAt(tx, employee.id, now, true)
             let selectedWorkDate = policy?.workDate
             if (input.workdayId) {
               const selected = await repository.workday(
@@ -378,6 +389,16 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
             (day) => day.weekday === workDate.getUTCDay(),
           )
           if (!rule) fail(409, "Attendance policy weekdays are incomplete")
+          const [schedule] =
+            policy.assignment.policy.scheduleMode === "FIXED" &&
+            rule.isWorkingDay
+              ? await tx.$queryRaw<
+                  { scheduledStartAt: Date; scheduledEndAt: Date }[]
+                >`SELECT * FROM attendance_schedule_at(
+                ${policy.workDate}::date, ${policy.assignment.policy.timeZone},
+                ${rule.scheduledStartMinute}::integer, ${rule.scheduledEndMinute}::integer
+              )`
+              : []
           const approvedLeave = await approvedLeaveForDate(
             tx,
             employee.id,
@@ -397,6 +418,11 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
                 timeZone: policy.assignment.policy.timeZone,
                 isWorkingDay: rule.isWorkingDay,
                 requiredMinutes: rule.requiredMinutes,
+                scheduledStartAt: schedule?.scheduledStartAt ?? null,
+                scheduledEndAt: schedule?.scheduledEndAt ?? null,
+                scheduledUnpaidBreakMinutes: schedule
+                  ? rule.scheduledUnpaidBreakMinutes
+                  : null,
                 policyName: policy.assignment.policy.name,
                 unpaidBreaksEnabled:
                   policy.assignment.policy.unpaidBreaksEnabled,

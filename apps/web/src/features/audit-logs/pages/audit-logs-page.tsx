@@ -349,7 +349,11 @@ export function AuditLogsPage({
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const fixedWindow = endpoint === "/api/workforce-compliance-logs"
   const windowKey = JSON.stringify([query, activity, source, range])
-  const logWindow = useRef<{ key: string; asOf: string; snapshot?: string } | null>(null)
+  const logWindow = useRef<{
+    key: string
+    asOf: string
+    snapshot?: string
+  } | null>(null)
   const list = usePaginatedList({
     params: { search: query, activity, source, range },
     load: ({ page, signal }) => {
@@ -375,7 +379,8 @@ export function AuditLogsPage({
         signal,
         fixedWindow
           ? {
-              snapshot: previous?.key === windowKey ? previous.snapshot : undefined,
+              snapshot:
+                previous?.key === windowKey ? previous.snapshot : undefined,
               asOf: previous?.key === windowKey ? previous.asOf : undefined,
               range: range || undefined,
             }
@@ -387,7 +392,12 @@ export function AuditLogsPage({
     initial: null,
     refresh: fixedWindow ? false : "focus",
     onLoaded: (result) => {
-      if (fixedWindow) logWindow.current = { key: windowKey, asOf: result.asOf, snapshot: result.snapshot }
+      if (fixedWindow)
+        logWindow.current = {
+          key: windowKey,
+          asOf: result.asOf,
+          snapshot: result.snapshot,
+        }
     },
     fallbackError: `Couldn't load ${title}.`,
   })
@@ -397,8 +407,14 @@ export function AuditLogsPage({
     : list.rows.find(({ id }) => id === selectedId)
 
   function resetSelectionAndPage() {
+    logWindow.current = null
     setSelectedId(null)
     setPage(1)
+  }
+
+  function refreshWindow() {
+    resetSelectionAndPage()
+    list.retry()
   }
 
   return (
@@ -408,14 +424,7 @@ export function AuditLogsPage({
         description={description}
         actions={
           fixedWindow && (
-            <PageHeaderButton
-              disabled={list.loading}
-              onClick={() => {
-                logWindow.current = null
-                resetSelectionAndPage()
-                list.retry()
-              }}
-            >
+            <PageHeaderButton disabled={list.loading} onClick={refreshWindow}>
               <RefreshCw aria-hidden="true" />
               Refresh logs
             </PageHeaderButton>
@@ -431,8 +440,10 @@ export function AuditLogsPage({
               value={search}
               maxLength={80}
               onChange={(event) => {
-                setSearch(event.target.value)
-                resetSelectionAndPage()
+                const value = event.target.value
+                setSearch(value)
+                if (!fixedWindow || value.trim() !== query)
+                  resetSelectionAndPage()
               }}
             />
             <FilterSelect
@@ -481,7 +492,7 @@ export function AuditLogsPage({
           viewKey={list.tableViewKey}
           quickKey={query}
           onRowsSettled={list.onRowsSettled}
-          onRetry={list.retry}
+          onRetry={fixedWindow ? refreshWindow : list.retry}
           onView={(log) => setSelectedId(log.id)}
         />
         <TableSearchStatus
