@@ -96,10 +96,12 @@ export function AttendanceSettingsPage() {
     mode: "create" | "assign"
     template?: AttendancePolicy
     replacement?: AttendancePolicyAssignment
+    onBack?: () => void
   } | null>(null)
-  const [detailsPolicy, setDetailsPolicy] = useState<AttendancePolicy | null>(
-    null,
-  )
+  const [details, setDetails] = useState<{
+    policy: AttendancePolicy
+    assignmentPage?: number
+  } | null>(null)
   const query = search.trim().toLowerCase()
   const policies = usePaginatedList({
     params: {search: query, archivedView},
@@ -350,7 +352,7 @@ export function AttendanceSettingsPage() {
                     }
                     onAction={(action) => {
                       setError("")
-                      if (action === "view") setDetailsPolicy(policy)
+                      if (action === "view") setDetails({ policy })
                       else if (action === "assign")
                         setPanel({ mode: "assign", template: policy })
                       else if (action === "edit")
@@ -385,15 +387,17 @@ export function AttendanceSettingsPage() {
           }}
         />
       )}
-      {detailsPolicy && (
+      {details && (
         <AttendancePolicyDetailsPanel
-          policy={detailsPolicy}
-          onClose={() => setDetailsPolicy(null)}
-          onReplace={(assignment) =>
+          {...details}
+          onClose={() => setDetails(null)}
+          onReplace={(assignment, page) =>
             setPanel({
               mode: "assign",
-              template: detailsPolicy,
+              template: details.policy,
               replacement: assignment,
+              onBack: () =>
+                setDetails({ policy: details.policy, assignmentPage: page }),
             })
           }
         />

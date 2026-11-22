@@ -150,9 +150,10 @@ export function AttendanceHistoryTable({
                     {!day.employee && (
                       <span className="text-xs font-medium">My attendance</span>
                     )}
-                    {!firstSession && (
-                      <div className="mt-1 text-[#65718a]">{day.workDate}</div>
-                    )}
+                    <div className="mt-1 text-[#65718a]">
+                      Work date{" "}
+                      <time dateTime={day.workDate}>{day.workDate}</time>
+                    </div>
                   </ResponsiveDataTableCell>
                   <ResponsiveDataTableCell className="min-w-0 text-xs leading-5 text-[#65718a]">
                     {firstSession

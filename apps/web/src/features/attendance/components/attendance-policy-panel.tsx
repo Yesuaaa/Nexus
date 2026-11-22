@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { ArrowLeft } from "lucide-react"
 import { Form } from "@/components/ui/form"
 import { FormInput } from "@/components/ui/form-input"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -50,6 +51,7 @@ export function AttendancePolicyPanel({
   policyChoices,
   template,
   replacement,
+  onBack,
   onClose,
   onSaved,
 }: {
@@ -58,6 +60,7 @@ export function AttendancePolicyPanel({
   policyChoices: { loading: boolean; error: string; retry: () => void }
   template?: AttendancePolicy
   replacement?: AttendancePolicyAssignment
+  onBack?: () => void
   onClose: () => void
   onSaved: () => void
 }) {
@@ -494,13 +497,14 @@ export function AttendancePolicyPanel({
             />
           )}
         </SidePanelBody>
-        <SidePanelFooter>
+        <SidePanelFooter className={onBack ? "justify-between" : undefined}>
           <SidePanelButton
             variant="secondary"
             disabled={pending}
-            onClick={() => panel.close()}
+            onClick={() => panel.close(onBack)}
           >
-            Cancel
+            {onBack && <ArrowLeft size={14} aria-hidden="true" />}
+            {onBack ? "Back" : "Cancel"}
           </SidePanelButton>
           <SidePanelButton
             type="submit"

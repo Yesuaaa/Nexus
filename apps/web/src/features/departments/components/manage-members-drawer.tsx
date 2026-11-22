@@ -38,6 +38,7 @@ import { InfoTip } from "@/components/ui/info-tip"
 import { PanelSubview } from "@/components/ui/panel-subview"
 import {
   panelAssignButton,
+  panelDangerIcon,
   panelEmpty,
   panelField,
   panelIconButton,
@@ -59,11 +60,6 @@ import {
 import { roleLabels } from "@/features/auth/model/roles"
 import { errorMessage } from "@/lib/error-message"
 import { useAsyncResource } from "@/lib/use-async-resource"
-
-const panelDangerIcon = cn(
-  panelIconButton,
-  "border-0 bg-transparent text-[#bc3649] hover:bg-[#fff0f1] hover:text-[#a72d3f]",
-)
 
 const nameBadge =
   "flex-none rounded bg-[#e8eef8] px-1.5 py-px text-[10px] leading-4 font-semibold text-[#294a9b]"

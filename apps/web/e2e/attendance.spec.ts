@@ -676,24 +676,51 @@ test("Admin can create and inspect a fixed overnight schedule", async ({
     .getByRole("listitem")
     .filter({ hasText: "Attendance head" })
   await page.setViewportSize({ width: 1000, height: 844 })
-  await head
-    .getByRole("button", { name: "Replace policy", exact: true })
-    .hover()
-  await expect(head.getByText("Replace policy", { exact: true })).toBeVisible()
-  await page.mouse.move(0, 0)
-  await head
-    .getByRole("button", { name: "End assignment", exact: true })
-    .focus()
-  await expect(head.getByText("End assignment", { exact: true })).toBeVisible()
+  await expect(
+    head.getByRole("button", { name: "Replace policy", exact: true }),
+  ).toBeVisible()
+  await expect(
+    head.getByRole("button", { name: "End assignment", exact: true }),
+  ).toBeVisible()
   await page.setViewportSize({ width: 390, height: 844 })
   await head
     .getByRole("button", { name: "End assignment", exact: true })
     .click()
-  const end = page.getByRole("dialog", { name: "End attendance assignment?" })
+  const end = head.getByRole("alertdialog", {
+    name: "End Attendance head’s assignment?",
+  })
   await expect(
     end.getByText(/Coverage ends at the start of tomorrow in Asia\/Manila/),
   ).toBeVisible()
-  await end.getByRole("button", { name: "Cancel", exact: true }).click()
+  const cancelEnd = end.getByRole("button", { name: "Cancel", exact: true })
+  await expect(cancelEnd).toBeFocused()
+  await cancelEnd.press("Escape")
+  const endAssignment = head.getByRole("button", {
+    name: "End assignment",
+    exact: true,
+  })
+  await expect(end).toHaveCount(0)
+  await expect(endAssignment).toBeFocused()
+  const endRoute = "**/api/attendance/assignments/*/unassign"
+  await page.route(endRoute, (route) =>
+    route.fulfill({
+      status: 409,
+      json: { error: "Recorded attendance prevents ending this assignment." },
+    }),
+  )
+  await endAssignment.click()
+  const endRequest = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" && request.url().endsWith("/unassign"),
+  )
+  await end.getByRole("button", { name: "End assignment", exact: true }).click()
+  expect((await endRequest).postDataJSON()).toEqual({ expectedStatus: "CURRENT" })
+  await expect(end.getByRole("alert")).toHaveText(
+    "Recorded attendance prevents ending this assignment.",
+  )
+  await cancelEnd.click()
+  await expect(end).toHaveCount(0)
+  await page.unroute(endRoute)
   await head
     .getByRole("button", { name: "Replace policy", exact: true })
     .click()
@@ -706,6 +733,16 @@ test("Admin can create and inspect a fixed overnight schedule", async ({
       /replace Browser flexible policy for Attendance head/,
     ),
   ).toBeVisible()
+  await expect(
+    replacement.getByRole("button", { name: "Cancel", exact: true }),
+  ).toHaveCount(0)
+  await replacement.getByRole("button", { name: "Back", exact: true }).click()
+  await expect(
+    details.getByRole("tab", { name: "Assigned people", selected: true }),
+  ).toBeVisible()
+  await head
+    .getByRole("button", { name: "Replace policy", exact: true })
+    .click()
   await replacement.getByRole("combobox", { name: "Attendance policy" }).click()
   await expect(
     page.getByRole("option", { name: /Browser flexible policy/ }),
@@ -1893,6 +1930,13 @@ test("WC-06-F02 reports and exports a suspended session until reconciliation", a
   await expect(
     history.getByText("Shift suspended", { exact: true }),
   ).toBeVisible()
+  const overnightRow = history.getByRole("row").filter({
+    has: page.getByText("WC06 Overnight", { exact: true }),
+  })
+  await expect(overnightRow.getByText(`Work date ${date}`)).toBeVisible()
+  await expect(
+    overnightRow.getByText("Sep 19, 2026", { exact: false }),
+  ).toBeVisible()
   const mixed = await exportRows()
   expect(mixed).toHaveLength(4)
   const suspendedCsv = {
@@ -1938,6 +1982,7 @@ test("WC-06-F02 reports and exports a suspended session until reconciliation", a
   await expect(
     history.getByText("Shift suspended", { exact: true }),
   ).toBeVisible()
+  await expect(page.getByText("WC06 reporting", { exact: true })).toBeVisible()
   const scopedCsv = await exportRows()
   expect(scopedCsv).toHaveLength(1)
   expect.soft(scopedCsv[0]).toMatchObject(suspendedCsv)

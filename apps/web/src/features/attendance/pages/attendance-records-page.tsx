@@ -60,6 +60,9 @@ export function AttendanceRecordsPage() {
   const departments = useAsyncResource(attendanceDepartments, [], {
     fallbackError: "Couldn't load departments.",
   })
+  const selectedDepartment = departments.data?.departments.find(
+    (department) => department.id === departmentId,
+  )
   const employees = usePaginatedList({
     params: { search, departmentId },
     load: ({ page, signal }) =>
@@ -260,7 +263,16 @@ export function AttendanceRecordsPage() {
       ) : (
         <>
           <div className="mb-4 flex flex-wrap items-center gap-[10px]">
-            {!selected && departmentFilter}
+            {selected
+              ? departmentId && (
+                  <div className="flex min-h-[34px] min-w-0 items-center gap-2 rounded-md border border-[#e1e4ea] px-3 text-xs">
+                    <span className="text-[#65718a]">Department</span>
+                    <span className="min-w-0 font-medium break-words">
+                      {selectedDepartment?.name ?? "Department unavailable"}
+                    </span>
+                  </div>
+                )
+              : departmentFilter}
             <RangeFields
               {...range}
               onChange={(from, to) => {
