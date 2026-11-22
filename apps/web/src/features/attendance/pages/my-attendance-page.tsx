@@ -23,6 +23,7 @@ import {
   RangeFields,
 } from "../components/attendance-shared"
 import { AttendanceHistoryTable } from "../components/attendance-history"
+import { AttendanceScheduleDetails } from "../components/attendance-schedule-details"
 import { AdjustmentDialog } from "../components/adjustment-dialog"
 import { useAttendanceClock } from "../hooks/use-attendance-clock"
 import {
@@ -35,6 +36,7 @@ import {
   defaultRange,
   duration,
   elapsedWork,
+  isSuspendedSession,
 } from "../model/attendance"
 
 export function MyAttendancePage() {
@@ -51,15 +53,16 @@ export function MyAttendancePage() {
   const [correction, setCorrection] = useState<{
     session: AttendanceSession | null
   } | null>(null)
+  const day = clock.state?.workday
+  const suspended = day?.sessions.some(isSuspendedSession) ?? false
   const history = useAsyncResource(
     (signal) => attendanceHistory(range.from, range.to, page, signal),
-    [range.from, range.to, page, revision],
+    [range.from, range.to, page, revision, suspended],
     {
       enabled: Boolean(range.from && range.to),
       fallbackError: "Couldn't load your attendance history.",
     },
   )
-  const day = clock.state?.workday
   const worked = day
     ? elapsedWork(day, clock.now || Date.parse(clock.state!.asOf))
     : 0
@@ -72,20 +75,8 @@ export function MyAttendancePage() {
     Boolean(clock.error) ||
     !day ||
     Boolean(clock.state?.needsPolicy)
-  const latest = history.data?.workdays[0]
-  const lastEnd = latest?.sessions.at(-1)?.endedAt
-  const localNow = day?.workDate
-  const continuation =
-    !active &&
-    latest?.id &&
-    day &&
-    lastEnd &&
-    latest.workDate < day.workDate &&
-    new Intl.DateTimeFormat("sv-SE", { timeZone: latest.timeZone }).format(
-      new Date(lastEnd),
-    ) === localNow
-      ? latest
-      : null
+  const continuation = clock.state?.continuation
+  const clockInReason = clock.state?.clockInBlockedReason
   function propose(
     input: AttendanceMutation,
     label: string,
@@ -120,6 +111,37 @@ export function MyAttendancePage() {
             your working days and required hours before clocking in.
           </Alert>
         )}
+        {!active &&
+          !clock.state?.needsPolicy &&
+          (suspended || clockInReason) && (
+            <Alert>
+              {suspended
+                ? "Ask HR to reconcile the suspended shift in Time Logs before you clock in again."
+                : clockInReason}
+            </Alert>
+          )}
+        {continuation && (
+          <div className="mt-4 rounded-lg border border-[#dfe6eb] p-3">
+            <p className="mt-0 text-xs leading-5">
+              Your previous overnight workday ended today. You can add a session
+              to {continuation.workDate}.
+            </p>
+            <Button
+              variant="brandOutline"
+              size="sm"
+              disabled={clock.loading || clock.pending || Boolean(clock.error)}
+              onClick={() =>
+                propose(
+                  { action: "clock-in", workdayId: continuation.id },
+                  "Continue overnight workday",
+                  `Add another session to ${continuation.workDate}. Its daily requirement is counted once.`,
+                )
+              }
+            >
+              Continue {continuation.workDate}
+            </Button>
+          </div>
+        )}
         {day && (
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(250px,1fr)]">
             <OverviewPanel
@@ -140,7 +162,7 @@ export function MyAttendancePage() {
                 </div>
                 <Pill
                   tone={
-                    paused
+                    suspended || paused
                       ? "warning"
                       : active
                         ? "info"
@@ -149,20 +171,22 @@ export function MyAttendancePage() {
                           : "neutral"
                   }
                 >
-                  {paused
-                    ? "On unpaid break"
-                    : active
-                      ? "Clocked in"
-                      : day.id
-                        ? "Clocked out"
-                        : "Not started"}
+                  {suspended
+                    ? "Shift suspended"
+                    : paused
+                      ? "On unpaid break"
+                      : active
+                        ? "Clocked in"
+                        : day.id
+                          ? "Clocked out"
+                          : "Not started"}
                 </Pill>
               </div>
               <div className="mt-5 flex flex-wrap gap-2">
                 {!active ? (
                   <Button
                     variant="brand"
-                    disabled={blocked}
+                    disabled={blocked || suspended || clockInReason !== null}
                     onClick={() =>
                       propose(
                         { action: "clock-in" },
@@ -253,29 +277,6 @@ export function MyAttendancePage() {
                   midnight. It will remain open until you clock out.
                 </p>
               )}
-              {continuation && (
-                <div className="mt-4 rounded-lg border border-[#dfe6eb] p-3">
-                  <p className="mt-0 text-xs leading-5">
-                    Your previous overnight workday ended today. Continue{" "}
-                    {continuation.workDate} or use Clock in to start today's
-                    workday.
-                  </p>
-                  <Button
-                    variant="brandOutline"
-                    size="sm"
-                    disabled={blocked}
-                    onClick={() =>
-                      propose(
-                        { action: "clock-in", workdayId: continuation.id! },
-                        "Continue overnight workday",
-                        `Add another session to ${continuation.workDate}. Its daily requirement is counted once.`,
-                      )
-                    }
-                  >
-                    Continue {continuation.workDate}
-                  </Button>
-                </div>
-              )}
             </OverviewPanel>
             <OverviewPanel
               title="Daily required hours"
@@ -317,6 +318,7 @@ export function MyAttendancePage() {
                 <DetailItem label="Unpaid breaks">
                   {day.policy.unpaidBreaksEnabled ? "Enabled" : "Disabled"}
                 </DetailItem>
+                <AttendanceScheduleDetails day={day} />
               </DetailList>
               {clock.state?.leaveConflict && (
                 <Alert>
@@ -326,7 +328,7 @@ export function MyAttendancePage() {
               )}
               {day.overnightRequiresReview && (
                 <p className="text-xs text-[#805316]">
-                  This policy requires overnight work to be reviewed.
+                  Overnight work requires review.
                 </p>
               )}
             </OverviewPanel>

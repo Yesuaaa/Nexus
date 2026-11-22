@@ -7,7 +7,6 @@ import {
   ModalFooter,
 } from "@/components/ui/modal"
 import { Button } from "@/components/ui/button"
-import { DateInput } from "@/components/ui/date-input"
 import { FormTextarea } from "@/components/ui/form-input"
 import { Alert } from "@/components/ui/alert"
 import { FilterSelect } from "@/components/ui/filter-select"
@@ -17,7 +16,12 @@ import {
   requestAttendanceAdjustment,
   type AttendanceSession,
 } from "../api/attendance-api"
-import { deviceDateTime } from "../model/attendance"
+import {
+  AttendanceDateTimeInput,
+  attendanceDateTimeError,
+  initialAttendanceDateTime,
+  resolveAttendanceDateTime,
+} from "./attendance-date-time-input"
 
 export function AdjustmentDialog({
   session,
@@ -30,11 +34,11 @@ export function AdjustmentDialog({
   onSaved: () => void
   allowOvertime?: boolean
 }) {
-  const [start, setStart] = useState(
-    session ? deviceDateTime(session.startedAt) : "",
+  const [start, setStart] = useState(() =>
+    initialAttendanceDateTime(session?.startedAt),
   )
-  const [end, setEnd] = useState(
-    session?.endedAt ? deviceDateTime(session.endedAt) : "",
+  const [end, setEnd] = useState(() =>
+    initialAttendanceDateTime(session?.endedAt),
   )
   const [reason, setReason] = useState("")
   const [type, setType] = useState<"CORRECTION" | "OVERTIME">("CORRECTION")
@@ -43,6 +47,10 @@ export function AdjustmentDialog({
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const startTime = resolveAttendanceDateTime(start)
+  const endTime = resolveAttendanceDateTime(end)
+  const startLabel = overtime ? "Overtime start" : "Actual clock-in"
+  const endLabel = overtime ? "Overtime end" : "Actual clock-out"
   return (
     <Modal size="md" busy={pending} onClose={onClose}>
       <ModalHeader
@@ -63,6 +71,17 @@ export function AdjustmentDialog({
         onSubmit={async (event) => {
           event.preventDefault()
           if (pending) return
+          if (!startTime.instant || !endTime.instant) {
+            const { label, time } = !startTime.instant
+              ? { label: startLabel, time: startTime }
+              : { label: endLabel, time: endTime }
+            setError(attendanceDateTimeError(label, time, zone))
+            return
+          }
+          if (endTime.instant <= startTime.instant) {
+            setError(`${endLabel} must be after ${startLabel.toLowerCase()}.`)
+            return
+          }
           setPending(true)
           setError("")
           try {
@@ -70,8 +89,8 @@ export function AdjustmentDialog({
               type,
               requestKey,
               ...(session ? { sessionId: session.id } : {}),
-              startedAt: new Date(start).toISOString(),
-              endedAt: new Date(end).toISOString(),
+              startedAt: startTime.instant.toISOString(),
+              endedAt: endTime.instant.toISOString(),
               reason,
             })
             sileo.success({
@@ -101,25 +120,24 @@ export function AdjustmentDialog({
                 }
               />
             )}
-            <label className="grid gap-2 text-xs">
-              {overtime ? "Overtime start" : "Actual clock-in"}
-              <DateInput
-                type="datetime-local"
-                required
-                value={start}
-                onChange={(event) => setStart(event.target.value)}
-              />
-            </label>
-            <label className="grid gap-2 text-xs">
-              {overtime ? "Overtime end" : "Actual clock-out"}
-              <DateInput
-                type="datetime-local"
-                required
-                min={start}
-                value={end}
-                onChange={(event) => setEnd(event.target.value)}
-              />
-            </label>
+            <AttendanceDateTimeInput
+              label={startLabel}
+              field={start}
+              time={startTime}
+              onChange={(field) => {
+                setStart(field)
+                setError("")
+              }}
+            />
+            <AttendanceDateTimeInput
+              label={endLabel}
+              field={end}
+              time={endTime}
+              onChange={(field) => {
+                setEnd(field)
+                setError("")
+              }}
+            />
             <label className="grid gap-2 text-xs">
               Reason
               <FormTextarea

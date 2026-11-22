@@ -20,6 +20,7 @@ import {
   type Field,
 } from "../model/schema"
 import type { AuthMode, AuthPortal } from "../model/types"
+import type { Role } from "../model/roles"
 
 export function AuthContent({
   mode,
@@ -30,7 +31,7 @@ export function AuthContent({
   mode: AuthMode
   portal: AuthPortal
   copy: AuthCopy
-  onLoggedIn: (mode: AuthMode) => void
+  onLoggedIn: (mode: AuthMode, role: Role) => void
 }) {
   const formRef = useRef<HTMLFormElement>(null)
   const submissionInFlight = useRef(false)
@@ -87,16 +88,16 @@ export function AuthContent({
     setPending(true)
     try {
       if (mode === "login") {
-        await signInToPortal(email.trim(), password, portal)
-        onLoggedIn("login")
+        const account = await signInToPortal(email.trim(), password, portal)
+        onLoggedIn("login", account.role)
       } else {
-        await register({
+        const account = await register({
           fullName: fullName.trim(),
           contactNumber: contactNumber.trim(),
           email: email.trim(),
           password,
         })
-        onLoggedIn("register")
+        onLoggedIn("register", account.role)
       }
     } catch (caught) {
       if (caught instanceof PortalAccessError) {

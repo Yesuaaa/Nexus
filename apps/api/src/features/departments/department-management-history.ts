@@ -50,7 +50,7 @@ export async function synchronizeDepartmentEmployee(
       where: { id: userId },
       select: userUpdateSelect,
     }))
-  await syncEmployeeForUser(tx, userId)
+  await syncEmployeeForUser(tx, userId, operation)
   const after = await tx.employee.findUnique({
     where: { userId },
     select: employeeSelect,

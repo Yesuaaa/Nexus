@@ -10,7 +10,7 @@ The ordinary `/api/request-inbox` router calls `requireDepartmentHead` before al
 
 ## Administrative inspection
 
-Service Operations exposes administrative request inspection at `/module/service-operations`. In the Superadmin sidebar, this appears under **Services → Requests**, alongside Overview and Management, using the existing disclosure and collapsed flyout components. Existing selector destinations and ordinary-role navigation remain unchanged. A request uses `?request=<id>` for detail navigation, back navigation and reload.
+Service Operations exposes administrative request inspection at `/module/service-operations`. In the Superadmin sidebar, **Service → Request** appears alongside Overview and Management in both the expanded sidebar and the collapsed flyout. Department heads use their own **Request** group for their department overview and inbox. A request uses `?request=<id>` for detail navigation, back navigation and reload.
 
 Separate GET endpoints `/api/administrative-requests` and `/api/administrative-requests/:id` require authenticated Phase 2A module access and organization-wide read capabilities. They use the current database account, without requiring Staff, Department Head, Employee or project assignments. No mutation endpoints are added.
 

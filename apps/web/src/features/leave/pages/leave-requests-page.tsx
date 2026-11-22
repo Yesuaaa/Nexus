@@ -7,6 +7,8 @@ import { PageHeaderButton } from "@/components/layout/page-header"
 import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { SearchField } from "@/components/ui/search-field"
 import { DateInput } from "@/components/ui/date-input"
+import { Alert } from "@/components/ui/alert"
+import { ApiError } from "@/features/auth/api/auth-api"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import {
   canAccessPersonalAttendance,
@@ -19,6 +21,7 @@ import { sileo } from "@/lib/toast"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import {
   actOnLeave,
+  leaveDetail,
   leaveRequests,
   type LeaveAction,
   type LeaveRequest,
@@ -27,7 +30,8 @@ import { LeaveRequestDialog } from "../components/leave-request-dialog"
 import { LeaveRequestTable } from "../components/leave-request-table"
 import { LeaveReviewPanel } from "../components/leave-review-panel"
 
-export function LeaveRequestsPage() {
+export function LeaveRequestsPage({ linkedId }: { linkedId?: string } = {}) {
+  const [linkedOpen, setLinkedOpen] = useState(true)
   const account = usePortalAccount()
   const manager = canManageAttendance(account)
   const selfService = canAccessPersonalAttendance(account)
@@ -59,37 +63,55 @@ export function LeaveRequestsPage() {
 
   const list = useAsyncResource(
     (signal) =>
-      leaveRequests(
-        effectiveScope,
-        page,
-        settledSearch,
-        type,
-        status,
-        signal,
-        from,
-        to,
-      ),
-    [effectiveScope, page, settledSearch, type, status, from, to],
+      linkedId
+        ? leaveDetail(linkedId, signal).then(({ request }) => ({
+            requests: [request],
+            total: 1,
+            page: 1,
+            pageSize: 1,
+            capabilities: { submit: false },
+          }))
+        : leaveRequests(
+            effectiveScope,
+            page,
+            settledSearch,
+            type,
+            status,
+            signal,
+            from,
+            to,
+          ),
+    [linkedId, effectiveScope, page, settledSearch, type, status, from, to],
     {
       enabled: !searchPending,
       fallbackError: "Couldn't load leave requests.",
     },
   )
   const data = list.error && !searchPending ? undefined : list.data
-  const current = data?.requests.find(
-    (request) => request.id === selection?.request.id,
-  )
+  const current = list.loading
+    ? undefined
+    : data?.requests.find((request) => request.id === selection?.request.id)
+  const selectedRequest =
+    current ??
+    selection?.request ??
+    (linkedOpen && linkedId && !list.error && !list.loading
+      ? data?.requests[0]
+      : undefined)
+  const selectedAction = selection?.action
+  const availableAction =
+    selectedAction && selectedRequest?.capabilities[selectedAction]
+      ? selectedAction
+      : null
 
   async function submitAction(note: string) {
-    const selected = current ?? selection?.request
-    const action = selection?.action
-    if (!selected || !action || pending) return false
+    const action = availableAction
+    if (!selection || !selectedRequest || !action || pending) return false
     setPending(true)
     setActionError("")
     try {
-      await actOnLeave(selected.id, action, {
+      await actOnLeave(selectedRequest.id, action, {
         actionId: selection.actionId,
-        expectedVersion: selected.version,
+        expectedVersion: selectedRequest.version,
         note,
       })
       sileo.success({
@@ -108,6 +130,25 @@ export function LeaveRequestsPage() {
       return true
     } catch (failure) {
       setActionError(errorMessage(failure, "Couldn't update leave request."))
+      if (
+        failure instanceof ApiError &&
+        failure.status === 409 &&
+        failure.message === "Leave request changed; refresh and try again"
+      ) {
+        try {
+          const { request } = await leaveDetail(selectedRequest.id)
+          setSelection({ ...selection, request, action: null })
+          if (linkedId) {
+            list.setData((value) => value && { ...value, requests: [request] })
+          } else {
+            list.retry()
+          }
+        } catch {
+          setSelection(null)
+          setLinkedOpen(false)
+          list.retry()
+        }
+      }
       return false
     } finally {
       setPending(false)
@@ -180,7 +221,7 @@ export function LeaveRequestsPage() {
             options={[
               { value: "", label: "All statuses" },
               { value: "SUBMITTED", label: "Submitted" },
-              { value: "VERIFIED", label: "Awaiting HR" },
+              { value: "VERIFIED", label: "Verified" },
               { value: "APPROVED", label: "Approved" },
               { value: "REJECTED", label: "Rejected" },
               { value: "CANCELLED", label: "Cancelled" },
@@ -218,6 +259,7 @@ export function LeaveRequestsPage() {
         Department Heads verify requests before HR approval. Approved whole-day
         leave reduces attendance requirements for the covered working dates.
       </p>
+      {!selectedRequest && actionError && <Alert>{actionError}</Alert>}
       <LeaveRequestTable
         items={data?.requests ?? []}
         loading={list.loading || searchPending}
@@ -245,13 +287,17 @@ export function LeaveRequestsPage() {
           onSaved={list.retry}
         />
       )}
-      {selection && (
+      {selectedRequest && (
         <LeaveReviewPanel
-          request={current ?? selection.request}
-          action={selection.action}
+          request={selectedRequest}
+          action={availableAction}
           pending={pending}
           error={actionError}
-          onClose={() => setSelection(null)}
+          onClose={() => {
+            setSelection(null)
+            setLinkedOpen(false)
+            setActionError("")
+          }}
           onSubmit={submitAction}
         />
       )}

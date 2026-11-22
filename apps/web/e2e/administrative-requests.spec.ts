@@ -118,16 +118,20 @@ for (const width of [390, 1440]) {
     const menu = page.getByRole("navigation", { name: "Main menu" })
     await expect(
       menu.getByRole("button", { name: "Request", exact: true }),
-    ).toHaveAttribute("aria-expanded", "false")
-    await expect(
-      menu.getByRole("button", { name: "Service", exact: true }),
-    ).toHaveAttribute("aria-expanded", "true")
-    await menu.getByRole("button", { name: "Request", exact: true }).click()
-    await page
-      .getByRole("link", { name: "Request overview", exact: true })
-      .click()
+    ).toHaveCount(0)
+    const service = menu.getByRole("button", { name: "Service", exact: true })
+    await expect(service).toHaveAttribute("aria-expanded", "true")
+    const servicePanelId = await service.getAttribute("aria-controls")
+    const servicePanel = menu.locator(`[id="${servicePanelId}"]`)
+    const requestLink = servicePanel.getByRole("link", {
+      name: "Request overview",
+      exact: true,
+    })
+    await expect(requestLink).toHaveText("Request")
+    await requestLink.click()
     if (width < 768)
       await page.getByRole("button", { name: "Open navigation menu" }).click()
+    await expect(service).toHaveAttribute("aria-expanded", "true")
     await expect(
       menu.getByRole("link", { name: "Request overview", exact: true }),
     ).toHaveAttribute("aria-current", "page")

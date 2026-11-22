@@ -20,6 +20,7 @@ import {
   storeAuthLanguage,
 } from "../content/auth-copy"
 import type { AuthLanguage, AuthMode, AuthPortal } from "../model/types"
+import { landingPathForRole } from "../model/auth-portal"
 
 function subscribeLanguage(onChange: () => void) {
   window.addEventListener("storage", onChange)
@@ -68,9 +69,7 @@ export function AuthPage({
       })
       .then((session) => {
         if (active && session)
-          router.replace(
-            session.user.role === "USER" ? "/dashboard" : "/module",
-          )
+          router.replace(landingPathForRole(session.user.role))
       })
       .catch((reason: unknown) => {
         if (!active) return

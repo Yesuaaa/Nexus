@@ -103,6 +103,8 @@ export type RoutePolicyId =
   | "administrative-workload"
   | "service-operation-logs"
   | "project-management-logs"
+  | "people-hr-logs"
+  | "workforce-compliance-logs"
   | "request-inbox-overview"
   | "request-inbox"
   | "profile"
@@ -190,6 +192,36 @@ export const routePolicies: readonly RoutePolicy[] = [
     navigation: {
       href: "/module/service-operations/logs",
       label: getModuleLogsLabel("service-operations"),
+      location: "system-tool",
+      order: 0,
+    },
+  },
+  {
+    id: "people-hr-logs",
+    match: { kind: "exact", path: "/module/people-hr/logs" },
+    moduleId: "people-hr",
+    canAccess: (account) =>
+      account.role === "SUPERADMIN" &&
+      canAccessAdministrativeModules(account) &&
+      hasPermission(account, Permissions.ORGANIZATION_READ_ALL),
+    navigation: {
+      href: "/module/people-hr/logs",
+      label: getModuleLogsLabel("people-hr"),
+      location: "system-tool",
+      order: 0,
+    },
+  },
+  {
+    id: "workforce-compliance-logs",
+    match: { kind: "exact", path: "/module/attendance-monitoring/logs" },
+    moduleId: "attendance-monitoring",
+    canAccess: (account) =>
+      account.role === "SUPERADMIN" &&
+      canAccessAdministrativeModules(account) &&
+      hasPermission(account, Permissions.ORGANIZATION_READ_ALL),
+    navigation: {
+      href: "/module/attendance-monitoring/logs",
+      label: getModuleLogsLabel("attendance-monitoring"),
       location: "system-tool",
       order: 0,
     },

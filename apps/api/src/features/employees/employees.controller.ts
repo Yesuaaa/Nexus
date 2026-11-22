@@ -214,7 +214,9 @@ employeesRouter.put(
       })
     const operation = createManagementOperation(request.auth!)
     const employee = await getPrisma()!.$transaction((tx) =>
-      updateEmployee(tx, String(request.params.id), parsed.value, operation),
+      updateEmployee(tx, String(request.params.id), parsed.value, {
+        operation,
+      }),
     )
     return response.json({
       employee: withoutEmployeeAccountDetails(employee),

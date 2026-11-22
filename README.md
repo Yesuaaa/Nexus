@@ -26,7 +26,7 @@ copy apps/api/.env.example apps/api/.env
 pnpm dev
 ```
 
-On macOS or Linux, use `cp` instead of `copy`. Open http://localhost:5173. Next.js forwards `/api` to the existing API on port 3001 in development and production. Port 5173 is retained to preserve the backend's existing default origin. The liveness check at `/api/health` works before database setup; `/api/ready` and `/api/db-check` report unavailable until a database is configured and reachable. Optional frontend settings are documented in `apps/web/.env.example`; use `apps/web/.env.local` for local overrides.
+On macOS or Linux, use `cp` instead of `copy`. Open http://localhost:5173. Next.js forwards `/api` to the existing API on port 3001 in development and production. Port 5173 is retained to preserve the backend's existing default origin. `/api/health` checks process liveness, `/api/db-check` checks PostgreSQL connectivity, and `/api/ready` also verifies the required schema and migration history. Optional frontend settings are documented in `apps/web/.env.example`; use `apps/web/.env.local` for local overrides.
 
 In Supabase, open **Connect** and copy the **Transaction pooler** URL into `DATABASE_URL` and the **Direct connection** URL into `DIRECT_URL` in `apps/api/.env`. Add `pgbouncer=true` to the transaction pooler URL if it is absent. For migrations from an IPv4-only network, use the **Session pooler** URL for `DIRECT_URL`. Keep these URLs out of web environment variables.
 
@@ -88,7 +88,7 @@ copy docker.env.example .env
 docker compose up --build -d
 ```
 
-On macOS or Linux, use `cp` instead of `copy`. Open http://localhost:5173. The API is also available at http://localhost:3001. Fill in `DATABASE_URL` in the root `.env` for Supabase access and use `sslmode=verify-full`. The API image trusts the bundled Supabase 2021 root CA in `certs/supabase-root-2021.crt`. Download an updated CA from Supabase Database Settings if Supabase rotates it. The development health check uses liveness and works without `DATABASE_URL`; `/api/ready` reports unavailable until the database is reachable. Do not commit `.env`.
+On macOS or Linux, use `cp` instead of `copy`. Open http://localhost:5173. The API is also available at http://localhost:3001. Fill in `DATABASE_URL` in the root `.env` for Supabase access and use `sslmode=verify-full`. The API image trusts the bundled Supabase 2021 root CA in `certs/supabase-root-2021.crt`. Download an updated CA from Supabase Database Settings if Supabase rotates it. The development health check uses liveness and works without `DATABASE_URL`. Do not commit `.env`.
 
 ```sh
 docker compose ps
@@ -97,7 +97,44 @@ docker compose down
 
 Change `WEB_PORT` or `API_PORT` in `.env` to use other host ports. If you change the browser origin, update `WEB_ORIGIN`. Source edits reload automatically; dependency changes require `docker compose up --build -d`. The web image includes the shared module registry from `apps/api/src/features/modules/module-registry.json`; development mounts that file read-only so registration edits also reload. After Dockerfile or mount changes, recreate the web service with `docker compose up --build -d --no-deps web`. Run Prisma migrations using `pnpm db:migrate --name <name>` from the host with `apps/api/.env` configured.
 
-The production Next.js standalone server is available with `docker compose -f compose.prod.yaml up --build -d` at http://localhost:8080. Set a valid `DATABASE_URL` before starting it; production Compose requires that value and the API also validates its PostgreSQL URL at startup. Its health check uses `/api/ready`, so the API is healthy only after the database responds. Stop the development containers first with `docker compose down`. The web image includes the standalone server, public assets, and generated static assets. The production runtime API image does not include Prisma CLI tooling. The API drains requests for up to 12 seconds on SIGTERM or SIGINT, with a 20-second container stop allowance.
+### Production release with Docker Compose
+
+Use `compose.prod.yaml` on the deployment host. Set `JWT_SECRET`, `PROD_WEB_ORIGIN` to the public site origin, and `DATABASE_URL` to the writable runtime database in the `public` schema. Set `DIRECT_URL` to a direct or session-pooled connection with migration privileges on the same database. You may omit `DIRECT_URL` when the runtime URL itself is a direct connection with migration privileges. Apply verified TLS settings on both connections. Keep the URLs in the server-side secret store.
+
+The runtime role needs its application grants and `SELECT` on `public._prisma_migrations`. If this is the first release with separate roles, arrange those grants before startup. If the migration job creates the ledger and its postflight reports missing access, verify the completed migration state, grant `SELECT` on the ledger to the runtime role, and rerun the job while ingress is paused.
+
+1. Confirm the intended PostgreSQL project, database and backup before releasing. Connect with each URL in a restricted operator shell and check `current_database()`, `current_schema()` and `current_user`. The migration job compares both connections against the same writable PostgreSQL instance and database. Run only one release job per target database at a time.
+2. Build all three images from the same release revision while the current stack is still serving. Stop any development stack sharing the ports. Put external ingress in maintenance mode and stop and drain the existing production web and API, including replicas outside this Compose project. Keep traffic paused across schema changes.
+
+   ```sh
+   docker compose -f compose.prod.yaml build
+   docker compose -f compose.prod.yaml stop web api
+   ```
+
+3. Remove the previous stopped migration job and start the release. Compose runs one `migrate` service with `prisma migrate deploy` and Prisma's PostgreSQL advisory lock. The API starts after the job exits successfully, and web starts after API health passes. `--wait` makes the command fail if startup fails or the deadline expires. If the job is still running at the deadline, check its state before retrying and keep ingress paused.
+
+   ```sh
+   docker compose -f compose.prod.yaml rm -f migrate
+   docker compose -f compose.prod.yaml up -d --no-build --wait --wait-timeout 120
+   docker compose -f compose.prod.yaml ps -a
+   ```
+
+4. Check that `migrate` exited `0` and every API replica is healthy. Check `/api/ready` through the web origin and run the release smoke checks before resuming ingress. The web listener defaults to port `8080`. The production API returns `503` on application routes when its schema or migration ledger is incompatible, including after a restart. The API drains requests for up to 12 seconds on SIGTERM or SIGINT, with a 20-second container stop allowance.
+
+### Migration failure and recovery
+
+Keep ingress paused and web/API stopped if the migration job exits nonzero. Use `docker compose -f compose.prod.yaml logs migrate` to identify the failed stage and any reported Prisma error code. In a restricted operator session, use the same release checkout and verified `DIRECT_URL` with `pnpm --filter @nexus/api exec prisma migrate status`. If the ledger exists, inspect the unresolved entries for the affected database:
+
+```sql
+SELECT migration_name, started_at, applied_steps_count
+FROM public._prisma_migrations
+WHERE finished_at IS NULL AND rolled_back_at IS NULL
+ORDER BY started_at;
+```
+
+Confirm the job is no longer running and inspect the failed migration's actual database effects, including any partial DDL or data changes. Review row and schema evidence, the migration source and any ledger diagnostics in the restricted session. After the verified effects have been safely undone, an authorized operator can record the attempt with `prisma migrate resolve --rolled-back <migration_name>`. Use `prisma migrate resolve --applied <migration_name>` only after independently verifying that all intended effects are already present. Keep migration files and history intact. Run pending migrations and API/web verification using the release steps above. An already completed job can be rerun safely against the same compatible release.
+
+To stop a failed rollout, keep ingress paused and stop the new web/API. Reopen traffic on a previous release only after confirming its schema and migration history match the database it will use. If committed DDL or data changes make that database incompatible, use a reviewed forward fix or recover a matching database from a verified backup under the recovery plan. Rehearse restore and verify data and readiness before routing traffic to the recovered stack.
 
 ## Separate deployment
 
@@ -112,7 +149,7 @@ Deploy `apps/web` to a Next.js-compatible Node.js host or Vercel with the reposi
 
 Set the server-only `API_PROXY_TARGET` before building to the Express API origin, such as `https://api.example.com`. Rewrites are resolved at build time, so rebuild when this target changes. Docker builds default to `http://api:3001` through a build argument of the same name. Leave `NEXT_PUBLIC_API_URL` empty to use same-origin `/api` calls, or set it at build time to a public API origin for direct browser requests. Direct requests require `WEB_ORIGIN` on the API to match the frontend's origin. Existing local `VITE_API_URL` settings must be renamed to `NEXT_PUBLIC_API_URL`.
 
-Deploy `apps/api` to a Node.js host with its production dependencies, built `dist`, and a valid `DATABASE_URL` or `DIRECT_URL`. Production startup rejects a missing or invalid PostgreSQL connection URL. Set `WEB_ORIGIN` to the web app's public origin, then run `pnpm --filter @nexus/api start`. Set `DIRECT_URL` in the environment used to run Prisma migrations. Database credentials belong only in the API environment; never put them in a `NEXT_PUBLIC_` variable.
+Deploy `apps/api` to a Node.js host with its production dependencies, built `dist`, the matching `prisma/migrations` directory, and `DATABASE_URL`. Set `NODE_ENV=production` and `WEB_ORIGIN` to the web app's public origin. Use the same gated release order as above. Drain old traffic, then run `pnpm --filter @nexus/api exec node scripts/deploy-migrations.mjs` once from the built release checkout with Prisma CLI installed and both database URLs set as described above. After the job succeeds, start the API with `pnpm --filter @nexus/api start` and wait for `/api/ready` before enabling traffic. Keep database credentials out of `NEXT_PUBLIC_` variables.
 
 ## Commands
 

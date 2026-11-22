@@ -384,6 +384,7 @@ test(
         const diagnosticBody = JSON.parse(diagnosticText) as {
           events: {
             message: string
+            summaryDetail: string | null
             failureCode: string
             failureReason: string
             target: { id: string; type: string; label: string }
@@ -393,6 +394,10 @@ test(
         assert.equal(
           diagnosticBody.events[0]?.message,
           "Failed while changing a service offering's availability for “Log service” because the activity log could not be saved and the requested change was rolled back.",
+        )
+        assert.equal(
+          diagnosticBody.events[0]?.summaryDetail,
+          "Attempted change · Availability · Available → Unavailable",
         )
         assert.equal(
           diagnosticBody.events[0]?.failureCode,
@@ -450,7 +455,9 @@ test(
       const body = JSON.parse(text) as {
         events: {
           requestId: string
+          event: string
           message: string
+          summaryDetail: string | null
           actor: { name: string; attribution: string }
         }[]
         total: number
@@ -459,6 +466,11 @@ test(
       assert.ok(body.events.every((row) => row.requestId === requestId))
       assert.ok(body.events.every((row) => row.message.endsWith(".")))
       assert.ok(body.events.every((row) => row.actor.name.length > 1))
+      assert.equal(
+        body.events.find(({ event }) => event === "REQUEST_ACCEPTED")
+          ?.summaryDetail,
+        "Status · Submitted → Under Review",
+      )
 
       const catalog = await call(
         "/service-operation-logs?search=availability&outcome=SUCCESS",
@@ -498,8 +510,12 @@ test(
         `/service-operation-logs?correlationId=${legacy.correlationId}`,
       )
       const legacyBody = (await legacyResponse.json()) as {
-        events: { actor: { name: string; attribution: string } }[]
+        events: {
+          actor: { name: string; attribution: string }
+          summaryDetail: string | null
+        }[]
       }
+      assert.equal(legacyBody.events[0]?.summaryDetail, null)
       assert.deepEqual(legacyBody.events[0]?.actor, {
         id: admin.user.id,
         name: "Renamed Admin",

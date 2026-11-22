@@ -40,6 +40,8 @@ Project Management logs (2026-11-18) provide the Superadmin-only viewer at `/mod
 
 The sidebar's **System Tool** section shows the log link for the active workspace. **Service Logs** and **Project Logs** each open the history of their own module.
 
+Superadmin opens the organization-wide request overview through **Service → Request**. Department heads use the **Request** group's **Overview** and **Inbox** for their own department.
+
 Implemented: catalog/pricing/packages, public active-service discovery at `/api/services/available`, client requests/booked services, Head inbox, conversation-centered requirements/consultation/quotation/agreement/payment workflow, project workspaces/milestones/deliverables/review/change requests, workload, and administrative oversight.
 
 Start with `apps/api/src/app.ts` and mounted controllers in `services`, `client-services`, `service-requests`, `request-inbox`, `request-workflow`, `projects`, `project-workspace`, `workload`, and conversation features. Trace corresponding web features/route entry points and API/PGlite/browser tests.
@@ -52,6 +54,16 @@ Start with `apps/api/src/app.ts` and mounted controllers in `services`, `client-
 Read records under `docs/features/`: `client-service-requests.md`, `department-request-inbox.md`, `conversation-workflow.md`, `request-messaging.md`, `staff-workload.md`, `messaging-privacy-validation.md`, and applicable `superadmin-project-*`, `superadmin-service-request-visibility.md`, `superadmin-workflow-oversight.md`, `superadmin-workload-oversight.md`, `superadmin-messaging-oversight.md`. Old phase limits describe those tasks, not future product boundaries.
 
 ## Attendance and calendar
+
+Department placement writes reuse the authenticated management operation in the transaction-local attendance audit context. The transfer trigger groups the department ID change with any verification resets for active correction and overtime reviews. See `docs/features/workforce-compliance-logs.md`.
+
+Workforce Logs text search keeps the original ordered group membership in short-lived, session-bound paging windows. Each response resolves current display names. See the Workforce Logs contract for window limits and refresh behavior.
+
+Workforce Logs text search accepts literal area codes and their spaced names, including `time-logs` and `Time Logs`.
+
+Workforce Logs projects suspension time and distinguishes manager reconciliation from employee clock-out using the recorded session transitions and authenticated audit context. Correction decisions continue to describe their grouped writes.
+
+Attendance policies support flexible weekly targets and fixed shifts. Fixed targets use scheduled duration minus scheduled unpaid breaks. PostgreSQL resolves and snapshots shift boundaries, and attendance details compare them against recorded punches. Leave and workload continue consuming the existing required-minute targets. See migration `20261122120000_attendance_fixed_schedule` and `docs/features/attendance-interface.md`.
 
 Implemented: attendance policies/assignments, workdays/sessions/breaks, adjustments/review/audit, whole-day leave requests, attendance web screens, and role-aware calendar composition. Sources: API `src/features/attendance` and `src/features/leave`, web `src/features/attendance`, `leave`, and `calendar`. Trace calendar API composition before assuming a dedicated backend calendar router.
 

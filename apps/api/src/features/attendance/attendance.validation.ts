@@ -1,10 +1,24 @@
+import type { AttendanceScheduleMode } from "../../generated/prisma/client.js"
+import { isPlainObject } from "../../shared/validation.js"
+
+const minutesPerDay = 1440
+
 /** Date attribution uses the policy zone, never the browser or server zone. */
-export function attendanceWorkDate(startedAt: Date, timeZone: string): string {
+export function attendanceWorkDate(
+  startedAt: Date,
+  timeZone: string,
+  formatters?: Map<string, Intl.DateTimeFormat>,
+): string {
   if (!Number.isFinite(startedAt.getTime()))
     throw new RangeError("Invalid timestamp")
-  return new Intl.DateTimeFormat("sv-SE", {
-    timeZone: attendanceTimeZone(timeZone),
-  }).format(startedAt)
+  let formatter = formatters?.get(timeZone)
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("sv-SE", {
+      timeZone: attendanceTimeZone(timeZone),
+    })
+    formatters?.set(timeZone, formatter)
+  }
+  return formatter.format(startedAt)
 }
 
 export function attendanceTimeZone(value: unknown): string {
@@ -44,22 +58,32 @@ export type AttendancePolicyDayInput = {
   weekday: number
   isWorkingDay: boolean
   requiredMinutes: number
+  scheduledStartMinute: number | null
+  scheduledEndMinute: number | null
+  scheduledUnpaidBreakMinutes: number | null
+}
+
+function isScheduledMinute(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value < minutesPerDay
+  )
 }
 
 /** Explicit seven-day configuration avoids inventing a default working week. */
 export function attendancePolicyDays(
   value: unknown,
+  scheduleMode: AttendanceScheduleMode = "FLEXIBLE",
+  unpaidBreaksEnabled = true,
 ): AttendancePolicyDayInput[] {
   if (!Array.isArray(value) || value.length !== 7)
     throw new RangeError("Configure all seven weekdays")
   const seen = new Set<number>()
-  return value.map((day: unknown) => {
+  const days = value.map((day: unknown): AttendancePolicyDayInput => {
     if (
-      !day ||
-      typeof day !== "object" ||
-      !("weekday" in day) ||
-      !("requiredMinutes" in day) ||
-      !("isWorkingDay" in day) ||
+      !isPlainObject(day) ||
       typeof day.weekday !== "number" ||
       !Number.isInteger(day.weekday) ||
       day.weekday < 0 ||
@@ -70,16 +94,73 @@ export function attendancePolicyDays(
       throw new RangeError(
         "Provide unique weekdays from 0 through 6 and working-day flags",
       )
-    const requiredMinutes = requiredAttendanceMinutes(day.requiredMinutes)
-    if (!day.isWorkingDay && requiredMinutes !== 0)
-      throw new RangeError("A rest day must have zero required minutes")
     seen.add(day.weekday)
+    const { weekday, isWorkingDay } = day
+    const start = day.scheduledStartMinute
+    const end = day.scheduledEndMinute
+    const unpaidBreak = day.scheduledUnpaidBreakMinutes
+    if (scheduleMode === "FIXED" && day.requiredMinutes !== undefined)
+      throw new RangeError(
+        "Required minutes are calculated from the fixed schedule",
+      )
+    if (scheduleMode === "FIXED" && isWorkingDay) {
+      if (!isScheduledMinute(start) || !isScheduledMinute(end) || start === end)
+        throw new RangeError(
+          "Choose different start and end times for each working day",
+        )
+      const breakMinutes = requiredAttendanceMinutes(unpaidBreak ?? 0)
+      if (!unpaidBreaksEnabled && breakMinutes > 0)
+        throw new RangeError(
+          "Enable unpaid breaks to schedule unpaid break minutes",
+        )
+      const shiftMinutes = (end - start + minutesPerDay) % minutesPerDay
+      if (breakMinutes >= shiftMinutes)
+        throw new RangeError(
+          "Scheduled unpaid breaks must be shorter than the shift",
+        )
+      return {
+        weekday,
+        isWorkingDay,
+        requiredMinutes: shiftMinutes - breakMinutes,
+        scheduledStartMinute: start,
+        scheduledEndMinute: end,
+        scheduledUnpaidBreakMinutes: breakMinutes,
+      }
+    }
+    if ([start, end, unpaidBreak].some((part) => part != null))
+      throw new RangeError("Only fixed working days can have a shift schedule")
+    const requiredMinutes =
+      scheduleMode === "FLEXIBLE"
+        ? requiredAttendanceMinutes(day.requiredMinutes)
+        : 0
+    if (!isWorkingDay && requiredMinutes !== 0)
+      throw new RangeError("A rest day must have zero required minutes")
     return {
-      weekday: day.weekday,
-      isWorkingDay: day.isWorkingDay,
+      weekday,
+      isWorkingDay,
       requiredMinutes,
+      scheduledStartMinute: null,
+      scheduledEndMinute: null,
+      scheduledUnpaidBreakMinutes: null,
     }
   })
+  const ordered = days.sort((left, right) => left.weekday - right.weekday)
+  for (const day of ordered) {
+    const start = day.scheduledStartMinute
+    const end = day.scheduledEndMinute
+    const nextStart = ordered[(day.weekday + 1) % 7].scheduledStartMinute
+    if (
+      start !== null &&
+      end !== null &&
+      end < start &&
+      nextStart !== null &&
+      end > nextStart
+    )
+      throw new RangeError(
+        "An overnight shift cannot overlap the next day's shift",
+      )
+  }
+  return ordered
 }
 
 export function requiredAttendanceMinutes(value: unknown): number {

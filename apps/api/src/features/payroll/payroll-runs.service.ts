@@ -1211,6 +1211,7 @@ export const payrollRunsService = {
               },
               attendanceAssignments: {
                 where: {
+                  cancelledAt: null,
                   effectiveFrom: { lte: run.period.endDate },
                   OR: [
                     { effectiveUntil: null },

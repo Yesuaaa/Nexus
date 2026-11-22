@@ -16,6 +16,7 @@ import {
 } from "./audit-context.js"
 import {
   describeServiceLog,
+  describeServiceLogDetail,
   matchingDescriptionCodes,
 } from "./log-descriptions.js"
 
@@ -223,6 +224,7 @@ serviceLogsRouter.get("/", async (req, res) => {
       )
       return {
         events: events.map(({ actorName, ...event }) => {
+          const changes = readServiceLogChanges(event.changes)
           const currentName = event.actorId
             ? currentNames.get(event.actorId)
             : undefined
@@ -251,7 +253,11 @@ serviceLogsRouter.get("/", async (req, res) => {
                   : null),
               label: event.targetLabel,
             },
-            changes: readServiceLogChanges(event.changes),
+            changes,
+            summaryDetail: describeServiceLogDetail(
+              changes,
+              event.outcome === "FAILURE",
+            ),
             message: describeServiceLog(
               event.event,
               event.action,

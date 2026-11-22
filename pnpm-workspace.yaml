@@ -1,10 +1,12 @@
 packages:
   - apps/*
 
-# Remove once typescript-estree can use a picomatch release that fixes GHSA-fc5q-39xc-vjpf.
 overrides:
-  # Prisma's config dependency otherwise resolves a release affected by GHSA-7589-6fvf-x4pw.
-  "@prisma/config>effect": ^3.22.1
+  # Remove when Prisma configuration uses a patched Effect release.
+  "@prisma/config>effect": "3.22.1"
+  # Keep glob consumers on a release that fixes GHSA-g3hv-75wg-m249.
+  "minimatch@>=7.0.0 <11.0.1": "11.0.9"
+  # Remove once typescript-estree can use a picomatch release that fixes GHSA-fc5q-39xc-vjpf.
   "@typescript-eslint/typescript-estree@8.72.0>tinyglobby": "-"
 
 packageExtensions:

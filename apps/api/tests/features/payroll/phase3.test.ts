@@ -1129,6 +1129,20 @@ test(
           changeReason: "Attendance integration compensation",
         },
       })
+      if (name === "Daily complete") {
+        const cancelledAssignment =
+          await prisma.attendancePolicyAssignment.create({
+            data: {
+              employeeId: employee.id,
+              policyId: overnightReviewPolicy.id,
+              effectiveFrom: new Date("2026-11-02"),
+            },
+          })
+        await prisma.attendancePolicyAssignment.update({
+          where: { id: cancelledAssignment.id },
+          data: { cancelledAt: new Date("2026-10-31T01:00:00Z") },
+        })
+      }
       await prisma.attendancePolicyAssignment.create({
         data: {
           employeeId: employee.id,
