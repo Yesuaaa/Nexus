@@ -104,17 +104,31 @@ export function AttendanceSettingsPage() {
   } | null>(null)
   const query = search.trim().toLowerCase()
   const policies = usePaginatedList({
-    params: {search: query, archivedView},
-    load: ({page, signal}) => attendancePolicyPage(page, signal, archivedView ? "archived" : "active", query, 10),
-    rows: result => result.policies,
-    matches: (policy, term) => `${policy.name} ${policy.timeZone}`.toLowerCase().includes(term.toLowerCase()),
+    params: { search: query, archivedView },
+    load: ({ page, signal }) =>
+      attendancePolicyPage(
+        page,
+        signal,
+        archivedView ? "archived" : "active",
+        query,
+        10,
+      ),
+    rows: (result) => result.policies,
+    matches: (policy, term) =>
+      `${policy.name} ${policy.timeZone}`
+        .toLowerCase()
+        .includes(term.toLowerCase()),
     initial: null,
     fallbackError: "Couldn't load attendance policies.",
   })
-  const choices = useAsyncResource(signal => attendancePolicies(signal, "active"), [panel?.mode], {
-    enabled: panel?.mode === "assign",
-    fallbackError: "Couldn't load policies for assignment.",
-  })
+  const choices = useAsyncResource(
+    (signal) => attendancePolicies(signal, "active"),
+    [panel?.mode],
+    {
+      enabled: panel?.mode === "assign",
+      fallbackError: "Couldn't load policies for assignment.",
+    },
+  )
   function switchView(nextArchivedView: boolean) {
     if (nextArchivedView === archivedView) return
     policies.setPage(1)
@@ -170,7 +184,10 @@ export function AttendanceSettingsPage() {
           placeholder="Search policies or timezone…"
           value={search}
           maxLength={100}
-          onChange={(event) => { setSearch(event.target.value); policies.setPage(1) }}
+          onChange={(event) => {
+            setSearch(event.target.value)
+            policies.setPage(1)
+          }}
         />
         <ManagementViewToggle
           active={archivedView}

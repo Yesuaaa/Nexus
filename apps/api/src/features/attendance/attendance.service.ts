@@ -142,13 +142,43 @@ async function overnightContinuation(
   return crossedMidnight ? { id: day.id, workDate } : null
 }
 
-async function clockInBlock(tx: Prisma.TransactionClient, employee: { id: string; status: string }, latest: LatestSession, now: Date, workDate: string | undefined) {
-  if (employee.status !== "ACTIVE") return { status: 403, reason: "Only active employees can clock in" }
-  if (latest && !latest.endedAt) return { status: 409, reason: "You already have an active attendance session" }
-  if (!workDate) return { status: 409, reason: "No attendance policy is assigned for this workday" }
-  if (latest?.endedAt && latest.endedAt > now) return { status: 409, reason: "Clock-in must follow your previous session" }
-  if (await approvedLeaveForDate(tx, employee.id, workDate)) return { status: 409, reason: "Approved leave covers this workday" }
-  if ((await approvedLeaveOverlappingInterval(tx, employee.id, now, new Date(now.getTime() + 1))).length) return { status: 409, reason: "Approved leave covers the current local date" }
+async function clockInBlock(
+  tx: Prisma.TransactionClient,
+  employee: { id: string; status: string },
+  latest: LatestSession,
+  now: Date,
+  workDate: string | undefined,
+) {
+  if (employee.status !== "ACTIVE")
+    return { status: 403, reason: "Only active employees can clock in" }
+  if (latest && !latest.endedAt)
+    return {
+      status: 409,
+      reason: "You already have an active attendance session",
+    }
+  if (!workDate)
+    return {
+      status: 409,
+      reason: "No attendance policy is assigned for this workday",
+    }
+  if (latest?.endedAt && latest.endedAt > now)
+    return { status: 409, reason: "Clock-in must follow your previous session" }
+  if (await approvedLeaveForDate(tx, employee.id, workDate))
+    return { status: 409, reason: "Approved leave covers this workday" }
+  if (
+    (
+      await approvedLeaveOverlappingInterval(
+        tx,
+        employee.id,
+        now,
+        new Date(now.getTime() + 1),
+      )
+    ).length
+  )
+    return {
+      status: 409,
+      reason: "Approved leave covers the current local date",
+    }
   return null
 }
 
@@ -189,64 +219,62 @@ async function workdayResponse(
   }
 }
 
-async function closeRecordedSession(tx:Prisma.TransactionClient,employeeId:string,requesterId:string|null,session:NonNullable<Awaited<ReturnType<typeof repository.session>>>,now:Date){
- const activeBreak=session.breaks.find(pause=>pause.endedAt===null)
-            const conflicts = await approvedLeaveOverlappingInterval(
-              tx,
-              employeeId,
-              session.startedAt,
-              now,
-            )
-            if (conflicts.length) {
-              await tx.$executeRaw`SELECT set_config('app.attendance_reason', concat_ws(' ? ',nullif(current_setting('app.attendance_reason',true),''),'Clock-out recovery crossed approved leave; HR reconciliation required'), true)`
-              const reviewers = await tx.user.findMany({
-                where: {
-                  isActive: true,
-                  accountDeletedAt: null,
-                  role: { in: ["ADMIN", "SUPERADMIN"] },
-                },
-                select: { id: true },
-              })
-              await tx.workflowNotification.createMany({
-                data: [
-                  ...new Set(conflicts.map((day) => day.requestId)),
-                ].flatMap((leaveRequestId) =>
-                  reviewers.map(({ id }) => ({
-                    userId: id,
-                    leaveRequestId,
-                    type: "LEAVE_ATTENDANCE_CONFLICT",
-                    summary:
-                      "Recorded attendance crosses approved leave. HR reconciliation is required.",
-                  })),
-                ),
-                skipDuplicates: true,
-              })
-            }
-            if (
-              now <= session.startedAt ||
-              (activeBreak && now <= activeBreak.startedAt) ||
-              session.breaks.some(
-                (pause) => pause.endedAt && pause.endedAt > now,
-              )
-            )
-              fail(409, "Clock-out must follow the session and its breaks")
-            if (activeBreak) {
-              await tx.attendanceBreak.update({
-                where: { id: activeBreak.id },
-                data: { endedAt: now },
-              })
-            }
-            await tx.attendanceWorkSession.update({
-              where: { id: session.id },
-              data: { endedAt: now },
-            })
-            if(requesterId) await submitRecordedOvertime(
-              tx,
-              requesterId,
-              employeeId,
-              session.id,
-              now,
-            )
+async function closeRecordedSession(
+  tx: Prisma.TransactionClient,
+  employeeId: string,
+  requesterId: string | null,
+  session: NonNullable<Awaited<ReturnType<typeof repository.session>>>,
+  now: Date,
+) {
+  const activeBreak = session.breaks.find((pause) => pause.endedAt === null)
+  const conflicts = await approvedLeaveOverlappingInterval(
+    tx,
+    employeeId,
+    session.startedAt,
+    now,
+  )
+  if (conflicts.length) {
+    await tx.$executeRaw`SELECT set_config('app.attendance_reason', concat_ws(' ? ',nullif(current_setting('app.attendance_reason',true),''),'Clock-out recovery crossed approved leave; HR reconciliation required'), true)`
+    const reviewers = await tx.user.findMany({
+      where: {
+        isActive: true,
+        accountDeletedAt: null,
+        role: { in: ["ADMIN", "SUPERADMIN"] },
+      },
+      select: { id: true },
+    })
+    await tx.workflowNotification.createMany({
+      data: [...new Set(conflicts.map((day) => day.requestId))].flatMap(
+        (leaveRequestId) =>
+          reviewers.map(({ id }) => ({
+            userId: id,
+            leaveRequestId,
+            type: "LEAVE_ATTENDANCE_CONFLICT",
+            summary:
+              "Recorded attendance crosses approved leave. HR reconciliation is required.",
+          })),
+      ),
+      skipDuplicates: true,
+    })
+  }
+  if (
+    now <= session.startedAt ||
+    (activeBreak && now <= activeBreak.startedAt) ||
+    session.breaks.some((pause) => pause.endedAt && pause.endedAt > now)
+  )
+    fail(409, "Clock-out must follow the session and its breaks")
+  if (activeBreak) {
+    await tx.attendanceBreak.update({
+      where: { id: activeBreak.id },
+      data: { endedAt: now },
+    })
+  }
+  await tx.attendanceWorkSession.update({
+    where: { id: session.id },
+    data: { endedAt: now },
+  })
+  if (requesterId)
+    await submitRecordedOvertime(tx, requesterId, employeeId, session.id, now)
 }
 
 export function createAttendanceService(clock: Clock = () => new Date()) {
@@ -337,7 +365,13 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
                   "Choose today's workday or your latest overnight continuation",
                 )
             }
-            const blocked = await clockInBlock(tx, employee, latest, now, selectedWorkDate)
+            const blocked = await clockInBlock(
+              tx,
+              employee,
+              latest,
+              now,
+              selectedWorkDate,
+            )
             if (blocked) fail(blocked.status, blocked.reason)
             const session = await tx.attendanceWorkSession.create({
               data: {
@@ -355,12 +389,13 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
           if (!session) fail(404, "Attendance session not found")
           if (session.endedAt)
             fail(409, "This attendance session has already ended")
-          if(session.suspendedAt)fail(409,"HR must reconcile this suspended shift in Time Logs")
+          if (session.suspendedAt)
+            fail(409, "HR must reconcile this suspended shift in Time Logs")
           const activeBreak = session.breaks.find(
             (pause) => pause.endedAt === null,
           )
           if (action === "clock-out") {
-            await closeRecordedSession(tx,employee.id,userId,session,now)
+            await closeRecordedSession(tx, employee.id, userId, session, now)
           } else if (action === "break-start") {
             const workday = await tx.attendanceWorkday.findUniqueOrThrow({
               where: { id: session.workdayId },
@@ -410,12 +445,36 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
           const now = serverTime(clock)
           const latest = await repository.latestSession(tx, employee.id)
           if (latest && !latest.endedAt)
-            return { ...await workdayResponse(tx, employee.id, latest.workdayId, now), clockInBlockedReason: "You already have an active attendance session", continuation: null }
+            return {
+              ...(await workdayResponse(
+                tx,
+                employee.id,
+                latest.workdayId,
+                now,
+              )),
+              clockInBlockedReason:
+                "You already have an active attendance session",
+              continuation: null,
+            }
           const policy = await policyAt(tx, employee.id, now)
-          const blocked = await clockInBlock(tx, employee, latest, now, policy?.workDate)
+          const blocked = await clockInBlock(
+            tx,
+            employee,
+            latest,
+            now,
+            policy?.workDate,
+          )
           const previous = await overnightContinuation(tx, latest, now)
-          const continuation = previous && previous.workDate !== policy?.workDate && !await clockInBlock(tx, employee, latest, now, previous.workDate) ? previous : null
-          const eligibility = { clockInBlockedReason: blocked?.reason ?? null, continuation }
+          const continuation =
+            previous &&
+            previous.workDate !== policy?.workDate &&
+            !(await clockInBlock(tx, employee, latest, now, previous.workDate))
+              ? previous
+              : null
+          const eligibility = {
+            clockInBlockedReason: blocked?.reason ?? null,
+            continuation,
+          }
           if (!policy)
             return {
               ...eligibility,
@@ -434,7 +493,10 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
             include: attendanceWorkdayInclude,
           })
           if (existing)
-            return { ...await workdayResponse(tx, employee.id, existing.id, now), ...eligibility }
+            return {
+              ...(await workdayResponse(tx, employee.id, existing.id, now)),
+              ...eligibility,
+            }
           const workDate = new Date(`${policy.workDate}T00:00:00Z`)
           const rule = policy.assignment.policy.days.find(
             (day) => day.weekday === workDate.getUTCDay(),

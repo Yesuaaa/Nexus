@@ -239,11 +239,17 @@ test(
       data: { name: "New policy during browsing", timeZone: "Asia/Manila" },
     })
     // This row becomes visible after page one with a timestamp inside its window.
-    await prisma.attendanceAudit.create({ data: {
-      actionId: randomUUID(), entityId: "backdated", entityType: "AttendancePolicy", action: "INSERT",
-      reason: "Historical import", after: { name: "Historical import" },
-      createdAt: new Date(Date.parse(firstRecent.asOf) - 100),
-    } })
+    await prisma.attendanceAudit.create({
+      data: {
+        actionId: randomUUID(),
+        entityId: "backdated",
+        entityType: "AttendancePolicy",
+        action: "INSERT",
+        reason: "Historical import",
+        after: { name: "Historical import" },
+        createdAt: new Date(Date.parse(firstRecent.asOf) - 100),
+      },
+    })
     const next = await read(
       `?source=policies&range=24h&page=2&asOf=${encodeURIComponent(firstRecent.asOf)}&snapshot=${encodeURIComponent(firstRecent.snapshot)}`,
     )

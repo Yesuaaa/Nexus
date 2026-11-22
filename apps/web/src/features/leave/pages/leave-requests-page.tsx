@@ -30,8 +30,8 @@ import { LeaveRequestDialog } from "../components/leave-request-dialog"
 import { LeaveRequestTable } from "../components/leave-request-table"
 import { LeaveReviewPanel } from "../components/leave-review-panel"
 
-export function LeaveRequestsPage({linkedId}:{linkedId?:string} = {}) {
- const [linkedOpen,setLinkedOpen]=useState(true)
+export function LeaveRequestsPage({ linkedId }: { linkedId?: string } = {}) {
+  const [linkedOpen, setLinkedOpen] = useState(true)
   const account = usePortalAccount()
   const manager = canManageAttendance(account)
   const selfService = canAccessPersonalAttendance(account)
@@ -63,17 +63,25 @@ export function LeaveRequestsPage({linkedId}:{linkedId?:string} = {}) {
 
   const list = useAsyncResource(
     (signal) =>
-      linkedId ? leaveDetail(linkedId,signal).then(({request})=>({requests:[request],total:1,page:1,pageSize:1,capabilities:{submit:false}})) : leaveRequests(
-        effectiveScope,
-        page,
-        settledSearch,
-        type,
-        status,
-        signal,
-        from,
-        to,
-      ),
-    [linkedId,effectiveScope, page, settledSearch, type, status, from, to],
+      linkedId
+        ? leaveDetail(linkedId, signal).then(({ request }) => ({
+            requests: [request],
+            total: 1,
+            page: 1,
+            pageSize: 1,
+            capabilities: { submit: false },
+          }))
+        : leaveRequests(
+            effectiveScope,
+            page,
+            settledSearch,
+            type,
+            status,
+            signal,
+            from,
+            to,
+          ),
+    [linkedId, effectiveScope, page, settledSearch, type, status, from, to],
     {
       enabled: !searchPending,
       fallbackError: "Couldn't load leave requests.",
@@ -83,7 +91,12 @@ export function LeaveRequestsPage({linkedId}:{linkedId?:string} = {}) {
   const current = list.loading
     ? undefined
     : data?.requests.find((request) => request.id === selection?.request.id)
-  const selectedRequest = current ?? selection?.request ?? (linkedOpen && linkedId && !list.error && !list.loading ? data?.requests[0]:undefined)
+  const selectedRequest =
+    current ??
+    selection?.request ??
+    (linkedOpen && linkedId && !list.error && !list.loading
+      ? data?.requests[0]
+      : undefined)
   const selectedAction = selection?.action
   const availableAction =
     selectedAction && selectedRequest?.capabilities[selectedAction]

@@ -1,4 +1,7 @@
-import type { AttendanceSession, AttendanceWorkday } from "../api/attendance-api"
+import type {
+  AttendanceSession,
+  AttendanceWorkday,
+} from "../api/attendance-api"
 import type { PillTone } from "@/components/ui/pill"
 export { formatDateTime as attendanceDate } from "../../../lib/format.ts"
 
@@ -63,7 +66,9 @@ export function elapsedWork(day: AttendanceWorkday, asOf: number): number {
   return day.sessions.reduce((total, session) => {
     const start = Date.parse(session.startedAt)
     const end = Math.min(
-      session.endedAt || session.suspendedAt ? Date.parse((session.endedAt ?? session.suspendedAt)!) : asOf,
+      session.endedAt || session.suspendedAt
+        ? Date.parse((session.endedAt ?? session.suspendedAt)!)
+        : asOf,
       asOf,
     )
     if (end <= start) return total

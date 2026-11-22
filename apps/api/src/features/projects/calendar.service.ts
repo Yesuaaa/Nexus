@@ -34,7 +34,11 @@ export type CalendarEvent = {
   endDateExclusive?: string
 }
 
-export async function listInternalCalendar(userId: string, scope: unknown, month: unknown = new Date().toISOString().slice(0,7)) {
+export async function listInternalCalendar(
+  userId: string,
+  scope: unknown,
+  month: unknown = new Date().toISOString().slice(0, 7),
+) {
   const prisma = getPrisma()!
   const user = await prisma.user.findFirst({
     where: { id: userId, ...activeAccount },
@@ -63,13 +67,17 @@ export async function listInternalCalendar(userId: string, scope: unknown, month
   )
   if (!organization && scope === "team" && !canViewTeam)
     throw new ServiceRequestsError(403, "Team calendar access is required")
-  if (typeof month !== "string" || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || month.startsWith("0000"))
+  if (
+    typeof month !== "string" ||
+    !/^\d{4}-(0[1-9]|1[0-2])$/.test(month) ||
+    month.startsWith("0000")
+  )
     throw new ServiceRequestsError(400, "Choose a valid calendar month")
   // Include spillover dates displayed by the six-week month grid.
   const from = new Date(month + "-01T00:00:00Z")
-  from.setUTCDate(1 - ((from.getUTCDay()+6)%7))
+  from.setUTCDate(1 - ((from.getUTCDay() + 6) % 7))
   const until = new Date(from)
-  until.setUTCDate(until.getUTCDate()+42)
+  until.setUTCDate(until.getUTCDate() + 42)
   const team = scope === "team"
   const membership: Prisma.ProjectWhereInput = {
     staff: { some: { employee: { userId } } },
@@ -168,7 +176,8 @@ export async function listInternalCalendar(userId: string, scope: unknown, month
     prisma.leaveRequest.findMany({
       where: {
         status: "APPROVED",
-        startDate: { lt: until }, endDate: { gte: from },
+        startDate: { lt: until },
+        endDate: { gte: from },
         ...(organization
           ? {}
           : team && user.headOf
@@ -178,7 +187,10 @@ export async function listInternalCalendar(userId: string, scope: unknown, month
       select: {
         id: true,
         days: {
-          where: { leaveMinutes: { gt: 0 }, workDate: { gte: from, lt: until } },
+          where: {
+            leaveMinutes: { gt: 0 },
+            workDate: { gte: from, lt: until },
+          },
           select: { id: true, workDate: true, timeZone: true },
           orderBy: { workDate: "asc" },
         },

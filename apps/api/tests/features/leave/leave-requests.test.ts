@@ -220,7 +220,10 @@ test(
     assert.equal(currentBody.workday.approvedLeaveMinutes, 480)
     assert.equal(currentBody.workday.requiredMinutes, 0)
 
-    const calendar = await api(employee, "/projects/calendar?scope=mine&month=2026-11")
+    const calendar = await api(
+      employee,
+      "/projects/calendar?scope=mine&month=2026-11",
+    )
     assert.equal(calendar.status, 200)
     const calendarBody = (await calendar.json()) as {
       events: { id: string; type: string; allDay?: boolean; context: string }[]
@@ -1332,8 +1335,16 @@ test(
             body: { startDate, endDate: startDate },
           })
         const restoredPreview = await preview()
-        assert.equal(restoredPreview.status, 200, await restoredPreview.clone().text())
-        const restoredDay = ((await restoredPreview.json()) as {days: {policyName: string; assignmentId: string}[]}).days[0]
+        assert.equal(
+          restoredPreview.status,
+          200,
+          await restoredPreview.clone().text(),
+        )
+        const restoredDay = (
+          (await restoredPreview.json()) as {
+            days: { policyName: string; assignmentId: string }[]
+          }
+        ).days[0]
         assert.equal(restoredDay.policyName, policy.name)
         assert.notEqual(restoredDay.assignmentId, assignmentId)
         const workload = await api(head, `/workload?week=${startDate}`)
@@ -1355,7 +1366,8 @@ test(
           const current = await api(subject, "/attendance/me/current")
           assert.equal(current.status, 200, await current.clone().text())
           assert.equal(
-            ((await current.json()) as {workday: {assignmentId: string}}).workday.assignmentId,
+            ((await current.json()) as { workday: { assignmentId: string } })
+              .workday.assignmentId,
             restoredDay.assignmentId,
           )
         }

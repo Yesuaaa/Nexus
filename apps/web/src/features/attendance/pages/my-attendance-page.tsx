@@ -120,27 +120,28 @@ export function MyAttendancePage() {
                 : clockInReason}
             </Alert>
           )}
-              {continuation && (
-                <div className="mt-4 rounded-lg border border-[#dfe6eb] p-3">
-                  <p className="mt-0 text-xs leading-5">
-                    Your previous overnight workday ended today. You can add a session to {continuation.workDate}.
-                  </p>
-                  <Button
-                    variant="brandOutline"
-                    size="sm"
-                    disabled={clock.loading || clock.pending || Boolean(clock.error)}
-                    onClick={() =>
-                      propose(
-                        { action: "clock-in", workdayId: continuation.id },
-                        "Continue overnight workday",
-                        `Add another session to ${continuation.workDate}. Its daily requirement is counted once.`,
-                      )
-                    }
-                  >
-                    Continue {continuation.workDate}
-                  </Button>
-                </div>
-              )}
+        {continuation && (
+          <div className="mt-4 rounded-lg border border-[#dfe6eb] p-3">
+            <p className="mt-0 text-xs leading-5">
+              Your previous overnight workday ended today. You can add a session
+              to {continuation.workDate}.
+            </p>
+            <Button
+              variant="brandOutline"
+              size="sm"
+              disabled={clock.loading || clock.pending || Boolean(clock.error)}
+              onClick={() =>
+                propose(
+                  { action: "clock-in", workdayId: continuation.id },
+                  "Continue overnight workday",
+                  `Add another session to ${continuation.workDate}. Its daily requirement is counted once.`,
+                )
+              }
+            >
+              Continue {continuation.workDate}
+            </Button>
+          </div>
+        )}
         {day && (
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(250px,1fr)]">
             <OverviewPanel
@@ -173,12 +174,12 @@ export function MyAttendancePage() {
                   {suspended
                     ? "Shift suspended"
                     : paused
-                    ? "On unpaid break"
-                    : active
-                      ? "Clocked in"
-                      : day.id
-                        ? "Clocked out"
-                        : "Not started"}
+                      ? "On unpaid break"
+                      : active
+                        ? "Clocked in"
+                        : day.id
+                          ? "Clocked out"
+                          : "Not started"}
                 </Pill>
               </div>
               <div className="mt-5 flex flex-wrap gap-2">

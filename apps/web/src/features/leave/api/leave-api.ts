@@ -71,7 +71,11 @@ export type LeavePreview = {
 
 const root = "/api/leave"
 
-export const leaveDetail = (id:string,signal?:AbortSignal)=>apiRequest<{request:LeaveRequest}>(`/api/leave/requests/${encodeURIComponent(id)}`,{signal})
+export const leaveDetail = (id: string, signal?: AbortSignal) =>
+  apiRequest<{ request: LeaveRequest }>(
+    `/api/leave/requests/${encodeURIComponent(id)}`,
+    { signal },
+  )
 
 export function leaveRequests(
   scope: "mine" | "team",

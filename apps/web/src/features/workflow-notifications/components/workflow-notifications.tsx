@@ -144,7 +144,7 @@ export function WorkflowNotifications() {
               <Link
                 href={
                   item.entityId && item.type.startsWith("ATTENDANCE_")
-                    ? `/attendance/requests/${item.type.startsWith("ATTENDANCE_OVERTIME_")?"overtime":"corrections"}?request=${encodeURIComponent(item.entityId)}`
+                    ? `/attendance/requests/${item.type.startsWith("ATTENDANCE_OVERTIME_") ? "overtime" : "corrections"}?request=${encodeURIComponent(item.entityId)}`
                     : item.entityId && item.type.startsWith("LEAVE_")
                       ? `/attendance/requests/leave?request=${encodeURIComponent(item.entityId)}`
                       : item.entityId &&

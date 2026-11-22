@@ -82,7 +82,9 @@ export function calendarConflicts(events: CalendarEvent[], now: number) {
     }
   }
   const formatters = new Map<string, Intl.DateTimeFormat>()
-  const tasks = events.filter(event => event.type === "task" && !event.completed)
+  const tasks = events.filter(
+    (event) => event.type === "task" && !event.completed,
+  )
   for (const item of [...timed, ...tasks]) {
     for (const person of item.staffMembers ?? []) {
       for (const leave of leaveByPerson.get(person.id) ?? []) {
@@ -92,8 +94,12 @@ export function calendarConflicts(events: CalendarEvent[], now: number) {
           formatter = new Intl.DateTimeFormat("sv-SE", { timeZone: zone })
           formatters.set(zone, formatter)
         }
-        const start = item.deadline ? calendarEventDate(item) : formatter.format(Date.parse(item.startsAt))
-        const end = item.endsAt ? formatter.format(Date.parse(item.endsAt)-1) : start
+        const start = item.deadline
+          ? calendarEventDate(item)
+          : formatter.format(Date.parse(item.startsAt))
+        const end = item.endsAt
+          ? formatter.format(Date.parse(item.endsAt) - 1)
+          : start
         if (start <= leave.startDate! && leave.startDate! <= end) {
           conflicts.add(item.id)
           conflicts.add(leave.id)

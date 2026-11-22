@@ -9,8 +9,10 @@ import { summarizeAttendance } from "./attendance.summary.js"
 import { notifyPendingAdjustment } from "./attendance.pending-notifications.js"
 
 /** HR can review exceptions when the employee has no independent, active Head. */
-export async function hrAdjustmentScope(tx: Prisma.TransactionClient): Promise<Prisma.AttendanceAdjustmentWhereInput> {
-  const exceptions = await tx.$queryRaw<{id:string}[]>`
+export async function hrAdjustmentScope(
+  tx: Prisma.TransactionClient,
+): Promise<Prisma.AttendanceAdjustmentWhereInput> {
+  const exceptions = await tx.$queryRaw<{ id: string }[]>`
     SELECT a.id FROM "AttendanceAdjustment" a
     JOIN "Employee" e ON e.id = a."employeeId"
     LEFT JOIN "Department" d ON d.id = e."departmentId"
@@ -19,7 +21,12 @@ export async function hrAdjustmentScope(tx: Prisma.TransactionClient): Promise<P
       AND h.id <> a."requestedById" AND h.id IS DISTINCT FROM e."userId"
     WHERE a.status = 'PENDING' AND h.id IS NULL
   `
-  return { OR: [{ status: { not: "PENDING" } }, { id: { in: exceptions.map(row => row.id) } }] }
+  return {
+    OR: [
+      { status: { not: "PENDING" } },
+      { id: { in: exceptions.map((row) => row.id) } },
+    ],
+  }
 }
 
 /** Uses the existing notification inbox, with the request as its source. */
@@ -44,8 +51,12 @@ export async function notifyOvertime(
   })
   if (stage === "VERIFIED") {
     await tx.workflowNotification.updateMany({
-      where:{attendanceAdjustmentId: requestId,type:"ATTENDANCE_"+request.type+"_VERIFIED",userId:{in:recipients.map(row=>row.id)}},
-      data:{readAt:null,createdAt:new Date()},
+      where: {
+        attendanceAdjustmentId: requestId,
+        type: "ATTENDANCE_" + request.type + "_VERIFIED",
+        userId: { in: recipients.map((row) => row.id) },
+      },
+      data: { readAt: null, createdAt: new Date() },
     })
   }
   await tx.workflowNotification.createMany({

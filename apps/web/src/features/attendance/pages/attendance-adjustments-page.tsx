@@ -46,10 +46,10 @@ export function AttendanceAdjustmentsPage({
   requestType,
   linkedId,
 }: {
- linkedId?:string
+  linkedId?: string
   requestType?: "CORRECTION" | "OVERTIME"
 }) {
-  const [linkedOpen,setLinkedOpen]=useState(true)
+  const [linkedOpen, setLinkedOpen] = useState(true)
   const account = usePortalAccount(),
     manager = canManageAttendance(account)
   const selfService = canAccessPersonalAttendance(account)
@@ -120,8 +120,15 @@ export function AttendanceAdjustmentsPage({
   const data = list.error && !searchPending ? undefined : list.data
   const listLoading = list.loading || searchPending
   const listError = data || searchPending ? "" : list.error
-  const linkedRequest= linkedId && linkedOpen && !list.loading && !list.error ? data?.adjustments[0] : undefined
-  const visibleReview=review ?? (linkedRequest?{request:linkedRequest,decision:null,readOnly:true}:null)
+  const linkedRequest =
+    linkedId && linkedOpen && !list.loading && !list.error
+      ? data?.adjustments[0]
+      : undefined
+  const visibleReview =
+    review ??
+    (linkedRequest
+      ? { request: linkedRequest, decision: null, readOnly: true }
+      : null)
   const panelReview = data || review?.reconciled ? visibleReview : null
   const currentReview = data?.adjustments.find(
     (item) => item.id === review?.request.id,

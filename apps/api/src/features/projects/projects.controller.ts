@@ -36,7 +36,11 @@ projectsRouter.get("/calendar", async (request, response) => {
   response.json(
     user.role === "USER"
       ? await listClientCalendar(user.id)
-      : await listInternalCalendar(user.id, request.query.scope, request.query.month),
+      : await listInternalCalendar(
+          user.id,
+          request.query.scope,
+          request.query.month,
+        ),
   )
 })
 projectsRouter.get(

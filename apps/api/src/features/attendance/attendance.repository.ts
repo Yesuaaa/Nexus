@@ -57,7 +57,9 @@ export const attendanceRepository = {
     return tx.attendanceWorkSession.findFirst({
       where: { employeeId },
       orderBy: [{ startedAt: "desc" }, { id: "desc" }],
-      include: { workday: { select: { id: true, workDate: true, timeZone: true } } },
+      include: {
+        workday: { select: { id: true, workDate: true, timeZone: true } },
+      },
     })
   },
 }

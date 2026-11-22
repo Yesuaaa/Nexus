@@ -714,7 +714,9 @@ test("Admin can create and inspect a fixed overnight schedule", async ({
       request.method() === "POST" && request.url().endsWith("/unassign"),
   )
   await end.getByRole("button", { name: "End assignment", exact: true }).click()
-  expect((await endRequest).postDataJSON()).toEqual({ expectedStatus: "CURRENT" })
+  expect((await endRequest).postDataJSON()).toEqual({
+    expectedStatus: "CURRENT",
+  })
   await expect(end.getByRole("alert")).toHaveText(
     "Recorded attendance prevents ending this assignment.",
   )
@@ -1515,10 +1517,15 @@ test("time log overview preserves available figures during partial failures and 
   for (const failed of ["departments", "overview"]) {
     const pattern = `**/api/attendance/${failed}*`
     await page.route(pattern, (route) =>
-      route.fulfill({ status: 503, json: { error: "Summary temporarily unavailable." } }),
+      route.fulfill({
+        status: 503,
+        json: { error: "Summary temporarily unavailable." },
+      }),
     )
-    const available = page.waitForResponse((response) =>
-      new URL(response.url()).pathname === `/api/attendance/${failed === "departments" ? "overview" : "departments"}`,
+    const available = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname ===
+        `/api/attendance/${failed === "departments" ? "overview" : "departments"}`,
     )
     await page.goto("/attendance/time-logs/overview")
     const response = await available
@@ -1526,19 +1533,34 @@ test("time log overview preserves available figures during partial failures and 
     const main = page.getByRole("main", { name: "Attendance workspace" })
     const figures = main.getByLabel("Time log figures")
     await expect(figures).toHaveAttribute("aria-busy", "false")
-    await expect(main.getByRole("button", {name:"Retry",exact:true})).toBeVisible()
+    await expect(
+      main.getByRole("button", { name: "Retry", exact: true }),
+    ).toBeVisible()
     if (failed === "departments") {
       const data = await response.json()
-      await expect(figures.locator(":scope > div").filter({has: page.getByText("Check-ins", {exact:true})}).getByRole("definition")).toHaveText(String(data.checkIns.total))
+      await expect(
+        figures
+          .locator(":scope > div")
+          .filter({ has: page.getByText("Check-ins", { exact: true }) })
+          .getByRole("definition"),
+      ).toHaveText(String(data.checkIns.total))
     } else {
-      await expect(figures.getByRole("definition").filter({hasText:"—"})).toHaveCount(4)
-      await expect(main.getByRole("combobox", {name:"Time logs department"})).toBeEnabled()
+      await expect(
+        figures.getByRole("definition").filter({ hasText: "—" }),
+      ).toHaveCount(4)
+      await expect(
+        main.getByRole("combobox", { name: "Time logs department" }),
+      ).toBeEnabled()
     }
     await page.unroute(pattern)
-    await main.getByRole("button", {name:"Retry",exact:true}).click()
-    await expect(main.getByRole("button", {name:"Retry",exact:true})).toHaveCount(0)
+    await main.getByRole("button", { name: "Retry", exact: true }).click()
+    await expect(
+      main.getByRole("button", { name: "Retry", exact: true }),
+    ).toHaveCount(0)
     await expect(figures).toHaveAttribute("aria-busy", "false")
-    await expect(figures.getByRole("definition").filter({hasText:"—"})).toHaveCount(0)
+    await expect(
+      figures.getByRole("definition").filter({ hasText: "—" }),
+    ).toHaveCount(0)
     await assertNoPageOverflow(page)
   }
 })
@@ -3111,7 +3133,9 @@ test("WC-07-F02 keeps Workforce Logs search pages stable through a real employee
   const changedSearch = "Workforce Paging Renamed"
   const changed = matches(1, changedSearch)
   await page.getByRole("searchbox", { name: "Search logs" }).fill(changedSearch)
-  expect(new URL((await changed).url()).searchParams.has("snapshot")).toBe(false)
+  expect(new URL((await changed).url()).searchParams.has("snapshot")).toBe(
+    false,
+  )
   await expect(page.getByText("Showing 1–1 of 1 logs")).toBeVisible()
 })
 
