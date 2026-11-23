@@ -352,6 +352,44 @@ test(
           reason: "Unauthorized correction",
         })
         assert.equal(foreign.status, 404)
+
+        // PG-006-F001-A010-T021 extends this existing PGlite request test
+        // with the API's inclusive reason-length boundaries.
+        const priorCount = await prisma.attendanceAdjustment.count({
+          where: { requestedById: staff.user.id },
+        })
+        for (const [length, expectedStatus] of [
+          [4, 400],
+          [5, 201],
+          [2000, 201],
+          [2001, 400],
+        ] as const) {
+          const reason = "x".repeat(length)
+          const boundary = await request(staff, "/adjustments", {
+            requestKey: randomUUID(),
+            startedAt: "2026-11-12T09:00:00+08:00",
+            endedAt: "2026-11-12T10:00:00+08:00",
+            reason,
+          })
+          assert.equal(
+            boundary.status,
+            expectedStatus,
+            `reason length ${length}: ${await boundary.clone().text()}`,
+          )
+          if (expectedStatus === 201) {
+            const body = (await boundary.json()) as {
+              adjustment: { reason: string }
+            }
+            assert.equal(body.adjustment.reason, reason)
+          }
+        }
+        assert.equal(
+          await prisma.attendanceAdjustment.count({
+            where: { requestedById: staff.user.id },
+          }),
+          priorCount + 2,
+        )
+
         const created = await submit()
         const replay = await request(staff, "/adjustments", created.body)
         assert.equal(replay.status, 201)

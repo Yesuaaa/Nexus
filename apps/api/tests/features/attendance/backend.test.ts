@@ -149,12 +149,46 @@ test(
           assert.equal((await request(actor, historyPath)).status, 403)
           assert.equal((await request(actor, "/me/clock-in", {})).status, 403)
         }
+        // PG-006-F001-A002-T003 adds the remaining authenticated role checks;
+        // preserve the existing anonymous and clock-in assertions above.
+        const otherActionBodies = [
+          ["/me/clock-out", { sessionId: staff.employee!.id }],
+          ["/me/breaks/start", { sessionId: staff.employee!.id }],
+          [
+            "/me/breaks/end",
+            { sessionId: staff.employee!.id, breakId: staff.employee!.id },
+          ],
+        ] as const
+        for (const actor of [client, superadmin])
+          for (const [path, body] of otherActionBodies)
+            assert.equal((await request(actor, path, body)).status, 403, path)
         const missing = await account("missing", "STAFF", false)
         assert.equal((await request(missing, "/me/clock-in", {})).status, 409)
         assert.equal(
           (await request(staff, `/employees/${other.employee!.id}/history`))
             .status,
           403,
+        )
+      },
+    )
+
+    await t.test(
+      "[PG-006-F001-A002-T004] an active ADMIN without an Employee profile receives 409 on personal reads",
+      async () => {
+        const missingAdmin = await account(
+          "missing-admin-profile",
+          "ADMIN",
+          false,
+        )
+        for (const path of ["/me/current", historyPath]) {
+          const result = await request(missingAdmin, path)
+          assert.equal(result.status, 409, `${path}: ${await result.text()}`)
+        }
+        assert.equal(
+          await prisma.employee.count({
+            where: { userId: missingAdmin.user.id },
+          }),
+          0,
         )
       },
     )

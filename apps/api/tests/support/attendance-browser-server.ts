@@ -44,6 +44,7 @@ test("attendance browser API fixture", { timeout: 1800000 }, async (t) => {
   > = {}
   for (const [name, role, placement = department] of [
     ["staff", "STAFF"],
+    ["pg006-overnight", "STAFF"],
     ["head", "STAFF"],
     ["admin", "ADMIN"],
     ["client", "USER"],

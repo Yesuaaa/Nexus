@@ -3,7 +3,12 @@ import { spawn, type ChildProcess } from "node:child_process"
 import { randomUUID } from "node:crypto"
 import path from "node:path"
 import { defaultPreferences } from "../src/features/settings/api/settings-api"
-import type { AttendanceAuditEvent } from "../src/features/attendance/api/attendance-api"
+import type {
+  AttendanceAuditEvent,
+  AttendanceHistory,
+  AttendanceState,
+  AttendanceWorkday,
+} from "../src/features/attendance/api/attendance-api"
 
 test.describe.configure({ mode: "serial" })
 type Fixture = {
@@ -220,6 +225,19 @@ test("real employee clocks overnight and never receives Employee Management", as
   await clock("2026-11-14T04:00:00+08:00")
   await page.getByRole("button", { name: "Refresh", exact: true }).click()
   await expect(page.getByLabel("Elapsed work")).toHaveText(/08:00:0/)
+  // PG-006-F001-A003-T007 adds visible workday/progress assertions to this
+  // existing persistence-backed clocking flow.
+  await expect(page.getByText("Clocked in", { exact: true })).toBeVisible()
+  const daily = page.getByRole("region", { name: "Daily required hours" })
+  await expect(
+    daily.getByRole("progressbar", {
+      name: "Daily required-hours progress",
+    }),
+  ).toHaveAttribute("aria-valuenow", "100")
+  await expect(daily).toContainText("8.00")
+  await expect(daily).toContainText("8 hours")
+  await expect(daily.getByText("Daily requirement complete")).toBeVisible()
+  await expect(daily.getByText("Browser flexible policy")).toBeVisible()
   await confirm(page, "Clock out")
   await expect(
     page
@@ -240,8 +258,172 @@ test("real employee clocks overnight and never receives Employee Management", as
   await expect(
     page.getByText("Overnight", { exact: true }).first(),
   ).toBeVisible()
+
+  // PG-006-F001-A009-T017 adds deterministic assertions for optional row
+  // fields while retaining the real persistence assertions above.
+  const summaryPage = await page.context().newPage()
+  await signIn(summaryPage, "staff")
+  const summaryState: AttendanceState = {
+    asOf: "2026-11-14T04:00:00.000Z",
+    employeeId: fixture.actors.staff.employeeId,
+    needsPolicy: true,
+    workday: null,
+  }
+  const summarySession = {
+    id: "pg006-summary-session",
+    startedAt: "2026-11-13T12:00:00.000Z",
+    endedAt: "2026-11-13T20:00:00.000Z",
+    breaks: [],
+  }
+  const summaryWorkday: AttendanceWorkday = {
+    id: "pg006-summary-workday",
+    employeeId: fixture.actors.staff.employeeId,
+    workDate: "2026-11-13",
+    timeZone: "Asia/Manila",
+    isWorkingDay: true,
+    requiredMinutes: 480,
+    workedMilliseconds: 8 * 60 * 60 * 1000,
+    workedHours: 8,
+    remainingMinutes: 0,
+    excessMinutes: 0,
+    excessRequiresReview: false,
+    progressPercent: 100,
+    status: "COMPLETE",
+    isComplete: true,
+    activeSessionId: null,
+    activeBreakId: null,
+    sessions: [summarySession],
+    policy: {
+      id: "pg006-summary-policy",
+      name: "PG-006 scheduled policy",
+      unpaidBreaksEnabled: true,
+      overnightRequiresReview: false,
+    },
+    schedule: {
+      startsAt: "09:00",
+      endsAt: "17:00",
+      unpaidBreakMinutes: 30,
+      lateArrivalMinutes: 15,
+      earlyDepartureMinutes: 20,
+    },
+    overnightRequiresReview: false,
+    pendingCorrections: 1,
+  }
+  const summaryHistory: AttendanceHistory = {
+    asOf: summaryState.asOf,
+    employeeId: fixture.actors.staff.employeeId,
+    total: 1,
+    page: 1,
+    pageSize: 20,
+    workdays: [summaryWorkday],
+  }
+  await summaryPage.route("**/api/attendance/me/current", (route) =>
+    route.fulfill({ json: summaryState }),
+  )
+  await summaryPage.route("**/api/attendance/me/history**", (route) =>
+    route.fulfill({ json: summaryHistory }),
+  )
+  await summaryPage.goto("/attendance/check-ins?pg006-summary=1")
+  const summaryRow = summaryPage
+    .getByRole("table", { name: "Attendance history" })
+    .getByRole("row")
+    .filter({ hasText: "2026-11-13" })
+  await expect(summaryRow).toContainText("Nov 13, 2026, 8:00 PM")
+  await expect(summaryRow).toContainText("Nov 14, 2026, 4:00 AM")
+  await expect(summaryRow).toContainText("08:00:00 / 8h")
+  await expect(summaryRow).toContainText("Complete")
+  await expect(summaryRow).toContainText("Overnight")
+  await expect(summaryRow).toContainText("Correction pending")
+  await expect(summaryRow).toContainText("Late arrival")
+  await expect(summaryRow).toContainText("Early departure")
+  await summaryPage.close()
+
   await page.goto("/employees")
   await expect(page).toHaveURL(/\/module$/)
+})
+
+test("[PG-006-F001-A004-T009] the page continues the prior overnight workday and persists the added session", async ({
+  page,
+}) => {
+  await clock("2026-12-07T20:00:00+08:00")
+  const overnightActor = fixture.actors["pg006-overnight"]
+  const overnightHeaders = {
+    authorization: `Bearer ${overnightActor.token}`,
+    "content-type": "application/json",
+  }
+  const started = await fetch(`${api}/api/attendance/me/clock-in`, {
+    method: "POST",
+    headers: overnightHeaders,
+    body: "{}",
+  })
+  expect(started.status, await started.clone().text()).toBe(201)
+  const startState = (await started.json()) as {
+    workday: { id: string; activeSessionId: string }
+  }
+  const workdayId = startState.workday.id
+  const firstSessionId = startState.workday.activeSessionId
+
+  await clock("2026-12-08T04:00:00+08:00")
+  const firstClockOut = await fetch(`${api}/api/attendance/me/clock-out`, {
+    method: "POST",
+    headers: overnightHeaders,
+    body: JSON.stringify({ sessionId: firstSessionId }),
+  })
+  expect(firstClockOut.status, await firstClockOut.clone().text()).toBe(200)
+  await clock("2026-12-08T04:30:00+08:00")
+
+  await signIn(page, "pg006-overnight")
+  await page.goto("/attendance/check-ins")
+  const continueButton = page.getByRole("button", {
+    name: "Continue 2026-12-07",
+    exact: true,
+  })
+  await expect(continueButton).toBeVisible()
+  await continueButton.click()
+  const dialog = page.getByRole("dialog")
+  const continuationRequest = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === "/api/attendance/me/clock-in",
+  )
+  await dialog
+    .getByRole("button", { name: "Continue overnight workday", exact: true })
+    .click()
+  const posted = await continuationRequest
+  expect(
+    JSON.parse(posted.postData() ?? "{}") as { workdayId?: string },
+  ).toEqual({ workdayId })
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByText("Clocked in", { exact: true })).toBeVisible()
+
+  await clock("2026-12-08T05:30:00+08:00")
+  await confirm(page, "Clock out")
+  const historyResponse = await fetch(
+    `${api}/api/attendance/me/history?from=2026-12-07&to=2026-12-08`,
+    { headers: { authorization: `Bearer ${overnightActor.token}` } },
+  )
+  expect(historyResponse.status).toBe(200)
+  const history = (await historyResponse.json()) as {
+    workdays: {
+      id: string
+      workDate: string
+      requiredMinutes: number
+      workedHours: number
+      sessions: { id: string }[]
+    }[]
+  }
+  expect(history.workdays).toEqual([
+    expect.objectContaining({
+      id: workdayId,
+      workDate: "2026-12-07",
+      requiredMinutes: 480,
+      workedHours: 9,
+      sessions: [
+        expect.objectContaining({ id: firstSessionId }),
+        expect.objectContaining({ id: expect.any(String) }),
+      ],
+    }),
+  ])
 })
 
 test("unpaid break timer freezes and correction request uses the real API", async ({
@@ -1584,6 +1766,41 @@ for (const width of [390, 820, 1440]) {
         ["settings", "Policy Management", "/api/attendance/policies"],
       ]
       for (const [path, title, endpoint] of pages) {
+        let myWorkDate: string | null = null
+        let myWorkdayId: string | null = null
+        if (path === "my") {
+          myWorkDate =
+            width === 390
+              ? "2026-11-20"
+              : width === 820
+                ? "2026-11-21"
+                : "2026-11-22"
+          const adminHeaders = {
+            authorization: `Bearer ${fixture.actors.admin.token}`,
+            "content-type": "application/json",
+          }
+          await clock(`${myWorkDate}T09:00:00+08:00`)
+          const started = await fetch(`${api}/api/attendance/me/clock-in`, {
+            method: "POST",
+            headers: adminHeaders,
+            body: "{}",
+          })
+          expect(started.status, await started.clone().text()).toBe(201)
+          const startState = (await started.json()) as {
+            workday: { id: string; activeSessionId: string | null }
+          }
+          myWorkdayId = startState.workday.id
+          expect(startState.workday.activeSessionId).toBeTruthy()
+          await clock(`${myWorkDate}T10:00:00+08:00`)
+          const ended = await fetch(`${api}/api/attendance/me/clock-out`, {
+            method: "POST",
+            headers: adminHeaders,
+            body: JSON.stringify({
+              sessionId: startState.workday.activeSessionId,
+            }),
+          })
+          expect(ended.status, await ended.clone().text()).toBe(200)
+        }
         const read = page.waitForResponse(
           (response) =>
             new URL(response.url()).pathname === endpoint &&
@@ -1632,6 +1849,72 @@ for (const width of [390, 820, 1440]) {
           expect(columns).toBe(4)
         }
         await assertNoPageOverflow(page)
+        if (path === "my") {
+          // PG-006-F001-A011-T024 adds Check-Ins control and dialog usability
+          // assertions to the existing 390/820/1440 px attendance matrix.
+          await expect(page.getByLabel("Attendance from date")).toBeVisible()
+          await expect(page.getByLabel("Attendance through date")).toBeVisible()
+          if (!myWorkDate) throw new Error("Check-Ins workday date was not set")
+          const workDate = myWorkDate
+          await page.getByLabel("Attendance from date").fill(workDate)
+          await page.getByLabel("Attendance through date").fill(workDate)
+          const history = page
+            .getByRole("table", {
+              name: "Attendance history",
+            })
+            .last()
+          const dayRow = history.getByRole("row").filter({ hasText: workDate })
+          await expect(dayRow).toBeVisible()
+          if (!myWorkdayId) throw new Error("Check-Ins workday was not seeded")
+          const rowActions = page
+            .locator(`[id="attendance-history-actions-${myWorkdayId}"]`)
+            .last()
+          await rowActions.click()
+          await expect(rowActions).toHaveAttribute("aria-expanded", "true")
+          const viewDetails = page.getByRole("menuitem", {
+            name: "View details",
+            exact: true,
+          })
+          await expect(viewDetails).toBeVisible()
+          await viewDetails.click()
+          const detailTitle = page.getByText(
+            `Attendance details for ${workDate}`,
+            { exact: true },
+          )
+          await expect(detailTitle).toBeVisible()
+          await page.getByRole("button", { name: "Done", exact: true }).click()
+          await expect(detailTitle).toHaveCount(0)
+          const clockIn = page.getByRole("button", {
+            name: "Clock in",
+            exact: true,
+          })
+          await expect(clockIn).toBeEnabled()
+          await clockIn.click()
+          const clockDialog = page.getByRole("dialog", { name: "Clock in" })
+          await expect(clockDialog).toBeVisible()
+          await clockDialog
+            .getByRole("button", { name: "Cancel", exact: true })
+            .click()
+          await expect(clockDialog).toHaveCount(0)
+          const missingAttendance = page.getByRole("button", {
+            name: "Request missing attendance",
+            exact: true,
+          })
+          await expect(missingAttendance).toBeVisible()
+          await missingAttendance.click()
+          const correctionDialog = page.getByRole("dialog")
+          await expect(
+            correctionDialog.getByLabel("Actual clock-in", { exact: true }),
+          ).toBeVisible()
+          await expect(
+            correctionDialog.getByLabel("Actual clock-out", { exact: true }),
+          ).toBeVisible()
+          await correctionDialog
+            .getByRole("button", { name: "Cancel", exact: true })
+            .click()
+          await expect(correctionDialog).toHaveCount(0)
+          await assertNoPageOverflow(page)
+        }
         if (path === "requests/overtime" || path === "requests/corrections") {
           await expect(
             page.getByRole("table", { name: "Attendance requests" }),

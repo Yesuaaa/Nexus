@@ -171,6 +171,59 @@ test("live elapsed time preserves overnight attribution and pauses during unpaid
     elapsedWork(paused, Date.parse("2026-11-14T01:30:00+08:00")),
     3.5 * 3600000,
   )
+
+  // PG-006-F001-A003-T006 adds boundary coverage without replacing the
+  // existing overnight, unpaid-break, split-session, or long-duration checks.
+  const bounded = {
+    sessions: [
+      {
+        ...session,
+        startedAt: "2026-11-13T09:00:00+08:00",
+        endedAt: "2026-11-13T10:00:00+08:00",
+      },
+    ],
+  }
+  assert.equal(elapsedWork(bounded, Date.parse("2026-11-13T08:59:59+08:00")), 0)
+  assert.equal(
+    elapsedWork(bounded, Date.parse("2026-11-13T12:00:00+08:00")),
+    60 * 60000,
+  )
+  assert.equal(
+    elapsedWork(
+      {
+        sessions: [
+          {
+            ...bounded.sessions[0],
+            endedAt: null,
+            suspendedAt: "2026-11-13T10:00:00+08:00",
+          },
+        ],
+      },
+      Date.parse("2026-11-13T12:00:00+08:00"),
+    ),
+    60 * 60000,
+  )
+  assert.equal(
+    elapsedWork(
+      {
+        sessions: [
+          {
+            ...bounded.sessions[0],
+            breaks: [
+              {
+                startedAt: "2026-11-13T09:30:00+08:00",
+                endedAt: "2026-11-13T09:45:00+08:00",
+                isPaid: true,
+              },
+            ],
+          },
+        ],
+      },
+      Date.parse("2026-11-13T12:00:00+08:00"),
+    ),
+    60 * 60000,
+  )
+
   const split = {
     sessions: [
       { ...session, endedAt: "2026-11-14T04:00:00+08:00" },
