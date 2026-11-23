@@ -207,12 +207,16 @@ export function ClientRequestsTable({
   onRowsSettled,
   emptyMessage,
   loading,
+  error,
+  onRetry,
 }: {
   viewKey: string
   quickKey: string
   onRowsSettled?: () => void
   emptyMessage: ReactNode
   loading: boolean
+  error?: string
+  onRetry?: () => void
   requests: ServiceRequestSummary[]
   onView: (request: ServiceRequestSummary) => void
   onCancelled: () => void
@@ -235,6 +239,8 @@ export function ClientRequestsTable({
         { className: "w-[140px]", label: "Actions" },
       ]}
       emptyContent={emptyMessage}
+      error={error}
+      onRetry={onRetry}
       ariaBusy={loading}
       onRowsSettled={onRowsSettled}
       renderRow={(request) => {

@@ -97,12 +97,16 @@ export function ClientProjectsTable({
   viewKey,
   quickKey,
   onRowsSettled,
+  error,
+  onRetry,
 }: {
   projects: ClientProjectSummary[]
   formatDate: (value: Date | string) => string
   viewKey: string
   quickKey: string
   onRowsSettled?: () => void
+  error?: string
+  onRetry?: () => void
 }) {
   return (
     <ClientRowTable
@@ -123,6 +127,8 @@ export function ClientProjectsTable({
       ]}
       rowClassName="h-[66px] align-middle"
       emptyContent="No projects match"
+      error={error}
+      onRetry={onRetry}
       onRowsSettled={onRowsSettled}
       renderRow={(project) => {
         const serviceName = project.request?.service.name || "Project"
