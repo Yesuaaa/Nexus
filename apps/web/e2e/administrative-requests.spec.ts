@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 import {
   configureRegressionTest,
   live,
@@ -65,81 +65,217 @@ const request: AdministrativeRequest = {
   },
 }
 
-test("Superadmin inspects requests through Service Operations without head or conversation actions", async ({
+function requestActions(page: Page, id: string) {
+  return page.getByRole("button", {
+    name: `More actions for request ${id}`,
+    exact: true,
+  })
+}
+
+async function inspectRequest(page: Page, id: string) {
+  await requestActions(page, id).click()
+  await page
+    .getByRole("menuitem", { name: "Inspect request", exact: true })
+    .click()
+}
+
+for (const width of [390, 1440]) {
+  test(`Superadmin inspects requests in the shared drawer at ${width}px without operational actions`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 })
+    await page.emulateMedia({ reducedMotion: "reduce" })
+    await restoreSession(page, "SUPERADMIN")
+    const prohibited: string[] = []
+    page.on("request", (req) => {
+      const path = new URL(req.url()).pathname
+      if (
+        path.startsWith("/api/") &&
+        (req.method() !== "GET" ||
+          /^\/api\/(?:request-inbox(?:\/|$)|request-workflows\/(?!notifications$)|request-conversations\/)/.test(
+            path,
+          ))
+      )
+        prohibited.push(path)
+    })
+    await page.route("**/api/administrative-requests**", (route) => {
+      const url = new URL(route.request().url())
+      return route.fulfill({
+        json: url.pathname.endsWith("/request-1")
+          ? { serviceRequest: request }
+          : {
+              serviceRequests: [request],
+              departments: [{ id: "design", name: "Design" }],
+              total: 1,
+              page: 1,
+              pageSize: 10,
+            },
+      })
+    })
+    await page.goto("/services")
+    if (width < 768)
+      await page.getByRole("button", { name: "Open navigation menu" }).click()
+    const menu = page.getByRole("navigation", { name: "Main menu" })
+    await expect(
+      menu.getByRole("button", { name: "Request", exact: true }),
+    ).toHaveCount(0)
+    const service = menu.getByRole("button", { name: "Service", exact: true })
+    await expect(service).toHaveAttribute("aria-expanded", "true")
+    const servicePanelId = await service.getAttribute("aria-controls")
+    const servicePanel = menu.locator(`[id="${servicePanelId}"]`)
+    const requestLink = servicePanel.getByRole("link", {
+      name: "Request overview",
+      exact: true,
+    })
+    await expect(requestLink).toHaveText("Request")
+    await requestLink.click()
+    if (width < 768)
+      await page.getByRole("button", { name: "Open navigation menu" }).click()
+    await expect(service).toHaveAttribute("aria-expanded", "true")
+    await expect(
+      menu.getByRole("link", { name: "Request overview", exact: true }),
+    ).toHaveAttribute("aria-current", "page")
+    if (width < 768)
+      await page
+        .getByRole("complementary", { name: "Primary navigation" })
+        .getByRole("button", { name: "Close navigation menu" })
+        .click()
+    await expect(
+      page.getByRole("table", { name: "Organization service requests" }),
+    ).toBeVisible()
+    await page
+      .getByLabel("Search service requests", { exact: true })
+      .fill("Design")
+    await expect
+      .poll(() =>
+        page
+          .getByLabel("Search service requests", { exact: true })
+          .inputValue(),
+      )
+      .toBe("Design")
+    await inspectRequest(page, "request-1")
+    await expect(page).toHaveURL(/\?request=request-1$/)
+    const drawer = page.getByRole("dialog", {
+      name: "Organization request",
+      exact: true,
+    })
+    await expect(drawer).toBeVisible()
+    await expect(
+      page.getByRole("heading", { name: "Organization request", exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByText("Assigned Designer (Designer) · Team lead", {
+        exact: true,
+      }),
+    ).toBeVisible()
+    await expect(page.getByText("CONSULTATION", { exact: true })).toBeVisible()
+    await page.screenshot({
+      path: test.info().outputPath("request-drawer.png"),
+    })
+    await expect(
+      page.getByRole("button", {
+        name: /accept|reject|decline|delete|chat|approve|verify|staff/i,
+      }),
+    ).toHaveCount(0)
+    await expect(
+      page.getByRole("link", { name: /open request workspace|download/i }),
+    ).toHaveCount(0)
+    await page.keyboard.press("Escape")
+    await expect(drawer).toHaveCount(0)
+    await expect(page).toHaveURL(/\/module\/service-operations$/)
+    await expect(
+      page.getByLabel("Search service requests", { exact: true }),
+    ).toHaveValue("Design")
+    const inspect = requestActions(page, "request-1")
+    await expect(inspect).toBeFocused()
+    await inspectRequest(page, "request-1")
+    await expect(drawer).toBeVisible()
+    await page.reload()
+    await expect(
+      page.getByRole("heading", { name: "Organization request", exact: true }),
+    ).toBeVisible()
+    await drawer.getByRole("button", { name: "Close request details" }).click()
+    await expect(drawer).toHaveCount(0)
+    expect(prohibited).toEqual([])
+  })
+}
+
+test("administrative request search stays pending without a false empty result", async ({
   page,
 }) => {
   await restoreSession(page, "SUPERADMIN")
-  const prohibited: string[] = []
-  page.on("request", (req) => {
-    const path = new URL(req.url()).pathname
-    if (
-      path.startsWith("/api/") &&
-      (req.method() !== "GET" ||
-        /^\/api\/(?:request-inbox(?:\/|$)|request-workflows\/(?!notifications$)|request-conversations\/)/.test(
-          path,
-        ))
-    )
-      prohibited.push(path)
+  let releaseSearch!: () => void
+  let notifySearchStarted!: () => void
+  const searchStarted = new Promise<void>((resolve) => {
+    notifySearchStarted = resolve
   })
-  await page.route("**/api/administrative-requests**", (route) => {
+  const pendingSearch = new Promise<void>((resolve) => {
+    releaseSearch = resolve
+  })
+  await page.route("**/api/administrative-requests?**", async (route) => {
     const url = new URL(route.request().url())
-    return route.fulfill({
-      json: url.pathname.endsWith("/request-1")
-        ? { serviceRequest: request }
-        : {
-            serviceRequests: [request],
-            departments: [{ id: "design", name: "Design" }],
-            total: 1,
-            page: 1,
-            pageSize: 10,
-          },
+    const search = url.searchParams.get("search") ?? ""
+    if (search === "No matching request") {
+      notifySearchStarted()
+      await pendingSearch
+    }
+    await route.fulfill({
+      json: {
+        serviceRequests: search ? [] : [request],
+        departments: [{ id: "design", name: "Design" }],
+        total: search ? 0 : 1,
+        page: 1,
+        pageSize: 10,
+      },
     })
   })
-  await page.goto("/services")
-  await page
-    .getByRole("link", { name: "Service Requests", exact: true })
-    .click()
-  await expect(
-    page.getByRole("table", { name: "Organization service requests" }),
-  ).toBeVisible()
-  await page
-    .getByLabel("Search service requests", { exact: true })
-    .fill("Design")
-  await expect
-    .poll(() =>
-      page.getByLabel("Search service requests", { exact: true }).inputValue(),
-    )
-    .toBe("Design")
-  await page
-    .getByRole("button", { name: "Inspect request request-1", exact: true })
-    .click()
-  await expect(page).toHaveURL(/\?request=request-1$/)
-  await expect(
-    page.getByRole("heading", { name: "Organization request", exact: true }),
-  ).toBeVisible()
-  await expect(
-    page.getByText("Assigned Designer (Designer) · Team lead", { exact: true }),
-  ).toBeVisible()
-  await expect(page.getByText("CONSULTATION", { exact: true })).toBeVisible()
-  await expect(
-    page.getByRole("button", {
-      name: /accept|reject|decline|delete|chat|approve|verify|staff/i,
-    }),
-  ).toHaveCount(0)
-  await expect(
-    page.getByRole("link", { name: /open request workspace|download/i }),
-  ).toHaveCount(0)
-  await page.reload()
-  await expect(
-    page.getByRole("heading", { name: "Organization request", exact: true }),
-  ).toBeVisible()
-  expect(prohibited).toEqual([])
+  try {
+    await page.goto("/module/service-operations")
+    const table = page.getByRole("table", {
+      name: "Organization service requests",
+      exact: true,
+    })
+    await expect(
+      table.getByRole("button", { name: "More actions for request request-1" }),
+    ).toBeVisible()
+    await page
+      .getByRole("searchbox", { name: "Search service requests", exact: true })
+      .fill("No matching request")
+    await searchStarted
+    await expect(table).toHaveAttribute("aria-busy", "true")
+    await expect(table.getByRole("status")).toHaveText("Loading requests…")
+    const skeletonRows = table.getByRole("rowgroup").nth(1).getByRole("row")
+    await expect(skeletonRows).toHaveCount(10)
+    for (const row of await skeletonRows.all())
+      await expect(row.getByRole("cell")).toHaveCount(6)
+    await expect(
+      table.getByText("No requests match this view.", { exact: true }),
+    ).toHaveCount(0)
+    releaseSearch()
+    await expect(
+      table.getByText("No requests match this view.", { exact: true }),
+    ).toBeVisible()
+    await expect(table.getByRole("status")).toHaveCount(0)
+  } finally {
+    releaseSearch()
+  }
 })
 
 test("backend rejection clears request details despite a cached administrative capability", async ({
   page,
 }) => {
   await restoreSession(page, "SUPERADMIN")
+  await page.route("**/api/administrative-requests?**", (route) =>
+    route.fulfill({
+      json: {
+        serviceRequests: [],
+        departments: [],
+        total: 0,
+        page: 1,
+        pageSize: 10,
+      },
+    }),
+  )
   await page.route("**/api/administrative-requests/**", (route) =>
     route.fulfill({
       status: 403,
@@ -190,12 +326,7 @@ test("shared filters, sorting and pagination send administrative request scopes 
   })
   await page.goto("/module/service-operations")
   await page.getByRole("button", { name: "Page 2", exact: true }).click()
-  await expect(
-    page.getByRole("button", {
-      name: "Inspect request request-11",
-      exact: true,
-    }),
-  ).toBeVisible()
+  await expect(requestActions(page, "request-11")).toBeVisible()
   await page
     .getByRole("combobox", {
       name: "Responsible or routed department",
@@ -208,7 +339,7 @@ test("shared filters, sorting and pagination send administrative request scopes 
   await page
     .getByRole("combobox", { name: "Request status", exact: true })
     .click()
-  await page.getByRole("option", { name: "UNDER REVIEW", exact: true }).click()
+  await page.getByRole("option", { name: "Under Review", exact: true }).click()
   await expect.poll(() => queries.at(-1)?.get("status")).toBe("UNDER_REVIEW")
   await page
     .getByRole("button", { name: "Sort by service", exact: true })
@@ -218,12 +349,7 @@ test("shared filters, sorting and pagination send administrative request scopes 
     .getByLabel("Search service requests", { exact: true })
     .fill("Design")
   await expect.poll(() => queries.at(-1)?.get("search")).toBe("Design")
-  await expect(
-    page.getByRole("button", {
-      name: "Inspect request request-1",
-      exact: true,
-    }),
-  ).toBeVisible()
+  await expect(requestActions(page, "request-1")).toBeVisible()
   await expect(page.getByRole("button", { name: /chat|delete/i })).toHaveCount(
     0,
   )

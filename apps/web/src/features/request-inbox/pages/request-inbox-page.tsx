@@ -35,19 +35,19 @@ type ConfirmAction = { kind: "decline" | "delete"; request: InboxRequest }
 
 const viewOptions: { value: InboxView; label: string }[] = [
   { value: "all", label: "All statuses" },
-  { value: "pending", label: "Awaiting acceptance" },
-  { value: "under-review", label: "Under review" },
-  { value: "awaiting-information", label: "Awaiting information" },
-  { value: "ready-for-quotation", label: "Ready for quotation" },
-  { value: "closed", label: "Closed" },
+  { value: "pending", label: "Pending" },
+  { value: "under-review", label: "Under Review" },
+  { value: "activated", label: "Activated" },
   { value: "cancelled", label: "Cancelled" },
+  { value: "concluded", label: "Concluded" },
 ]
 
 function matchesTableSearch(item: InboxRequest, query: string) {
   return [
-    item.title,
+    item.id,
     item.referenceNumber,
     item.service.name,
+    item.packageName,
     item.client.fullName,
     item.client.email,
   ].some((value) => value?.toLowerCase().includes(query))
@@ -58,7 +58,7 @@ export function RequestInboxPage() {
   const account = usePortalAccount()
   const [search, setSearch] = useState("")
   const query = search.trim()
-  const [view, setView] = useState<InboxView>("pending")
+  const [view, setView] = useState<InboxView>("all")
   const [sortBy, setSortBy] = useState<InboxSort>("createdAt")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
   const [selected, setSelected] = useState<InboxRequest | null>(null)
@@ -273,7 +273,9 @@ export function RequestInboxPage() {
           onDelete={(request) => setConfirm({ kind: "delete", request })}
         />
         <TableSearchStatus
-          active={list.loading && list.previewing}
+          active={
+            list.loading && list.previewing && Boolean(list.preview?.length)
+          }
           label="requests"
         />
         {list.footer && (
@@ -290,6 +292,7 @@ export function RequestInboxPage() {
           key={selected.id}
           id={selected.id}
           loadDetails={getInboxRequest}
+          panelStyle="management"
           closeDisabled={accepting || !!confirm}
           onClose={() => setSelected(null)}
           description="Review the client's booking before accepting it for department review."

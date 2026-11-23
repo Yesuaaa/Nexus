@@ -16,6 +16,7 @@ import {
   canCreateProjectWorkspace,
   Permissions,
 } from "../src/features/auth/model/permissions.ts"
+import { canAccessAdministrativeModules } from "../src/features/workspaces/model/module-registry.ts"
 
 const permissionsByRole = {
   USER: [
@@ -36,11 +37,12 @@ const permissionsByRole = {
     Permissions.DEPARTMENTS_READ,
     Permissions.DEPARTMENTS_MANAGE,
     Permissions.DEPARTMENTS_DELETE,
-    Permissions.EMPLOYEES_READ,
-    Permissions.EMPLOYEES_MANAGE,
     Permissions.SERVICES_READ,
     Permissions.SERVICES_MANAGE,
     Permissions.CLIENTS_READ,
+    Permissions.CLIENTS_CREATE,
+    Permissions.EMPLOYEES_READ,
+    Permissions.EMPLOYEES_MANAGE,
   ],
   SUPERADMIN: [
     Permissions.SERVICES_READ,
@@ -48,6 +50,7 @@ const permissionsByRole = {
     Permissions.EMPLOYEES_READ,
     Permissions.EMPLOYEES_MANAGE,
     Permissions.CLIENTS_READ,
+    Permissions.CLIENTS_CREATE,
     Permissions.DASHBOARD_READ,
     Permissions.PROFILE_READ,
     Permissions.PROFILE_CHANGE_PASSWORD,
@@ -62,6 +65,10 @@ const permissionsByRole = {
     Permissions.ACCOUNTS_ASSIGN_PRIVILEGED,
     Permissions.ACCOUNTS_STATUS_BASIC,
     Permissions.ACCOUNTS_STATUS_PRIVILEGED,
+    Permissions.MODULES_ACCESS_ALL,
+    Permissions.ORGANIZATION_READ_ALL,
+    Permissions.ADMINISTRATION_MANAGE_ALL,
+    Permissions.BUSINESS_CONVERSATIONS_INSPECT,
   ],
 }
 
@@ -89,6 +96,7 @@ const accessChecks = {
   messages: canAccessMessages,
   projects: canAccessProjects,
   projectWorkspace: canAccessProjectWorkspace,
+  administrativeModules: canAccessAdministrativeModules,
   requestInbox: canAccessRequestInbox,
   serviceCatalog: canAccessServiceCatalog,
   serviceManagement: canAccessServiceManagement,
@@ -106,6 +114,7 @@ const expectedAccess = {
     messages: true,
     projects: true,
     projectWorkspace: false,
+    administrativeModules: false,
     requestInbox: false,
     serviceCatalog: true,
     serviceManagement: false,
@@ -121,6 +130,7 @@ const expectedAccess = {
     messages: true,
     projects: true,
     projectWorkspace: true,
+    administrativeModules: false,
     requestInbox: false,
     serviceCatalog: false,
     serviceManagement: false,
@@ -136,6 +146,7 @@ const expectedAccess = {
     messages: true,
     projects: true,
     projectWorkspace: true,
+    administrativeModules: false,
     requestInbox: true,
     serviceCatalog: false,
     serviceManagement: false,
@@ -151,6 +162,7 @@ const expectedAccess = {
     messages: true,
     projects: false,
     projectWorkspace: false,
+    administrativeModules: false,
     requestInbox: false,
     serviceCatalog: false,
     serviceManagement: true,
@@ -166,6 +178,7 @@ const expectedAccess = {
     messages: true,
     projects: false,
     projectWorkspace: false,
+    administrativeModules: true,
     requestInbox: false,
     serviceCatalog: false,
     serviceManagement: true,

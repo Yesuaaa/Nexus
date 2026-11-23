@@ -2,8 +2,12 @@ import { useDatePreferences } from "@/features/settings/providers/preferences-pr
 import { Eye, MessageSquare, Trash2 } from "lucide-react"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
+import {
+  RowActionLabel,
+  RowActionsMenu,
+  type RowActionMenuItem,
+} from "@/components/ui/row-actions-menu"
 import { TableSortButton } from "@/components/ui/table-sort-button"
-import { rowActionButton } from "@/components/ui/row-action-styles"
 import { Pill } from "@/components/ui/pill"
 import {
   DataTableErrorRow,
@@ -34,6 +38,63 @@ function requestKey(request: InboxRequest) {
 function StatusCell({ request }: { request: InboxRequest }) {
   if (request.status === "SUBMITTED") return <Pill tone="warning">Pending</Pill>
   return <BookingStatusPill status={request.status} />
+}
+
+type InboxAction = "view" | "chat" | "delete"
+
+const dangerItem =
+  "text-[#c33945] hover:bg-[#fff0f1] focus:bg-[#fff0f1] focus:text-[#c33945] focus-visible:bg-[#fff0f1]"
+
+function RequestInboxRowActions({
+  request,
+  readOnly,
+  onView,
+  onGoToChat,
+  onDelete,
+}: {
+  request: InboxRequest
+  readOnly: boolean
+  onView: (request: InboxRequest) => void
+  onGoToChat: (request: InboxRequest) => void
+  onDelete: (request: InboxRequest) => void
+}) {
+  const itemLabel = request.referenceNumber ?? request.id
+  const items: RowActionMenuItem<InboxAction>[] = [
+    {
+      action: "view",
+      label: (
+        <RowActionLabel icon={Eye}>
+          {readOnly ? "Inspect request" : "Review request"}
+        </RowActionLabel>
+      ),
+    },
+  ]
+  if (!readOnly)
+    items.push(
+      {
+        action: "chat",
+        label: <RowActionLabel icon={MessageSquare}>Go to chat</RowActionLabel>,
+      },
+      {
+        action: "delete",
+        label: <RowActionLabel icon={Trash2}>Delete request</RowActionLabel>,
+        className: dangerItem,
+        separatorBefore: true,
+      },
+    )
+  return (
+    <RowActionsMenu
+      triggerId={`request-actions-${request.id}`}
+      triggerLabel={`More actions for request ${request.id}`}
+      menuLabel={`Actions for request ${itemLabel}`}
+      items={items}
+      onAction={(action) => {
+        if (action === "view") onView(request)
+        else if (action === "chat") onGoToChat(request)
+        else onDelete(request)
+      }}
+    />
+  )
 }
 
 export function RequestInboxTable({
@@ -111,7 +172,7 @@ export function RequestInboxTable({
           </ResponsiveDataTableColumnHeader>
         ))}
         <ResponsiveDataTableColumnHeader
-          className="!text-[#070f1f] @max-[800px]:hidden"
+          className="flex items-center justify-end !text-[#070f1f] @max-[800px]:hidden"
           style={{ color: "#070f1f" }}
         >
           Actions
@@ -147,7 +208,7 @@ export function RequestInboxTable({
           viewKey={viewKey}
           quickKey={quickKey}
           onRowsSettled={onRowsSettled}
-          animateRows
+          animateRows={false}
           ariaBusy={loading}
           defaultRowHeight={58}
           className="relative min-w-0 overflow-x-clip"
@@ -209,46 +270,15 @@ export function RequestInboxTable({
               </div>
               <div
                 role="cell"
-                className="flex items-center justify-start gap-2 @max-[800px]:col-start-2 @max-[800px]:row-start-1 @max-[800px]:justify-self-end"
+                className="flex items-center justify-end @max-[800px]:col-start-2 @max-[800px]:row-start-1 @max-[800px]:justify-self-end"
               >
-                <button
-                  type="button"
-                  id={`booking-view-${request.id}`}
-                  aria-label={`${readOnly ? "Inspect" : "Review"} request ${request.id}`}
-                  className={cn(
-                    rowActionButton,
-                    "text-[#52627a] max-[560px]:size-11",
-                  )}
-                  onClick={() => onView(request)}
-                >
-                  <Eye size={16} aria-hidden="true" />
-                </button>
-                {!readOnly && (
-                  <button
-                    type="button"
-                    aria-label={`Go to chat for request ${request.id}`}
-                    className={cn(
-                      rowActionButton,
-                      "text-[#52627a] max-[560px]:size-11",
-                    )}
-                    onClick={() => onGoToChat(request)}
-                  >
-                    <MessageSquare size={16} aria-hidden="true" />
-                  </button>
-                )}
-                {!readOnly && (
-                  <button
-                    type="button"
-                    aria-label={`Delete request ${request.id}`}
-                    className={cn(
-                      rowActionButton,
-                      "text-[#b42318] max-[560px]:size-11",
-                    )}
-                    onClick={() => onDelete(request)}
-                  >
-                    <Trash2 size={16} aria-hidden="true" />
-                  </button>
-                )}
+                <RequestInboxRowActions
+                  request={request}
+                  readOnly={readOnly}
+                  onView={onView}
+                  onGoToChat={onGoToChat}
+                  onDelete={onDelete}
+                />
               </div>
             </>
           )}

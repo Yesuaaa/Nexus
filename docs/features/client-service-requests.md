@@ -2,6 +2,8 @@
 
 Developed: 2026-10-30
 
+2026-11-15: Request lifecycle labels now match the department inbox: Pending, Under Review, Activated, Cancelled, Concluded. The descriptions and filter options share the same status definitions; see [request lifecycle](department-request-inbox.md#request-lifecycle-2026-11-15) for transitions and migration requirements. Detailed consultation/quotation progress remains in the workflow.
+
 Client accounts (`USER`) can open **Service Requests** at `/service-requests` to track their own requests. The page uses the existing portal header, navy actions, KPI cards, Radix filters, status pills, numbered pagination, and details drawer. Desktop tables switch to cards on smaller screens.
 
 The overview shows total, pending-review, in-review, and closed requests across the client's history. Search matches the request title, reference, service, or package. Status filtering, newest/oldest sorting, and pagination run on the server. The drawer shows submitted requirements, timeline, the pricing snapshot, and the preferred specialist. A specialist preference never finalizes an assignment; the Department Manager makes that decision.

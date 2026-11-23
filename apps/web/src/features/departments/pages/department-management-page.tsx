@@ -96,6 +96,7 @@ export function DepartmentManagementPage() {
         <DepartmentTable
           departments={departments}
           loading={loading}
+          ariaBusy={departmentList.loading}
           error={error}
           canManage={canManage}
           canDelete={canDelete}

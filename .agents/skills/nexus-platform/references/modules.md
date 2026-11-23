@@ -4,6 +4,8 @@ Verified against the working tree on 2026-11-15, including uncommitted implement
 
 ## Accounts and module access
 
+Account editing (2026-11-16): Superadmin Account Management uses a row-action edit panel for name, email, contact number and permitted role changes. `PATCH /api/users/:id` saves profile and role atomically with management history; self-role changes and leadership/promotion restrictions remain enforced. Employee HR fields and department/team assignment remain in People & HR. The inline Access column and bulk role save are removed.
+
 Implemented: account administration, JWT/session/refresh handling, fixed permissions, administrative capabilities, module registration, and route policy. Start with API `src/features/auth`, `users`, `modules`, and web `src/features/auth`, `accounts`, `workspaces`.
 
 - `SUPERADMIN` has account-management and global administrative grants. Current `ADMIN` permissions include people/departments/services and separate `clients:read` / `clients:create`, but no `accounts:*`. Feature-specific Employee/Client provisioning has separate authorization.
@@ -14,6 +16,8 @@ Implemented: account administration, JWT/session/refresh handling, fixed permiss
 Read `docs/rbac.md` and these records under `docs/features/`: `module-role-access.md`, `superadmin-authorization-foundation.md`, `superadmin-module-registration.md`, `client-creation-permission-separation.md`. Trace both permission maps and affected controllers/services before changing access.
 
 ## People, departments, clients, and attribution
+
+Attendance review update (2026-11-16): overtime and corrections share Head verification → HR final decision. HR organization queues/counts/notifications exclude pending Head reviews; Superadmin can decide at either stage, preserving self-review denials, validation, and audit attribution. Correction verification does not mutate sessions. See migration `20261116120000_attendance_correction_verification` and `docs/features/attendance-interface.md`.
 
 Implemented: HR records distinct from login accounts, account/employee lifecycle, client management, department/team structure and leadership, temporary head handoff/restoration, and scoped management attribution. Sources: API `src/features/employees`, `users`, `departments`, `clients`, and `src/shared/management-history.ts`; schema `AccountManagementChange` / `WorkforceManagementChange`.
 
@@ -28,11 +32,22 @@ Read these `docs/features/` records: `employee-management.md`, `client-managemen
 
 ## Services, workflow, projects, workload, and messaging
 
+Abandoned branch 266 (2026-11-17): its applied management-history immutability migration is retained for ledger compatibility and compensated by `20261117160000_revert_branch266_history_guards`. Both management-history tables/data and the current Service Operations log foundation remain. See `docs/features/branch266-database-rollback.md` for verified target scope and deployment result.
+
+Service Operations logs (2026-11-17): `/module/service-operations/logs` and `/api/service-operation-logs` provide Superadmin-only structured activity and safe 5xx incident inspection with actor attribution, affected-record labels, allowlisted before/after or attempted changes, operation-specific messages, closed diagnostic codes/reasons, correlation-aware server output, 30-day expiry and startup/hourly pruning. Success writes share domain transactions. See `docs/features/service-operation-logs.md` for precise coverage, privacy, legacy and outage limitations; this is not universal mutation or messaging history.
+
+Project Management logs (2026-11-18) provide the Superadmin-only viewer at `/module/project-management/logs` and API at `/api/project-management-logs`. Workspace, plan, task, milestone, deliverable and Client project mutations write transactional success events. Scoped HTTP 5xx incidents persist independently. See `docs/features/project-management-logs.md` for the event matrix, retention and privacy rules.
+
+The sidebar's **System Tool** section shows the log link for the active workspace. **Service Logs** and **Project Logs** each open the history of their own module.
+
+Superadmin opens the organization-wide request overview through **Service → Request**. Department heads use the **Request** group's **Overview** and **Inbox** for their own department.
+
 Implemented: catalog/pricing/packages, public active-service discovery at `/api/services/available`, client requests/booked services, Head inbox, conversation-centered requirements/consultation/quotation/agreement/payment workflow, project workspaces/milestones/deliverables/review/change requests, workload, and administrative oversight.
 
 Start with `apps/api/src/app.ts` and mounted controllers in `services`, `client-services`, `service-requests`, `request-inbox`, `request-workflow`, `projects`, `project-workspace`, `workload`, and conversation features. Trace corresponding web features/route entry points and API/PGlite/browser tests.
 
 - Catalog administration retains `services:read` / `services:manage`. Preserve server-side ownership, headship, assignment, state transitions, shared/client visibility, upload/download protections, and idempotency/receipt rules.
+- Request lifecycle labels are Pending (`SUBMITTED`), Under Review, Activated, Cancelled, and Concluded. Acceptance sets Under Review, authorized staffed workspace activation sets Activated, and workspace completion sets Concluded in the same transaction. Consultation/quotation stages remain separate workflow state. See `docs/features/department-request-inbox.md` for normalization migrations and compatibility details.
 - Service conversations require the owning Client or eligible current Head; project participation requires the owning Client or eligible assigned Staff plus project-state checks. Internal DMs require explicit participant membership. Administrative oversight exposes restricted business metadata, not chat bodies, private DMs, file authority, read markers, or participation.
 - `apps/web/src/app/(portal)/billing-logs/page.tsx` calls `/api/request-workflows/billing`. Workflow payments, proof/verification, sandbox flags, and demo-specific presentation exist. This is partial billing functionality, not a complete finance/payroll system or proof of a production payment gateway.
 
@@ -40,11 +55,25 @@ Read records under `docs/features/`: `client-service-requests.md`, `department-r
 
 ## Attendance and calendar
 
-Implemented: attendance policies/assignments, workdays/sessions/breaks, adjustments/review/audit, attendance web screens, and role-aware calendar composition. Sources: API `src/features/attendance`, web `src/features/attendance` and `calendar`. Trace calendar API composition before assuming a dedicated backend calendar router.
+Department placement writes reuse the authenticated management operation in the transaction-local attendance audit context. The transfer trigger groups the department ID change with any verification resets for active correction and overtime reviews. See `docs/features/workforce-compliance-logs.md`.
+
+Workforce Logs text search keeps the original ordered group membership in short-lived, session-bound paging windows. Each response resolves current display names. See the Workforce Logs contract for window limits and refresh behavior.
+
+Workforce Logs text search accepts literal area codes and their spaced names, including `time-logs` and `Time Logs`.
+
+Workforce Logs projects suspension time and distinguishes manager reconciliation from employee clock-out using the recorded session transitions and authenticated audit context. Correction decisions continue to describe their grouped writes.
+
+Attendance policies support flexible weekly targets and fixed shifts. Fixed targets use scheduled duration minus scheduled unpaid breaks. PostgreSQL resolves and snapshots shift boundaries, and attendance details compare them against recorded punches. Leave and workload continue consuming the existing required-minute targets. See migration `20261122120000_attendance_fixed_schedule` and `docs/features/attendance-interface.md`.
+
+Implemented: attendance policies/assignments, workdays/sessions/breaks, adjustments/review/audit, whole-day leave requests, attendance web screens, and role-aware calendar composition. Sources: API `src/features/attendance` and `src/features/leave`, web `src/features/attendance`, `leave`, and `calendar`. Trace calendar API composition before assuming a dedicated backend calendar router.
+
+Leave requests (2026-11-17) use immutable request/day records and audited decisions. Linked employees submit annual, sick, emergency, unpaid, or other leave; current eligible Heads verify department requests, HR/Admin decides verified or Headless exception-routed requests, and Superadmin retains organization oversight without gaining Employee self-service identity. Self-review is denied. Approved policy snapshots reduce required attendance minutes, block covered clock-ins/corrections, generate private all-day calendar projections, and appear separately in workload planning without mutating manual capacity or `Employee.status`. See migration `20261117120000_leave_requests` and `docs/features/leave-requests-plan.md`.
 
 Preserve administrative versus Employee self-service/Head review boundaries, eligibility, time/policy rules, audit history, and clock-injection fixtures. Attendance does not imply salary/payroll processing.
 
-Read `docs/features/attendance-foundation.md`, `attendance-backend.md`, `attendance-interface.md`, `superadmin-attendance-administration.md`, and `calendar.md` in that folder. `attendance-availability-plan.md` is planning context; verify proposed integrations against current attendance/workload code.
+Leave review fixes (2026-11-17): transferred verified requests require receiving-Head re-verification before final approval. Future approved leave guards policy edits and assignment replacement/removal. Corrections reject intervals crossing leave dates; clock-out recovery preserves recorded work with an audit reason, employee warning, and HR conflict notification. Calendar leave uses explicit date-only boundaries rather than a fixed timezone offset.
+
+Read `docs/features/attendance-foundation.md`, `attendance-backend.md`, `attendance-interface.md`, `leave-requests-plan.md`, `superadmin-attendance-administration.md`, and `calendar.md` in that folder. `attendance-availability-plan.md` is planning context; verify proposed integrations against current attendance/workload code.
 
 ## Planned, partial, and experimental
 

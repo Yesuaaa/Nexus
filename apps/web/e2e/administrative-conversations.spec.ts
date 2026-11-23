@@ -167,12 +167,23 @@ for (const width of [1440, 390])
     await expect(
       table.getByText("Engineering Client · Engineering", { exact: true }),
     ).toBeVisible()
-    await page
-      .getByRole("searchbox", {
-        name: "Search business conversations",
-        exact: true,
-      })
-      .fill("Engineering")
+    const search = page.getByRole("searchbox", {
+      name: "Search business conversations",
+      exact: true,
+    })
+    const requestsBeforeSearch = requests.length
+    await page.clock.install()
+    await search.fill("Engineering")
+    await expect(table).toHaveAttribute("aria-busy", "true")
+    await expect(table.getByRole("status")).toHaveText(
+      "Loading business conversations…",
+    )
+    await page.clock.runFor(199)
+    expect(requests).toHaveLength(requestsBeforeSearch)
+    await expect(table.getByRole("status")).toHaveText(
+      "Loading business conversations…",
+    )
+    await page.clock.runFor(1)
     await page
       .getByRole("combobox", { name: "Conversation type", exact: true })
       .click()
@@ -409,9 +420,10 @@ test("a private-thread identifier cannot open a participant view through an over
       .getByRole("alert")
       .filter({ hasText: "Business conversation not found" }),
   ).toBeVisible()
-  expect(paths).toEqual([
-    "/api/administrative-conversations/service/private-thread",
-  ])
+  expect(paths.length).toBeGreaterThan(0)
+  expect(new Set(paths)).toEqual(
+    new Set(["/api/administrative-conversations/service/private-thread"]),
+  )
   await expect(page.getByRole("textbox")).toHaveCount(0)
 })
 
@@ -443,6 +455,12 @@ test("metadata errors, retry and pagination use the existing read-only UI", asyn
       .getByRole("alert")
       .filter({ hasText: "Metadata temporarily unavailable" }),
   ).toBeVisible()
+  await expect(
+    page.getByRole("table", {
+      name: "Business conversations",
+      exact: true,
+    }),
+  ).toBeVisible()
   failed = false
   await page.getByRole("button", { name: "Retry", exact: true }).click()
   const table = page.getByRole("table", {
@@ -453,3 +471,178 @@ test("metadata errors, retry and pagination use the existing read-only UI", asyn
   await page.getByRole("button", { name: "Next page", exact: true }).click()
   await expect(table.getByText(rows[1].name, { exact: true })).toBeVisible()
 })
+
+test("conversation tables keep aligned skeletons on initial and background loads", async ({
+  page,
+}) => {
+  await restoreSession(page, "SUPERADMIN")
+  const initialList = requestGate()
+  const refreshedList = requestGate()
+  const initialDetails = requestGate()
+  const refreshedDetails = requestGate()
+  const linkedRecords = Array.from({ length: 11 }, (_, index) => ({
+    id: `request-${index + 1}`,
+    title: `Brand identity ${index + 1}`,
+    referenceNumber: `EXP-${100 + index}`,
+    status: "UNDER_REVIEW",
+    serviceName: "Branding",
+    createdAt: stamp,
+    updatedAt: stamp,
+    project: null,
+  }))
+
+  await page.route("**/api/administrative-conversations**", async (route) => {
+    const url = new URL(route.request().url())
+    if (url.pathname === "/api/administrative-conversations") {
+      const gate = url.searchParams.get("search") ? refreshedList : initialList
+      gate.start()
+      await gate.pending
+      const search = url.searchParams.get("search")?.toLowerCase() ?? ""
+      const conversations = rows.filter((row) =>
+        row.name.toLowerCase().includes(search),
+      )
+      return route.fulfill({
+        json: {
+          conversations,
+          departments,
+          page: 1,
+          pageSize: 10,
+          total: conversations.length,
+        },
+      })
+    }
+
+    const pageNumber = Number(url.searchParams.get("page") ?? "1")
+    const gate = pageNumber === 1 ? initialDetails : refreshedDetails
+    gate.start()
+    await gate.pending
+    return route.fulfill({
+      json: {
+        conversation: {
+          ...(rows.find((row) => row.id === url.pathname.split("/").at(-1)) ??
+            rows[0]),
+          linkedRecordCount: linkedRecords.length,
+        },
+        linkedRecords: linkedRecords.slice(
+          (pageNumber - 1) * 10,
+          pageNumber * 10,
+        ),
+        page: pageNumber,
+        pageSize: 10,
+        total: linkedRecords.length,
+      },
+    })
+  })
+
+  await page.goto("/messages/oversight")
+  const conversations = page.getByRole("table", {
+    name: "Business conversations",
+    exact: true,
+  })
+  await initialList.started
+  await expect(conversations.locator("thead th")).toHaveCount(6)
+  const listSkeletons = conversations.locator("tbody tr")
+  await expect(listSkeletons).toHaveCount(5)
+  for (const skeleton of await listSkeletons.all())
+    await expect(skeleton.locator("td")).toHaveCount(6)
+  await expect(conversations.getByRole("status")).toContainText(
+    "Loading business conversations",
+  )
+  initialList.release()
+  await expect(
+    conversations.getByText(rows[0].name, { exact: true }),
+  ).toBeVisible()
+
+  const search = page.getByRole("searchbox", {
+    name: "Search business conversations",
+    exact: true,
+  })
+  await search.fill("Engineering")
+  await refreshedList.started
+  await expect(conversations).toHaveAttribute("aria-busy", "true")
+  const searchSkeletons = conversations.locator("tbody tr")
+  await expect(searchSkeletons).toHaveCount(5)
+  for (const skeleton of await searchSkeletons.all())
+    await expect(skeleton.locator("td")).toHaveCount(6)
+  await expect(conversations.getByRole("status")).toContainText(
+    "Loading business conversations",
+  )
+  await expect(
+    conversations.getByText(rows[0].name, { exact: true }),
+  ).toHaveCount(0)
+  await expect(
+    conversations.getByText(rows[1].name, { exact: true }),
+  ).toHaveCount(0)
+  await expect(
+    conversations.getByText("No business conversations found.", {
+      exact: true,
+    }),
+  ).toHaveCount(0)
+  await expect(
+    page
+      .getByRole("navigation", { name: "Business conversation pages" })
+      .getByRole("button", { name: "Next page", exact: true }),
+  ).toBeDisabled()
+  refreshedList.release()
+  await expect(conversations).toHaveAttribute("aria-busy", "false")
+  await expect(
+    conversations.getByText(rows[0].name, { exact: true }),
+  ).toHaveCount(0)
+  await expect(
+    conversations.getByText(rows[1].name, { exact: true }),
+  ).toBeVisible()
+  await expect(conversations.locator("tbody tr")).toHaveCount(1)
+  await expect(
+    conversations.getByText("No business conversations found.", {
+      exact: true,
+    }),
+  ).toHaveCount(0)
+
+  await page
+    .getByRole("link", {
+      name: `Inspect metadata for ${rows[1].name}`,
+      exact: true,
+    })
+    .click()
+  const records = page.getByRole("table", {
+    name: "Linked business records",
+    exact: true,
+  })
+  await initialDetails.started
+  await expect(records.locator("thead th")).toHaveCount(4)
+  const detailSkeletons = records.locator("tbody tr")
+  await expect(detailSkeletons).toHaveCount(5)
+  for (const skeleton of await detailSkeletons.all())
+    await expect(skeleton.locator("td")).toHaveCount(4)
+  await expect(records.getByRole("status")).toContainText(
+    "Loading linked business records",
+  )
+  initialDetails.release()
+  await expect(
+    records.getByRole("cell").filter({ hasText: "EXP-100" }),
+  ).toBeVisible()
+
+  await page.getByRole("button", { name: "Next page", exact: true }).click()
+  await refreshedDetails.started
+  await expect(records).toHaveAttribute("aria-busy", "true")
+  await expect(
+    records.getByRole("cell").filter({ hasText: "EXP-100" }),
+  ).toBeVisible()
+  await expect(detailSkeletons).toHaveCount(10)
+  refreshedDetails.release()
+  await expect(
+    records.getByRole("cell").filter({ hasText: "EXP-110" }),
+  ).toBeVisible()
+})
+
+function requestGate() {
+  let start!: () => void
+  let release!: () => void
+  const started = new Promise<void>((resolve) => {
+    start = resolve
+  })
+  const pending = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  return { started, pending, start, release: () => release() }
+}

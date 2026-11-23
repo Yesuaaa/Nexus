@@ -17,6 +17,8 @@ export const Permission = {
   DEPARTMENTS_DELETE: "departments:delete",
   EMPLOYEES_READ: "employees:read",
   EMPLOYEES_MANAGE: "employees:manage",
+  PAYROLL_READ: "payroll:read",
+  PAYROLL_MANAGE: "payroll:manage",
   SERVICES_READ: "services:read",
   SERVICES_MANAGE: "services:manage",
   SERVICE_INQUIRIES_READ: "service-inquiries:read",
@@ -60,6 +62,9 @@ const adminPermissions = [
   Permission.EMPLOYEES_MANAGE,
 ] as const
 
+const payrollReadPermissions = [Permission.PAYROLL_READ] as const
+const payrollManagementPermissions = [Permission.PAYROLL_MANAGE] as const
+
 const accountManagementPermissions = [
   Permission.ACCOUNTS_READ,
   Permission.ACCOUNTS_RESET_PASSWORD,
@@ -82,9 +87,14 @@ const globalAdministrativePermissions = [
 const rolePermissions: Record<Role, readonly Permission[]> = {
   [Role.USER]: commonPermissions,
   [Role.STAFF]: staffPermissions,
-  [Role.ADMIN]: adminPermissions,
+  [Role.ADMIN]: [
+    ...adminPermissions,
+    ...payrollReadPermissions,
+    ...payrollManagementPermissions,
+  ],
   [Role.SUPERADMIN]: [
     ...adminPermissions,
+    ...payrollReadPermissions,
     ...accountManagementPermissions,
     ...globalAdministrativePermissions,
   ],

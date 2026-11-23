@@ -1,16 +1,21 @@
 import { json, Router } from "express"
-import { recordIdParam } from "../../shared/validation.js"
-import { requireAuth } from "../auth/auth.middleware.js"
+import { isRecordId, recordIdParam } from "../../shared/validation.js"
+import { requireAuth, requirePermission } from "../auth/auth.middleware.js"
+import { Permission } from "../auth/auth.permissions.js"
 import { fail } from "../../shared/http-error.js"
+import { parsePage } from "../../shared/query/pagination.js"
+import { parseWorkspaceIdentity } from "./workspace-identity.js"
 import {
   addProjectTask,
   assignProjectTeamLead,
   cancelProjectWorkspace,
   createProjectWorkspaces,
   getProjectWorkspace,
+  getAdminProjectManagementWorkspaceDetails,
   listApprovedBookings,
   listProjectWorkspaceTemplates,
   listProjectWorkspaces,
+  listWorkspaceDirectory,
   renameProjectWorkspace,
   updateProjectTask,
   saveProjectPlan,
@@ -22,11 +27,32 @@ import {
   downloadProjectDeliverable,
   updateProjectWorkspaceStatus,
 } from "./project-workspace.service.js"
+import { getProjectWorkspaceOverview } from "./project-workspace-overview.service.js"
 
 export const projectWorkspaceRouter = Router()
 projectWorkspaceRouter.use(requireAuth)
 
-for (const parameter of ["id", "projectId", "taskId", "deliverableId"])
+projectWorkspaceRouter.param(
+  "id",
+  (_request, _response, next, value: string) => {
+    parseWorkspaceIdentity(value)
+    next()
+  },
+)
+
+projectWorkspaceRouter.param(
+  "departmentId",
+  recordIdParam("Invalid department ID"),
+)
+projectWorkspaceRouter.param(
+  "identity",
+  (_request, _response, next, value: string) => {
+    parseWorkspaceIdentity(value)
+    next()
+  },
+)
+
+for (const parameter of ["projectId", "taskId", "deliverableId"])
   projectWorkspaceRouter.param(
     parameter,
     recordIdParam("Invalid project workspace ID"),
@@ -40,6 +66,74 @@ projectWorkspaceRouter.get("/", async (request, response) => {
       limit: Number.isInteger(limit) && limit > 0 ? limit : undefined,
     }),
   )
+})
+
+projectWorkspaceRouter.get("/directory", async (request, response) => {
+  const rawDepartmentId = request.query.departmentId ?? ""
+  const departmentId =
+    typeof rawDepartmentId === "string"
+      ? rawDepartmentId.trim()
+      : rawDepartmentId
+  const {
+    page: inputPage,
+    search = "",
+    status = "",
+    sort = "recent",
+    view = "active",
+  } = request.query
+  const page = parsePage(inputPage)
+  if (
+    !page ||
+    typeof search !== "string" ||
+    search.length > 200 ||
+    typeof departmentId !== "string" ||
+    (departmentId !== "" && !isRecordId(departmentId)) ||
+    typeof status !== "string" ||
+    ![
+      "",
+      "PLANNED",
+      "IN_PROGRESS",
+      "ON_HOLD",
+      "COMPLETED",
+      "CANCELLED",
+    ].includes(status) ||
+    (sort !== "recent" &&
+      sort !== "name" &&
+      sort !== "client" &&
+      sort !== "projects") ||
+    (view !== "active" && view !== "archive" && view !== "all")
+  )
+    fail(400, "Invalid workspace directory filters")
+  response.json(
+    await listWorkspaceDirectory(request.auth!.user.id, {
+      page,
+      search: search.trim(),
+      departmentId,
+      status,
+      sort,
+      view,
+    }),
+  )
+})
+
+projectWorkspaceRouter.get(
+  "/admin/departments/:departmentId/workspaces/:identity",
+  requirePermission(Permission.MODULES_ACCESS_ALL),
+  requirePermission(Permission.ORGANIZATION_READ_ALL),
+  requirePermission(Permission.DEPARTMENTS_READ),
+  async (request, response) => {
+    response.json(
+      await getAdminProjectManagementWorkspaceDetails(
+        request.auth!.user.id,
+        String(request.params.departmentId),
+        String(request.params.identity),
+      ),
+    )
+  },
+)
+
+projectWorkspaceRouter.get("/overview", async (request, response) => {
+  response.json(await getProjectWorkspaceOverview(request.auth!.user.id))
 })
 
 projectWorkspaceRouter.get("/templates", async (request, response) => {

@@ -1,0 +1,4 @@
+ALTER TYPE "WorkforceManagementSubject" ADD VALUE 'COMPENSATION';
+ALTER TYPE "WorkforceManagementSubject" ADD VALUE 'PAYROLL_CONFIGURATION';
+ALTER TYPE "WorkforceManagementAction" ADD VALUE 'VERSION_CREATED';
+ALTER TYPE "WorkforceManagementOrigin" ADD VALUE 'PAYROLL_MANAGEMENT';

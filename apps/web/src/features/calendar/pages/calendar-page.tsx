@@ -26,6 +26,7 @@ import { FilterSelect, filterGridClass } from "@/components/ui/filter-select"
 import { watchVisibleRefresh } from "@/lib/visible-refresh"
 import {
   calendarConflicts,
+  calendarEventDate,
   calendarEventStatus,
   type CalendarEvent,
   type CalendarResponse,
@@ -38,6 +39,7 @@ const eventTypes = {
   meeting: { label: "Meeting", color: "#0d9488" },
   milestone: { label: "Milestone", color: "#d97706" },
   task: { label: "Task deadline", color: "#7c3aed" },
+  leave: { label: "Approved leave", color: "#b45309" },
 }
 
 const timezone = "Asia/Manila"
@@ -160,6 +162,7 @@ export function CalendarPage() {
   const [staffId, setStaffId] = useState("all")
   const [now, setNow] = useState(() => Date.now())
   const today = dateKey.format(now)
+  const [month, setMonth] = useState(today.slice(0, 7))
   const [selected, setSelected] = useState(today)
   const [allEvents, setEvents] = useState<CalendarEvent[]>([])
   const [loading, setLoading] = useState(true)
@@ -178,7 +181,7 @@ export function CalendarPage() {
       if (inFlight) return
       inFlight = true
       apiRequest<CalendarEvent[] | CalendarResponse>(
-        `/api/projects/calendar${isClient ? "" : `?scope=${scope}`}`,
+        `/api/projects/calendar${isClient ? "" : `?scope=${scope}&month=${month}`}`,
         {
           signal: controller.signal,
         },
@@ -210,7 +213,7 @@ export function CalendarPage() {
       controller.abort()
       stopRefresh()
     }
-  }, [isClient, scope, revision, account.id])
+  }, [isClient, scope, month, revision, account.id])
 
   const events = allEvents.filter(
     (event) =>
@@ -271,7 +274,7 @@ export function CalendarPage() {
 
   const byDay: Record<string, CalendarEvent[]> = {}
   for (const event of events) {
-    const day = dateKey.format(new Date(event.startsAt))
+    const day = calendarEventDate(event)
     ;(byDay[day] ??= []).push(event)
   }
   const markers = Object.fromEntries(
@@ -287,8 +290,8 @@ export function CalendarPage() {
     (event) =>
       event.type !== "milestone" &&
       !event.completed &&
-      (event.deadline
-        ? dateKey.format(new Date(event.startsAt)) >= today
+      (event.deadline || event.allDay
+        ? calendarEventDate(event) >= today
         : Date.parse(event.endsAt ?? event.startsAt) >= now),
   )
   const nextJoin = events.find(
@@ -300,7 +303,7 @@ export function CalendarPage() {
       meetingLink(event),
   )
   const comingUp = upcoming
-    .filter((event) => dateKey.format(new Date(event.startsAt)) !== selected)
+    .filter((event) => calendarEventDate(event) !== selected)
     .slice(0, 3)
   const emptyMessage = loading
     ? "Loading calendar…"
@@ -462,6 +465,7 @@ export function CalendarPage() {
             today={today}
             markers={markers}
             onSelect={setSelected}
+            onViewMonthChange={setMonth}
           />
           <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2">
             {Object.entries(eventTypes)
@@ -504,12 +508,14 @@ export function CalendarPage() {
                   const status = calendarEventStatus(event, today)
                   const overlap = !isClient && conflicts.has(event.id)
                   const needsStaff = organization && event.unassigned
-                  const time = event.endsAt
-                    ? timeLabel.formatRange(
-                        new Date(event.startsAt),
-                        new Date(event.endsAt),
-                      )
-                    : "All day"
+                  const time = event.allDay
+                    ? "All day"
+                    : event.endsAt
+                      ? timeLabel.formatRange(
+                          new Date(event.startsAt),
+                          new Date(event.endsAt),
+                        )
+                      : "All day"
                   const details = [
                     staff && `with ${staff}`,
                     !isClient && event.context,
@@ -586,9 +592,7 @@ export function CalendarPage() {
             {comingUp.length ? (
               <ul className="mt-3 list-none space-y-0.5 p-0">
                 {comingUp.map((event) => {
-                  const date = calendarDate(
-                    dateKey.format(new Date(event.startsAt)),
-                  )
+                  const date = calendarDate(calendarEventDate(event))
                   return (
                     <li key={event.id} className={eventRowClass}>
                       <time
@@ -607,9 +611,11 @@ export function CalendarPage() {
                           {event.title}
                         </p>
                         <p className={cn(mutedText, "m-0 break-words")}>
-                          {event.deadline
-                            ? "Due this day"
-                            : timeLabel.format(new Date(event.startsAt))}
+                          {event.allDay
+                            ? "All day"
+                            : event.deadline
+                              ? "Due this day"
+                              : timeLabel.format(new Date(event.startsAt))}
                           {" · "}
                           {event.context}
                         </p>

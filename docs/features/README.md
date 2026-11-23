@@ -6,6 +6,14 @@ Use the date the feature was completed, and keep later implementation changes in
 
 ## Records
 
+- [Payroll workflow guide](payroll-workflow.md), documented 2026-11-20: setup, calculation, independent approval, payslips, Staff concerns, sandbox disbursements and reconciliation.
+
+- [Branch 266 database rollback](branch266-database-rollback.md), completed 2026-11-17.
+
+- [Superadmin Service Operations logs](service-operation-logs.md), developed 2026-11-17.
+
+- [Leave requests: workflow, edge cases, and frontend reuse](leave-requests-plan.md), developed 2026-11-17.
+
 - [Browser regression baseline and contract remediation (Phase 4C.1)](browser-regression-contract-remediation.md), developed 2026-11-15; [preserved initial baseline](browser-regression-baseline.md).
 
 - [Team management actor attribution (Phase 4B.4B.5D)](team-management-attribution.md), developed 2026-11-15.
@@ -46,7 +54,7 @@ Use the date the feature was completed, and keep later implementation changes in
 
 - [Superadmin People & HR administrative access (Phase 3C.2)](superadmin-people-hr-administration.md), developed 2026-11-14.
 
-- [Superadmin Attendance & Monitoring administration (Phase 3C.1)](superadmin-attendance-administration.md), developed 2026-11-14.
+- [Superadmin Workforce Compliance administration (Phase 3C.1)](superadmin-attendance-administration.md), developed 2026-11-14.
 
 - [Superadmin service request workflow oversight (Phase 3B.3A)](superadmin-workflow-oversight.md), developed 2026-11-14.
 

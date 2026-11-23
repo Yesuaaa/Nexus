@@ -1,0 +1,378 @@
+{
+  "timestamp": "2026-11-09T07:43:24.478Z",
+  "revision": "2075d354d62dd15b6d34b53600416de336eca4d6",
+  "sourceChecks": [
+    {
+      "file": "apps/web/e2e/admin.spec.ts",
+      "expected": "738b2d3a3ec8374dc4aa6e3b9a8fd5ca0405b095733fc4b1e4a87eabd2d9919e",
+      "actual": "738b2d3a3ec8374dc4aa6e3b9a8fd5ca0405b095733fc4b1e4a87eabd2d9919e",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/auth-performance.spec.ts",
+      "expected": "e8d3435088b37fe7c4bf460ab63137d243b48e22be74303010241030202bba81",
+      "actual": "e8d3435088b37fe7c4bf460ab63137d243b48e22be74303010241030202bba81",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/auth-styles.spec.ts",
+      "expected": "3a130c369f8f35d9463b2f0c04ce7d6bf1cbacb0953c63564d818ee33091f259",
+      "actual": "3a130c369f8f35d9463b2f0c04ce7d6bf1cbacb0953c63564d818ee33091f259",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/booked-services.spec.ts",
+      "expected": "1b503443be6dd29ded299e15ff02668aebb47c557f9b8e44884e5559552b51c2",
+      "actual": "1b503443be6dd29ded299e15ff02668aebb47c557f9b8e44884e5559552b51c2",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/client-mutations.spec.ts",
+      "expected": "67a725f4fbc19f2616d12c58a7bc61014bb01ec3b582ad38531e0b1420e2c0b0",
+      "actual": "67a725f4fbc19f2616d12c58a7bc61014bb01ec3b582ad38531e0b1420e2c0b0",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/client-service-requests.spec.ts",
+      "expected": "fe49116a24f988d4f5c74b47d2d81a60fdca37026ccd05b0e0e903733b8ee0b6",
+      "actual": "fe49116a24f988d4f5c74b47d2d81a60fdca37026ccd05b0e0e903733b8ee0b6",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/client.spec.ts",
+      "expected": "b201768e5536e88b752bae37cf6d4228a8f85ad9a36f4060b41a1d45b53bc368",
+      "actual": "b201768e5536e88b752bae37cf6d4228a8f85ad9a36f4060b41a1d45b53bc368",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/clients.spec.ts",
+      "expected": "77c97507d081078864bef73c4c68301055b704ff4bf7ee7958cee508d566d3f0",
+      "actual": "77c97507d081078864bef73c4c68301055b704ff4bf7ee7958cee508d566d3f0",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/departments.spec.ts",
+      "expected": "db9fbf104ed3db228ed70979559bb36f87663a275786ea6125895c37495a91d6",
+      "actual": "db9fbf104ed3db228ed70979559bb36f87663a275786ea6125895c37495a91d6",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/dropdown-positioning.spec.ts",
+      "expected": "e2c68fc1bbf5e2208f53608d74dd04fe85731db66f507d93d69084b3798b6cc9",
+      "actual": "e2c68fc1bbf5e2208f53608d74dd04fe85731db66f507d93d69084b3798b6cc9",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/employee-login.spec.ts",
+      "expected": "c5ee2a29f4ad689b75cb56862c64d200f4c24a89c329ba5d4d5f65ca9f755edc",
+      "actual": "c5ee2a29f4ad689b75cb56862c64d200f4c24a89c329ba5d4d5f65ca9f755edc",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/employees.spec.ts",
+      "expected": "8e7c98608cc3a925c293e5ef319d9d79575e04b92f240c65006d38b2ff284d28",
+      "actual": "8e7c98608cc3a925c293e5ef319d9d79575e04b92f240c65006d38b2ff284d28",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/internal-conversations.spec.ts",
+      "expected": "f17dda85c302dea3e521e5ac9155918dbef89b8500884340717dbddcea86bc3e",
+      "actual": "f17dda85c302dea3e521e5ac9155918dbef89b8500884340717dbddcea86bc3e",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/jwt-session.spec.ts",
+      "expected": "0b62fb3805b3dd14f2fba93377df30aa2a659a4dc8ce2f7f69f6b75b512afccd",
+      "actual": "0b62fb3805b3dd14f2fba93377df30aa2a659a4dc8ce2f7f69f6b75b512afccd",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/login-validation.spec.ts",
+      "expected": "ae2473b30857d003ab19ef453f8ccc753637830571168b16227cf345afc981e9",
+      "actual": "ae2473b30857d003ab19ef453f8ccc753637830571168b16227cf345afc981e9",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/messages-topbar.spec.ts",
+      "expected": "ea7885e77c0b175a1d0cd6c8ac822c5d94960a31f07a8f9208574e0dd3d31f92",
+      "actual": "ea7885e77c0b175a1d0cd6c8ac822c5d94960a31f07a8f9208574e0dd3d31f92",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/operational-loading.spec.ts",
+      "expected": "0b7b47ef49d5a916dd225c661a80aaa280c95e8a1a68fa70e7b0cd8bac1ea165",
+      "actual": "0b7b47ef49d5a916dd225c661a80aaa280c95e8a1a68fa70e7b0cd8bac1ea165",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/portal-regression.spec.ts",
+      "expected": "ad398d0b3cc721cf08fe69bda99fecbb2ad5fe9fe2ee12093c3655140f0d0c9c",
+      "actual": "ad398d0b3cc721cf08fe69bda99fecbb2ad5fe9fe2ee12093c3655140f0d0c9c",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/pricing-templates.spec.ts",
+      "expected": "aabe1b6623e4d673d2066245f15ca2c0b7965da102e026ee06714d6792e3d5a4",
+      "actual": "aabe1b6623e4d673d2066245f15ca2c0b7965da102e026ee06714d6792e3d5a4",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/profile.spec.ts",
+      "expected": "9da2a1e8885b63948277edf189c791b13de927850bf1067fda287534702fdc9f",
+      "actual": "9da2a1e8885b63948277edf189c791b13de927850bf1067fda287534702fdc9f",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/project-pages-regression.spec.ts",
+      "expected": "92bc6e2022ec2b08c4e5341e3a106a9d698088c2f098ac059acbff9b7bf2dff8",
+      "actual": "92bc6e2022ec2b08c4e5341e3a106a9d698088c2f098ac059acbff9b7bf2dff8",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/project-workspace.spec.ts",
+      "expected": "e9f10e9dfe823f748d57567b560b00ec2e4b3f7f11dcc37e8bd9d5280561d291",
+      "actual": "e9f10e9dfe823f748d57567b560b00ec2e4b3f7f11dcc37e8bd9d5280561d291",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/regression-live.spec.ts",
+      "expected": "e64be7fa5e8447197dda0ef5f43d31a594bf03118cd9f40d6e7eebdd686b15a4",
+      "actual": "e64be7fa5e8447197dda0ef5f43d31a594bf03118cd9f40d6e7eebdd686b15a4",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/regression-support.ts",
+      "expected": "e27777c880ed37a718cf891b877f92eac7f7740d32f1a2823f4c8d57f8acc64a",
+      "actual": "e27777c880ed37a718cf891b877f92eac7f7740d32f1a2823f4c8d57f8acc64a",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/regression.spec.ts",
+      "expected": "84414bf9c4b2dca6d253649be93d32412f8b9f787a36bcf53ab36b3972d4c8ee",
+      "actual": "84414bf9c4b2dca6d253649be93d32412f8b9f787a36bcf53ab36b3972d4c8ee",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/request-conversations.spec.ts",
+      "expected": "e72df1e17c673b562aa889360cb31353728808d6111ea4e0a8171b9ceca07b3c",
+      "actual": "e72df1e17c673b562aa889360cb31353728808d6111ea4e0a8171b9ceca07b3c",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/request-inbox.spec.ts",
+      "expected": "b647034b9167cdb71d72d8d214e4adb8de8a29c2c561041d14a2248654004e20",
+      "actual": "b647034b9167cdb71d72d8d214e4adb8de8a29c2c561041d14a2248654004e20",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/request-workflow.spec.ts",
+      "expected": "cb826b606551bc735d5210975c85051c2f43d3a1511385b5429253d2e4710a7e",
+      "actual": "cb826b606551bc735d5210975c85051c2f43d3a1511385b5429253d2e4710a7e",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/responsive-data-table.spec.ts",
+      "expected": "305d9f2c168d38d112aba1c813ec81009044af784861f7f2cf09bb5f03159d3b",
+      "actual": "305d9f2c168d38d112aba1c813ec81009044af784861f7f2cf09bb5f03159d3b",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/services.spec.ts",
+      "expected": "65b175dd4cbae8e9d672efdb43c415c6c2cddb12d321bb4a3e7ae2a3945b5777",
+      "actual": "65b175dd4cbae8e9d672efdb43c415c6c2cddb12d321bb4a3e7ae2a3945b5777",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/session-revocation.spec.ts",
+      "expected": "18b9b563b813630a36a2717d10288db8ed3d6fcf69b850996febd71039f209ff",
+      "actual": "18b9b563b813630a36a2717d10288db8ed3d6fcf69b850996febd71039f209ff",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/settings.spec.ts",
+      "expected": "a0a079b44496ff874f25b1751b41ac97c2888267bf4fa63baefc00044361c42e",
+      "actual": "a0a079b44496ff874f25b1751b41ac97c2888267bf4fa63baefc00044361c42e",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/staff-workload.spec.ts",
+      "expected": "dfaa440808a34d774a344eb282d1319294e5dff2a85ecd06cda8a6cb7a79b523",
+      "actual": "dfaa440808a34d774a344eb282d1319294e5dff2a85ecd06cda8a6cb7a79b523",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/staff.spec.ts",
+      "expected": "2cd6a1e3d8b0bfa0404ae952e78a0881dde5dbeefa5e86cc2ab610363948c18f",
+      "actual": "2cd6a1e3d8b0bfa0404ae952e78a0881dde5dbeefa5e86cc2ab610363948c18f",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/superadmin.spec.ts",
+      "expected": "d32b68912100c3f12bb3cc43313ef5f1c1ba142b78940061c196a57b487884d5",
+      "actual": "d32b68912100c3f12bb3cc43313ef5f1c1ba142b78940061c196a57b487884d5",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/e2e/table-interactions.spec.ts",
+      "expected": "714b57087496ddcfc3a4b01a9b237d7be5e22a4a344f16740d258ad2393c8897",
+      "actual": "714b57087496ddcfc3a4b01a9b237d7be5e22a4a344f16740d258ad2393c8897",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/playwright.config.ts",
+      "expected": "22161008b62df2459e2d7b1c0200a64030e9d25d06c6337bb934860ef1236b4b",
+      "actual": "22161008b62df2459e2d7b1c0200a64030e9d25d06c6337bb934860ef1236b4b",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/package.json",
+      "expected": "3d12507a9503c59cb458d7f38686979603e97bdba9e7d8a79e09212b5ece850d",
+      "actual": "3d12507a9503c59cb458d7f38686979603e97bdba9e7d8a79e09212b5ece850d",
+      "unchanged": true
+    },
+    {
+      "file": "package.json",
+      "expected": "4c4d68eb951a6706c692092b684de482edeae0c08509c782062d18e61970fc0d",
+      "actual": "4c4d68eb951a6706c692092b684de482edeae0c08509c782062d18e61970fc0d",
+      "unchanged": true
+    },
+    {
+      "file": "apps/api/package.json",
+      "expected": "99435723c0d7174d2b1906de3777fd8eae61988774231c2165aaf810e3046cbe",
+      "actual": "99435723c0d7174d2b1906de3777fd8eae61988774231c2165aaf810e3046cbe",
+      "unchanged": true
+    },
+    {
+      "file": "scripts/run-e2e.mjs",
+      "expected": "3cb74559d83964fdfd2aea73cc64594fec57e53cd12fb689ee66425a015a30ba",
+      "actual": "3cb74559d83964fdfd2aea73cc64594fec57e53cd12fb689ee66425a015a30ba",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/scripts/start.mjs",
+      "expected": "919b00d36bbfbc490482dacc6847bea58c96a37dc30fac2298aa6f053e59dcda",
+      "actual": "919b00d36bbfbc490482dacc6847bea58c96a37dc30fac2298aa6f053e59dcda",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/scripts/prepare-standalone.mjs",
+      "expected": "92740d5a4f1688b8a36e3ff29a4126f0e5112232e65592faa7ed450f01c86475",
+      "actual": "92740d5a4f1688b8a36e3ff29a4126f0e5112232e65592faa7ed450f01c86475",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/scripts/regression-live.mjs",
+      "expected": "3d50c495a576b14831493fd77242bfaf45fdf609f16c1a7f9fc51a8aa9a459f3",
+      "actual": "3d50c495a576b14831493fd77242bfaf45fdf609f16c1a7f9fc51a8aa9a459f3",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/next.config.ts",
+      "expected": "737d0d3f241eba70847bbd193ca2e1498a846e285416f3e48b4d4ca50cec67e9",
+      "actual": "737d0d3f241eba70847bbd193ca2e1498a846e285416f3e48b4d4ca50cec67e9",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/src/features/auth/model/types.ts",
+      "expected": "e1476d2cdba1147de22d14fd6f0866eaef97067534ab7c3a07a372be00b3ca52",
+      "actual": "e1476d2cdba1147de22d14fd6f0866eaef97067534ab7c3a07a372be00b3ca52",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/src/features/auth/model/permissions.ts",
+      "expected": "7f3239866fcf6334066820cef9dbd23610d51af1abdf5e9cb2a1bc9d9146004a",
+      "actual": "7f3239866fcf6334066820cef9dbd23610d51af1abdf5e9cb2a1bc9d9146004a",
+      "unchanged": true
+    },
+    {
+      "file": "apps/web/src/features/settings/api/settings-api.ts",
+      "expected": "663c8e1445caf6f52f39b9f479b4f7f7f14e24f317ba70ca31b6cc0784211d0a",
+      "actual": "663c8e1445caf6f52f39b9f479b4f7f7f14e24f317ba70ca31b6cc0784211d0a",
+      "unchanged": true
+    },
+    {
+      "file": "pnpm-lock.yaml",
+      "expected": "da25669325dc731eb860429bc7877a29ead5a623a94a1733b52d742e2e62ea36",
+      "actual": "da25669325dc731eb860429bc7877a29ead5a623a94a1733b52d742e2e62ea36",
+      "unchanged": true
+    }
+  ],
+  "caseCount": 292,
+  "uniqueTestIds": 292,
+  "matchedDeclarations": 292,
+  "matchedExecutionResults": 292,
+  "assertionSites": 1630,
+  "orphanedAssertions": [],
+  "files": [
+    {
+      "name": "assertions.md",
+      "bytes": 757484,
+      "sha256": "c7b0dca895f77dde24e6089e78f87abdc90403b3d985bd9f8073376cac0f3cb1"
+    },
+    {
+      "name": "baseline.json",
+      "bytes": 13018592,
+      "sha256": "1b9d67a1842439ccac9f61ad405539e3ab04ca2afcf7dace3879555936467c08"
+    },
+    {
+      "name": "coverage-matrix.md",
+      "bytes": 33584,
+      "sha256": "7887986d28d03eb8236e1f972aea393d16abaa9fbbe4d5e3deb42543d6e7f994"
+    },
+    {
+      "name": "discovery-command.json",
+      "bytes": 656,
+      "sha256": "e4cf469078f76fa85a1f8ff528799dc9fcc41893f09da17023cdde24d6186bdc"
+    },
+    {
+      "name": "discovery.json",
+      "bytes": 201486,
+      "sha256": "3a69c0d1d75ee5f37acebf8fe23f111459407d2a378a082977bb9f23c26744c4"
+    },
+    {
+      "name": "discovery.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "execution-command.json",
+      "bytes": 1550,
+      "sha256": "a4965c27b0d453578400df0458d7dd7860b90f3501dc2cf48395d4ef92d8e7a9"
+    },
+    {
+      "name": "execution.json",
+      "bytes": 343718,
+      "sha256": "8b297dbacd76d3a47749e348004db6fcbe471a5458d29949b2c18c56ee1f9f36"
+    },
+    {
+      "name": "execution.log",
+      "bytes": 79672,
+      "sha256": "f179d150aa3c0611f09dcfc840c2a6e2c212c728a2e12bf1b29670adc11b44fb"
+    },
+    {
+      "name": "execution.stderr.txt",
+      "bytes": 1356,
+      "sha256": "25f9c4cda18f54434698d29e5adf842620c19b286b8dfa76d6ff93a0dc7e9f51"
+    },
+    {
+      "name": "inventory.md",
+      "bytes": 1266772,
+      "sha256": "cd1fbcd8fc816a07b26e4fe963c119ed97b6708a8b7bffa15d60f5186db8456a"
+    },
+    {
+      "name": "preservation-map.csv",
+      "bytes": 2250692,
+      "sha256": "589512402461e66ab697525c2212628814a93cc2aac8f808abb93aa59d374d84"
+    },
+    {
+      "name": "report.md",
+      "bytes": 18102,
+      "sha256": "6ae0890d6f70c3b0bd2c83a3f4967a3e9118bc5d9bcbf888a4770a1cf7024a67"
+    },
+    {
+      "name": "test-index.txt",
+      "bytes": 57324,
+      "sha256": "20a45affe7dd974e1f7ce9de3cf38c4def045939c4a5b80038135d41a4a3762a"
+    }
+  ]
+}

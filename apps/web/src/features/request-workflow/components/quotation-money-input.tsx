@@ -1,13 +1,14 @@
 "use client"
 
 import { FormInput } from "@/components/ui/form-input"
-
-import { useState } from "react"
 import {
   decimalMoneyValue,
   formatMoneyInput,
-  parseMoneyInput,
-} from "../model/quotation-money"
+  moneyInputCaret,
+} from "@/lib/money-input"
+
+import { useState } from "react"
+import { parseMoneyInput } from "../model/quotation-money"
 
 export function QuotationMoneyInput({
   name,
@@ -52,12 +53,7 @@ export function QuotationMoneyInput({
             .slice(0, position)
             .replace(/,/g, "").length
           const formatted = formatMoneyInput(next)
-          let caret = 0
-          let count = 0
-          while (caret < formatted.length && count < characters) {
-            if (formatted[caret] !== ",") count++
-            caret++
-          }
+          const caret = moneyInputCaret(formatted, characters)
           input.setCustomValidity("")
           setRaw(next)
           requestAnimationFrame(() => {

@@ -1,20 +1,14 @@
 "use client"
 
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
+import { BriefcaseBusiness } from "lucide-react"
 
 import type { ReactNode } from "react"
-import {
-  SidePanel,
-  SidePanelBody,
-  SidePanelError,
-  SidePanelFooter,
-  SidePanelHeader,
-  useSidePanel,
-} from "@/components/ui/side-panel"
-import { useAsyncResource } from "@/lib/use-async-resource"
 import { getBooking, type BookingDetails } from "../api/bookings-api"
 import { BookingStatusPill } from "./booking-status-pill"
 import { RequestDetailsBody } from "./request-details-body"
+import { RequestDetailsDrawer } from "./request-details-drawer"
+import { serviceRequestStatuses } from "../../services/model/service-request-status"
 
 export function BookingDetailsDrawer({
   id,
@@ -29,6 +23,7 @@ export function BookingDetailsDrawer({
   showMessagesLink = true,
   statusLabels,
   onLoaded,
+  panelStyle = "booking",
 }: {
   id: string
   onClose: () => void
@@ -44,97 +39,117 @@ export function BookingDetailsDrawer({
   showMessagesLink?: boolean | ((details: BookingDetails) => boolean)
   onLoaded?: (details: BookingDetails) => void
   statusLabels?: Partial<Record<string, string>>
+  /** Uses the Service Management-style header and detail layout for staff inboxes. */
+  panelStyle?: "booking" | "management"
 }) {
   const { formatDate } = useDatePreferences()
-  const panel = useSidePanel(onClose)
-  const {
-    data: details,
-    error,
-    loading,
-    retry,
-  } = useAsyncResource(
-    async (signal) => {
-      const value = await loadDetails(id, signal)
-      if (!signal.aborted) onLoaded?.(value)
-      return value
-    },
-    [id, refreshKey],
-    { fallbackError: "Couldn't load your booking." },
-  )
-  const ready = loading || error ? undefined : details
-
+  const managementStyle = panelStyle === "management"
   return (
-    <SidePanel
-      open={panel.open}
-      onOpenChange={panel.onOpenChange}
-      busy={closeDisabled}
-      fallbackFocus={() =>
-        document.getElementById(`booking-view-${id}`) ??
-        document.getElementById(fallbackFocusId)
+    <RequestDetailsDrawer
+      id={id}
+      onClose={onClose}
+      loadDetails={loadDetails}
+      title={
+        managementStyle ? (details) => details.service.name : "Booking details"
       }
-    >
-      <SidePanelHeader
-        title="Booking details"
-        description={description}
-        closeLabel="Close booking details"
-        closeDisabled={closeDisabled}
-      />
-      <SidePanelBody>
-        {loading ? (
-          <p role="status" className="py-8 text-center text-xs text-[#52627a]">
-            Loading booking details…
-          </p>
-        ) : error ? (
-          <SidePanelError message={error} onRetry={retry} />
-        ) : (
-          details && (
-            <RequestDetailsBody
-              title={details.service.name}
-              status={
-                <BookingStatusPill
-                  status={details.status}
-                  label={statusLabels?.[details.status]}
-                />
-              }
-              fields={[
-                ...additionalFields,
-                ["Request reference", details.referenceNumber || details.id],
-                ["Package", details.packageName || "Standard service"],
-                ["Date requested", formatDate(details.createdAt)],
-                ["Last updated", formatDate(details.updatedAt)],
-                [
-                  "Expected timeline",
-                  details.expectedTimeline || "Not specified",
-                ],
-                [
-                  "Preferred specialist",
-                  details.preferredSpecialistName || "Department to assign",
-                ],
-              ]}
-              sections={[
-                ["Project goals", details.projectGoals],
-                ["Project requirements", details.projectRequirements],
-                ["Additional details", details.additionalDetails],
-              ]}
-              note="Specialist preferences are subject to availability and department approval. An expected timeline is your requested schedule."
-              messagesRequestId={
-                (
-                  typeof showMessagesLink === "function"
-                    ? showMessagesLink(details)
-                    : showMessagesLink
-                )
-                  ? details.id
-                  : null
-              }
+      description={
+        managementStyle
+          ? (details) =>
+              `${details.referenceNumber || details.id} Â· Service request`
+          : description
+      }
+      fallbackTitle={managementStyle ? "Request details" : "Booking details"}
+      fallbackDescription={
+        managementStyle ? "Loading service request detailsâ€¦" : description
+      }
+      leading={
+        managementStyle ? (
+          <span
+            className="grid size-11 flex-none place-items-center rounded-xl bg-[#e5edff] text-[#2058d4]"
+            aria-hidden="true"
+          >
+            <BriefcaseBusiness size={20} />
+          </span>
+        ) : undefined
+      }
+      meta={
+        managementStyle
+          ? (details) => (
+              <BookingStatusPill
+                status={details.status}
+                label={statusLabels?.[details.status]}
+              />
+            )
+          : undefined
+      }
+      closeLabel={
+        managementStyle ? "Close request details" : "Close booking details"
+      }
+      closeDisabled={closeDisabled}
+      fallbackFocusId={fallbackFocusId}
+      refreshKey={refreshKey}
+      onLoaded={onLoaded}
+      renderActions={renderActions}
+      renderBody={(details) => (
+        <RequestDetailsBody
+          title={details.service.name}
+          statusNote={serviceRequestStatuses[details.status].description}
+          status={
+            <BookingStatusPill
+              status={details.status}
+              label={statusLabels?.[details.status]}
             />
-          )
-        )}
-      </SidePanelBody>
-      {ready && renderActions && (
-        <SidePanelFooter className="block">
-          {renderActions(ready)}
-        </SidePanelFooter>
+          }
+          fields={[
+            ...additionalFields,
+            ["Request reference", details.referenceNumber || details.id],
+            ...(managementStyle
+              ? [
+                  [
+                    "Status",
+                    <BookingStatusPill
+                      key="status"
+                      status={details.status}
+                      label={statusLabels?.[details.status]}
+                    />,
+                  ] as [string, ReactNode],
+                ]
+              : []),
+            ["Package", details.packageName || "Standard service"],
+            ["Date requested", formatDate(details.createdAt)],
+            ["Last updated", formatDate(details.updatedAt)],
+            ["Expected timeline", details.expectedTimeline || "Not specified"],
+            [
+              "Preferred specialist",
+              details.preferredSpecialistName || "Department to assign",
+            ],
+          ]}
+          sections={[
+            ["Project goals", details.projectGoals],
+            ["Project requirements", details.projectRequirements],
+            ["Additional details", details.additionalDetails],
+          ]}
+          detailLayout={managementStyle ? "inline" : "stacked"}
+          detailSectionTitle={
+            managementStyle ? "Request information" : undefined
+          }
+          showIntro={!managementStyle}
+          note={
+            managementStyle
+              ? "Specialist preferences are subject to availability and department approval. An expected timeline is the client's requested schedule."
+              : "Specialist preferences are subject to availability and department approval. An expected timeline is your requested schedule."
+          }
+          messagesRequestId={
+            (
+              typeof showMessagesLink === "function"
+                ? showMessagesLink(details)
+                : showMessagesLink
+            )
+              ? details.id
+              : null
+          }
+        />
       )}
-    </SidePanel>
+    />
   )
 }

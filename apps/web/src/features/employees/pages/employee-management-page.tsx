@@ -13,7 +13,10 @@ import { Button } from "@/components/ui/button"
 import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { usePaginatedList } from "@/components/ui/use-paginated-list"
 import { TableSearchStatus } from "@/components/ui/table-search-status"
-import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
+import {
+  pageRange,
+  TablePaginationFooter,
+} from "@/components/ui/table-pagination-footer"
 import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import { SearchField } from "@/components/ui/search-field"
 import { cn } from "@/lib/utils"
@@ -75,8 +78,8 @@ const statuses: { value: EmploymentStatus | ""; label: string }[] = [
 ]
 
 function matchesTableSearch(item: Employee, query: string) {
-  return [item.fullName, item.employeeId, item.email].some((value) =>
-    value?.toLowerCase().includes(query),
+  return [item.fullName, item.employeeId, item.email, item.contactNumber].some(
+    (value) => value?.toLowerCase().includes(query),
   )
 }
 
@@ -88,7 +91,6 @@ export function EmployeeManagementPage() {
     Permissions.DEPARTMENTS_MANAGE,
   )
   const [archiveView, setArchiveView] = useState(false)
-  const [animateRows, setAnimateRows] = useState(true)
   const [search, setSearch] = useState("")
   const query = search.trim()
   const [departmentId, setDepartmentId] = useState("")
@@ -134,6 +136,7 @@ export function EmployeeManagementPage() {
     fallbackError: "Couldn't load employees.",
   })
   const { setPage } = list
+  const searchSkeleton = list.searchSkeleton
 
   const departmentList = useDepartments()
   const departmentOptions = [
@@ -146,14 +149,12 @@ export function EmployeeManagementPage() {
 
   function updateFilters(update: () => void) {
     update()
-    setAnimateRows(true)
     setPage(1)
   }
 
   function switchView(nextArchiveView: boolean) {
     if (nextArchiveView === archiveView) return
     setArchiveView(nextArchiveView)
-    setAnimateRows(true)
     setPage(1)
     setSearch("")
     setDepartmentId("")
@@ -172,6 +173,20 @@ export function EmployeeManagementPage() {
 
   const hasFilters = Boolean(query || departmentId || employmentType || status)
   const shownRows = list.data?.employees.length ?? 0
+  const previewFooter =
+    list.previewing && list.preview?.length && list.data?.total
+      ? {
+          ...pageRange(list.data.page, list.data.pageSize, list.data.total),
+          total: list.data.total,
+          page: list.data.page,
+          totalPages: Math.max(
+            1,
+            Math.ceil(list.data.total / list.data.pageSize),
+          ),
+          disabled: true,
+        }
+      : null
+  const paginationFooter = list.footer ?? previewFooter
 
   return (
     <main
@@ -217,7 +232,6 @@ export function EmployeeManagementPage() {
               value={search}
               maxLength={100}
               onChange={(event) => {
-                setAnimateRows(true)
                 setSearch(event.target.value)
                 setPage(1)
               }}
@@ -281,10 +295,9 @@ export function EmployeeManagementPage() {
         <EmployeeTable
           archiveView={archiveView}
           employees={list.rows}
-          viewKey={list.tableViewKey}
+          viewKey={searchSkeleton ? "" : list.tableViewKey}
           quickKey={query}
           onRowsSettled={list.onRowsSettled}
-          animateRows={animateRows}
           loading={list.loading}
           error={list.error}
           emptyMessage={
@@ -317,15 +330,19 @@ export function EmployeeManagementPage() {
           }
         />
         <TableSearchStatus
-          active={list.loading && list.previewing}
+          active={
+            !searchSkeleton &&
+            list.loading &&
+            list.previewing &&
+            Boolean(list.preview?.length)
+          }
           label="employees"
         />
-        {list.footer && (
+        {!searchSkeleton && paginationFooter && (
           <TablePaginationFooter
-            {...list.footer}
+            {...paginationFooter}
             label="Employee pages"
             onPageChange={(nextPage) => {
-              setAnimateRows(true)
               setPage(nextPage)
             }}
           />

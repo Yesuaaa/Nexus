@@ -3,42 +3,104 @@ import { getPrisma } from "../../lib/db.js"
 import {
   activeAccount,
   activeDepartmentHead,
+  activeStaff,
 } from "../../shared/query/accounts.js"
 import { fail } from "./workflow.validation.js"
+import { submittedLeaveFallbackScope } from "../leave/leave.repository.js"
 
-export function notificationScope(
+import { hrAdjustmentScope } from "../attendance/attendance.overtime.js"
+
+const inboxViewerSelect = {
+  settings: true,
+  role: true,
+  headOf: { select: { id: true } },
+} satisfies Prisma.UserSelect
+
+type InboxViewer = Prisma.UserGetPayload<{ select: typeof inboxViewerSelect }>
+
+async function notificationScope(
+  tx: Prisma.TransactionClient,
   userId: string,
-): Prisma.WorkflowNotificationWhereInput {
-  return {
-    userId,
-    OR: [
+  viewer?: InboxViewer,
+): Promise<Prisma.WorkflowNotificationWhereInput> {
+  const visibility: Prisma.WorkflowNotificationWhereInput[] = [
+    {
+      leaveRequest: {
+        requestedById: userId,
+        requestedBy: activeAccount,
+      },
+    },
+    { attendanceAdjustment: { requestedById: userId }, user: activeAccount },
+  ]
+
+  // Only the inbox's Repeatable Read snapshot can rule out branches up front.
+  // Read-state writes evaluate the full predicate at the UPDATE statement.
+  if (!viewer || (viewer.role === activeStaff.role && viewer.headOf)) {
+    const department = activeDepartmentHead(userId)
+    visibility.push(
       {
-        attendanceAdjustment: {
-          employee: { department: activeDepartmentHead(userId) },
-        },
+        leaveRequest: { employee: { department } },
+      },
+      {
+        attendanceAdjustment: { employee: { department } },
+      },
+      { workflow: { request: { acceptedDepartment: department } } },
+    )
+  }
+
+  if (!viewer || viewer.role === "ADMIN") {
+    const admin = { ...activeAccount, role: "ADMIN" } as const
+    visibility.push(
+      {
+        leaveRequestId: { not: null },
+        user: admin,
+        OR: [
+          {
+            type: "LEAVE_SUBMITTED",
+            leaveRequest: await submittedLeaveFallbackScope(tx, userId),
+          },
+          {
+            type: { not: "LEAVE_SUBMITTED" },
+            leaveRequest: { status: { not: "SUBMITTED" } },
+          },
+        ],
       },
       {
         attendanceAdjustmentId: { not: null },
-        user: { ...activeAccount, role: "ADMIN" },
+        user: admin,
+        attendanceAdjustment: await hrAdjustmentScope(tx),
       },
-      {
-        workflow: {
-          request: {
-            clientId: userId,
-            client: { ...activeAccount, role: "USER" },
-          },
+    )
+  }
+
+  if (!viewer || viewer.role === "SUPERADMIN") {
+    const superadmin = { ...activeAccount, role: "SUPERADMIN" } as const
+    visibility.push(
+      { leaveRequestId: { not: null }, user: superadmin },
+      { attendanceAdjustmentId: { not: null }, user: superadmin },
+    )
+  }
+
+  if (!viewer || viewer.role === "USER") {
+    visibility.push({
+      workflow: {
+        request: {
+          clientId: userId,
+          client: { ...activeAccount, role: "USER" },
         },
-        event: { internal: false },
       },
+      event: { internal: false },
+    })
+  }
+
+  if (!viewer || viewer.role === "ADMIN" || viewer.role === "SUPERADMIN") {
+    const approver = {
+      ...activeAccount,
+      role: { in: ["ADMIN", "SUPERADMIN"] },
+    } satisfies Prisma.UserWhereInput
+    visibility.push(
       {
-        workflow: {
-          request: {
-            acceptedDepartment: activeDepartmentHead(userId),
-          },
-        },
-      },
-      {
-        user: { ...activeAccount, role: { in: ["ADMIN", "SUPERADMIN"] } },
+        user: approver,
         workflow: { quotationApproverId: userId },
         event: {
           OR: [
@@ -48,7 +110,7 @@ export function notificationScope(
         },
       },
       {
-        user: { ...activeAccount, role: { in: ["ADMIN", "SUPERADMIN"] } },
+        user: approver,
         workflow: { paymentVerifierId: userId },
         event: {
           OR: [
@@ -58,18 +120,20 @@ export function notificationScope(
           ],
         },
       },
-    ],
+    )
   }
+
+  return { userId, OR: visibility }
 }
 
 export async function listWorkflowNotifications(userId: string) {
   return getPrisma()!.$transaction(
     async (tx) => {
-      const user = await tx.user.findUniqueOrThrow({
+      const viewer = await tx.user.findUniqueOrThrow({
         where: { id: userId },
-        select: { settings: true },
+        select: inboxViewerSelect,
       })
-      const settings = user.settings
+      const settings = viewer.settings
       if (
         settings &&
         typeof settings === "object" &&
@@ -77,7 +141,7 @@ export async function listWorkflowNotifications(userId: string) {
         settings.workflowNotifications === false
       )
         return { notifications: [], unreadCount: 0 }
-      const where = notificationScope(userId)
+      const where = await notificationScope(tx, userId, viewer)
       const [notifications, unreadCount] = await Promise.all([
         tx.workflowNotification.findMany({
           where,
@@ -87,6 +151,7 @@ export async function listWorkflowNotifications(userId: string) {
             createdAt: true,
             readAt: true,
             attendanceAdjustmentId: true,
+            leaveRequestId: true,
             summary: true,
             type: true,
             event: { select: { summary: true, type: true, entityId: true } },
@@ -101,7 +166,10 @@ export async function listWorkflowNotifications(userId: string) {
           ...record,
           summary: event?.summary ?? record.summary!,
           type: event?.type ?? record.type!,
-          entityId: event?.entityId ?? record.attendanceAdjustmentId,
+          entityId:
+            event?.entityId ??
+            record.attendanceAdjustmentId ??
+            record.leaveRequestId,
         })),
         unreadCount,
       }
@@ -111,19 +179,23 @@ export async function listWorkflowNotifications(userId: string) {
 }
 
 export async function readWorkflowNotification(userId: string, id: string) {
-  const result = await getPrisma()!.workflowNotification.updateMany({
-    where: { ...notificationScope(userId), id },
-    data: { readAt: new Date() },
-  })
+  const result = await getPrisma()!.$transaction(async (tx) =>
+    tx.workflowNotification.updateMany({
+      where: { ...(await notificationScope(tx, userId)), id },
+      data: { readAt: new Date() },
+    }),
+  )
   if (!result.count) fail("Notification not found", 404)
   return { ok: true }
 }
 
 export async function readAllWorkflowNotifications(userId: string) {
-  await getPrisma()!.workflowNotification.updateMany({
-    where: { ...notificationScope(userId), readAt: null },
-    data: { readAt: new Date() },
-  })
+  await getPrisma()!.$transaction(async (tx) =>
+    tx.workflowNotification.updateMany({
+      where: { ...(await notificationScope(tx, userId)), readAt: null },
+      data: { readAt: new Date() },
+    }),
+  )
   return { ok: true }
 }
 

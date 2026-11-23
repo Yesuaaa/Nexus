@@ -19,6 +19,9 @@ export function RequestDetailsBody({
   sections,
   note,
   messagesRequestId,
+  detailLayout = "stacked",
+  detailSectionTitle,
+  showIntro = true,
 }: {
   title: string
   /** Status pill. */
@@ -31,25 +34,42 @@ export function RequestDetailsBody({
   note: ReactNode
   /** Shows the "Open request workspace" link for this request when set. */
   messagesRequestId?: string | null
+  detailLayout?: "inline" | "stacked"
+  detailSectionTitle?: string
+  showIntro?: boolean
 }) {
   return (
     <>
-      <div>
-        <h2 className="m-0 text-base font-semibold break-words">{title}</h2>
-        <div className="mt-3">{status}</div>
-        {statusNote && (
-          <p className="mt-2 mb-0 text-xs leading-5 text-[#52627a]">
-            {statusNote}
-          </p>
-        )}
-      </div>
-      <DetailList layout="stacked">
-        {fields.map(([label, value]) => (
-          <DetailItem key={label} label={label}>
-            {value}
-          </DetailItem>
-        ))}
-      </DetailList>
+      {showIntro && (
+        <div>
+          <h2 className="m-0 text-base font-semibold break-words">{title}</h2>
+          <div className="mt-3">{status}</div>
+          {statusNote && (
+            <p className="mt-2 mb-0 text-xs leading-5 text-[#52627a]">
+              {statusNote}
+            </p>
+          )}
+        </div>
+      )}
+      {detailSectionTitle ? (
+        <SidePanelSection title={detailSectionTitle}>
+          <DetailList layout={detailLayout}>
+            {fields.map(([label, value]) => (
+              <DetailItem key={label} label={label}>
+                {value}
+              </DetailItem>
+            ))}
+          </DetailList>
+        </SidePanelSection>
+      ) : (
+        <DetailList layout={detailLayout}>
+          {fields.map(([label, value]) => (
+            <DetailItem key={label} label={label}>
+              {value}
+            </DetailItem>
+          ))}
+        </DetailList>
+      )}
       {sections.map(([sectionTitle, value]) => (
         <SidePanelSection key={sectionTitle} title={sectionTitle}>
           <p className="m-0 text-xs leading-6 whitespace-pre-wrap text-[#52627a] [overflow-wrap:anywhere]">

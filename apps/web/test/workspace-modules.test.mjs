@@ -11,6 +11,8 @@ const permissionsByRole = {
     Permissions.EMPLOYEES_READ,
     Permissions.SERVICES_READ,
     Permissions.CLIENTS_READ,
+    "payroll:read",
+    "payroll:manage",
   ],
   SUPERADMIN: [
     Permissions.MODULES_ACCESS_ALL,
@@ -18,6 +20,7 @@ const permissionsByRole = {
     Permissions.SERVICES_READ,
     Permissions.EMPLOYEES_READ,
     Permissions.DEPARTMENTS_READ,
+    "payroll:read",
   ],
 }
 
@@ -49,10 +52,10 @@ test("clients do not receive workspace selector entries", () => {
   assert.deepEqual(moduleEntries(account("USER")), [])
 })
 
-test("Staff receive project and personal attendance workspaces", () => {
+test("Staff receive project and Workforce Compliance workspaces", () => {
   assert.deepEqual(moduleEntries(account("STAFF")), [
     ["Project Management", "/project-workspace"],
-    ["Attendance & Monitoring", "/attendance/check-ins"],
+    ["Workforce Compliance", "/attendance/check-ins"],
     ["Billing & Finance", null],
   ])
 })
@@ -65,9 +68,9 @@ test("a current department head receives Service Operations without changing Sta
       }),
     ),
     [
-      ["Service Operations", "/request-inbox"],
+      ["Service Operations", "/request-inbox/overview"],
       ["Project Management", "/project-workspace"],
-      ["Attendance & Monitoring", "/attendance/overview"],
+      ["Workforce Compliance", "/attendance/overview"],
       ["Billing & Finance", null],
     ],
   )
@@ -77,7 +80,7 @@ test("the selector returns only the Admin operational workspaces", () => {
   assert.deepEqual(moduleEntries(account("ADMIN")), [
     ["Service Operations", "/services"],
     ["People & HR", "/employees"],
-    ["Attendance & Monitoring", "/attendance/overview"],
+    ["Workforce Compliance", "/attendance/overview"],
     ["Billing & Finance", null],
   ])
 })
@@ -85,9 +88,9 @@ test("the selector returns only the Admin operational workspaces", () => {
 test("Superadmin receives operational modules alongside Administration", () => {
   assert.deepEqual(moduleEntries(account("SUPERADMIN")), [
     ["Service Operations", "/services"],
-    ["Project Management", "/module/project-management"],
+    ["Project Management", "/project-management/overview"],
     ["People & HR", "/employees"],
-    ["Attendance & Monitoring", "/attendance/dashboard"],
+    ["Workforce Compliance", "/attendance/time-logs/overview"],
     ["Administration", "/accounts"],
     ["Billing & Finance", null],
   ])
@@ -100,7 +103,7 @@ test("permission-limited accounts never receive a denied module entry route", ()
     ),
     [
       ["Service Operations", "/clients"],
-      ["Attendance & Monitoring", "/attendance/check-ins"],
+      ["Workforce Compliance", "/attendance/check-ins"],
       ["Billing & Finance", null],
     ],
   )
@@ -110,7 +113,7 @@ test("permission-limited accounts never receive a denied module entry route", ()
     ),
     [
       ["People & HR", "/departments"],
-      ["Attendance & Monitoring", "/attendance/check-ins"],
+      ["Workforce Compliance", "/attendance/check-ins"],
       ["Billing & Finance", null],
     ],
   )

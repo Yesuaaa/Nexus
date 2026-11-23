@@ -2,13 +2,13 @@ import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { focusRing } from "./styles"
 
-type ManagementView = {
-  value: boolean
+type ManagementView<T extends string | boolean> = {
+  value: T
   label: string
   icon: LucideIcon
 }
 
-export function ManagementViewToggle({
+export function ManagementViewToggle<T extends string | boolean>({
   active,
   views,
   ariaLabel,
@@ -16,12 +16,12 @@ export function ManagementViewToggle({
   className,
   onChange,
 }: {
-  active: boolean
-  views: readonly [ManagementView, ManagementView]
+  active: T
+  views: readonly ManagementView<T>[]
   ariaLabel: string
   disabled?: boolean
   className?: string
-  onChange: (value: boolean) => void
+  onChange: (value: T) => void
 }) {
   return (
     <div

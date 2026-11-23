@@ -10,6 +10,14 @@ const descriptionTones = {
   client: "text-[#52627a]",
 } as const
 
+const pageHeaderBaseClass =
+  "-mx-[clamp(16px,2.1vw,32px)] flex items-center justify-between gap-6 border-b border-[#eceef1] px-[clamp(16px,2.1vw,32px)] pt-0.5 pb-5"
+
+export const pageHeaderFrameClass = cn(
+  pageHeaderBaseClass,
+  "max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-4 max-[560px]:pb-[18px]",
+)
+
 /**
  * Classes that turn a header action into a round icon button on phones when
  * its PageHeader is in `mobileActions="icon"` mode. The label text stays in
@@ -51,7 +59,8 @@ export function PageHeader({
     <header
       data-compact={compact || undefined}
       className={cn(
-        "group/header -mx-[clamp(16px,2.1vw,32px)] flex items-center justify-between gap-6 border-b border-[#eceef1] px-[clamp(16px,2.1vw,32px)] pt-0.5 pb-5 max-[560px]:pb-[18px]",
+        pageHeaderBaseClass,
+        "group/header max-[560px]:pb-[18px]",
         compact
           ? "max-[560px]:grid max-[560px]:grid-cols-[minmax(0,1fr)_auto] max-[560px]:items-center max-[560px]:gap-x-3 max-[560px]:gap-y-1.5"
           : "max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-4",

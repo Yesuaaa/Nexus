@@ -34,8 +34,11 @@ export type WorkloadPlanning = {
       timeZone: string | null
     }[]
   }
+  approvedLeave?: { workDate: string; minutes: number }[]
+  approvedLeaveHours?: number
   confirmedAvailableSlots: null
   commitments: {
+    overlapsLeave?: boolean
     id: string
     title: string
     startsAt: string

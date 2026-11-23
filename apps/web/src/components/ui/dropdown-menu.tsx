@@ -62,8 +62,10 @@ DropdownMenuSubContent.displayName =
 
 const DropdownMenuContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
->(({ className, sideOffset = 4, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content> & {
+    variant?: "compact"
+  }
+>(({ className, sideOffset = 4, variant, ...props }, ref) => (
   <DropdownMenuPrimitive.Portal>
     <DropdownMenuPrimitive.Content
       ref={ref}
@@ -73,6 +75,8 @@ const DropdownMenuContent = React.forwardRef<
       className={cn(
         "z-[130] max-h-[var(--radix-dropdown-menu-content-available-height)] min-w-[8rem] max-w-[calc(100vw-16px)] overflow-y-auto overflow-x-hidden rounded-md border bg-background p-1 text-foreground shadow-md",
         "origin-[var(--radix-dropdown-menu-content-transform-origin)]",
+        variant === "compact" &&
+          "w-[var(--radix-dropdown-menu-trigger-width)] min-w-0 rounded-lg border-[#e1e4ea]",
         className,
       )}
       {...props}
@@ -85,12 +89,14 @@ const DropdownMenuItem = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Item>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> & {
     inset?: boolean
+    variant?: "compact"
   }
->(({ className, inset, ...props }, ref) => (
+>(({ className, inset, variant, ...props }, ref) => (
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={cn(
       "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0",
+      variant === "compact" && "min-h-8 cursor-pointer rounded-md text-xs",
       inset && "pl-8",
       className,
     )}

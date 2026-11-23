@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
+import { writeServiceLog } from "../service-operation-logs/log-writer.js"
 import type { RequestWorkflowState } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { activeStaff } from "../../shared/query/accounts.js"
@@ -9,6 +10,10 @@ import {
   type WorkflowTx,
 } from "./workflow.access.js"
 import { snapshot } from "./workflow.snapshot.js"
+import {
+  workflowAuditChanges,
+  workflowAuditSnapshot,
+} from "./workflow-audit.js"
 import {
   amount,
   cents,
@@ -156,7 +161,7 @@ async function runAction(
   const head = request.acceptedDepartment?.head
   if (!head?.isActive || head.accountDeletedAt || head.role !== "STAFF")
     fail("An active department head must be assigned before continuing", 409)
-  if (request.status === "CANCELLED" || request.status === "CLOSED")
+  if (["CANCELLED", "CLOSED", "CONCLUDED"].includes(request.status))
     fail("This service request is closed", 409)
 
   switch (command.type) {
@@ -584,7 +589,7 @@ async function runAction(
         if (command.decision === "DECLINE")
           await tx.serviceRequest.update({
             where: { id: requestId },
-            data: { status: "CLOSED" },
+            data: { status: "CANCELLED" },
           })
         await event(
           `QUOTATION_${status}`,
@@ -1007,6 +1012,10 @@ async function runAction(
       })
       if (activated.count !== 1)
         fail("This project has already been activated", 409)
+      await tx.serviceRequest.update({
+        where: { id: requestId },
+        data: { status: "ACTIVATED" },
+      })
       await setState("ACTIVE_PROJECT")
       await event(
         "PROJECT_ACTIVATED",
@@ -1077,6 +1086,13 @@ export async function actOnWorkflow(
     async (tx) => {
       await lockRequest(tx, requestId)
       const { request } = await workflowAccess(tx, userId, requestId)
+      if (
+        command.type === "COMPLETE_SANDBOX_PAYMENT" &&
+        (process.env.WORKFLOW_LOCAL_PAYMENT_SIMULATOR !== "true" ||
+          (process.env.NODE_ENV !== "development" &&
+            process.env.NODE_ENV !== "test"))
+      )
+        fail("Sandbox checkout is disabled", 403)
       const existing = await tx.workflowActionReceipt.findUnique({
         where: {
           requestId_actorId_actionId: { requestId, actorId: userId, actionId },
@@ -1092,7 +1108,9 @@ export async function actOnWorkflow(
           "The workflow changed. Review the latest state and try again.",
           409,
         )
+      const before = await workflowAuditSnapshot(tx, requestId, command)
       await runAction(tx, userId, requestId, command)
+      const after = await workflowAuditSnapshot(tx, requestId, command)
       await tx.requestWorkflow.update({
         where: { requestId },
         data: { version: { increment: 1 } },
@@ -1104,6 +1122,18 @@ export async function actOnWorkflow(
       await tx.workflowActionReceipt.create({
         data: { requestId, actorId: userId, actionId, payloadHash },
       })
+      await writeServiceLog(
+        tx,
+        "WORKFLOW_ACTION_COMPLETED",
+        requestId,
+        requestId,
+        userId,
+        command.type,
+        {
+          targetLabel: `${request.service.name} (${request.referenceNumber ?? requestId})`,
+          changes: workflowAuditChanges(command, before, after),
+        },
+      )
       return snapshot(tx, userId, requestId)
     },
     { timeout: 20_000 },

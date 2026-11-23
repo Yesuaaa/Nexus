@@ -1,6 +1,8 @@
 import type { AttendanceWorkdayRecord } from "./attendance.repository.js"
-import { attendanceWorkedMilliseconds } from "./attendance.validation.js"
-import { attendanceWorkDate } from "./attendance.validation.js"
+import {
+  attendanceWorkDate,
+  attendanceWorkedMilliseconds,
+} from "./attendance.validation.js"
 
 type SummarySource = Pick<
   AttendanceWorkdayRecord,
@@ -10,19 +12,33 @@ type SummarySource = Pick<
   | "timeZone"
   | "isWorkingDay"
   | "requiredMinutes"
+  | "scheduledStartAt"
+  | "scheduledEndAt"
+  | "scheduledUnpaidBreakMinutes"
   | "policyName"
   | "unpaidBreaksEnabled"
   | "overnightRequiresReview"
   | "sessions"
   | "assignment"
-> & { id: string | null }
+> & { id: string | null; approvedLeaveMinutes?: number }
 
 /** Count elapsed instants against the attributed workday, never split at midnight. */
-export function summarizeAttendance(day: SummarySource, asOf: Date) {
+export function summarizeAttendance(
+  day: SummarySource,
+  asOf: Date,
+  workDateFormatters?: Map<string, Intl.DateTimeFormat>,
+) {
+  const localDate = (instant: Date) =>
+    attendanceWorkDate(instant, day.timeZone, workDateFormatters)
   let unpaidBreakMilliseconds = 0
   const intervals = day.sessions.flatMap((session) => {
     const end = new Date(
-      Math.min(session.endedAt?.getTime() ?? asOf.getTime(), asOf.getTime()),
+      Math.min(
+        session.endedAt?.getTime() ??
+          session.suspendedAt?.getTime() ??
+          asOf.getTime(),
+        asOf.getTime(),
+      ),
     )
     if (end <= session.startedAt) return []
     const breaks = session.breaks.flatMap((pause) => {
@@ -40,7 +56,12 @@ export function summarizeAttendance(day: SummarySource, asOf: Date) {
     return [{ startedAt: session.startedAt, endedAt: end, breaks }]
   })
   const workedMilliseconds = attendanceWorkedMilliseconds(intervals)
-  const requiredMilliseconds = day.requiredMinutes * 60000
+  const approvedLeaveMinutes = Math.min(
+    day.requiredMinutes,
+    Math.max(0, day.approvedLeaveMinutes ?? 0),
+  )
+  const effectiveRequiredMinutes = day.requiredMinutes - approvedLeaveMinutes
+  const requiredMilliseconds = effectiveRequiredMinutes * 60000
   const remainingMilliseconds = Math.max(
     0,
     requiredMilliseconds - workedMilliseconds,
@@ -49,9 +70,43 @@ export function summarizeAttendance(day: SummarySource, asOf: Date) {
     0,
     workedMilliseconds - requiredMilliseconds,
   )
-  const activeSession = day.sessions.find((session) => session.endedAt === null)
+  const activeSession = day.sessions.find(
+    (session) => session.endedAt === null && !session.suspendedAt,
+  )
+  const workDate = day.workDate.toISOString().slice(0, 10)
+  const scheduledEndDate = day.scheduledEndAt
+    ? localDate(day.scheduledEndAt)
+    : workDate
+  const firstStart = day.sessions[0]?.startedAt
+  const lastEnd = day.sessions.at(-1)?.endedAt
+  const schedule =
+    day.scheduledStartAt && day.scheduledEndAt
+      ? {
+          startsAt: day.scheduledStartAt,
+          endsAt: day.scheduledEndAt,
+          unpaidBreakMinutes: day.scheduledUnpaidBreakMinutes ?? 0,
+          lateArrivalMinutes: firstStart
+            ? Math.max(
+                0,
+                Math.floor(
+                  (firstStart.getTime() - day.scheduledStartAt.getTime()) /
+                    60000,
+                ),
+              )
+            : 0,
+          earlyDepartureMinutes:
+            lastEnd && asOf >= day.scheduledEndAt
+              ? Math.max(
+                  0,
+                  Math.floor(
+                    (day.scheduledEndAt.getTime() - lastEnd.getTime()) / 60000,
+                  ),
+                )
+              : 0,
+        }
+      : null
   const status =
-    day.requiredMinutes === 0
+    effectiveRequiredMinutes === 0
       ? "NOT_REQUIRED"
       : activeSession
         ? remainingMilliseconds === 0
@@ -66,7 +121,8 @@ export function summarizeAttendance(day: SummarySource, asOf: Date) {
     id: day.id,
     employeeId: day.employeeId,
     assignmentId: day.assignmentId,
-    workDate: day.workDate.toISOString().slice(0, 10),
+    workDate,
+    schedule,
     timeZone: day.timeZone,
     isWorkingDay: day.isWorkingDay,
     policy: {
@@ -78,18 +134,24 @@ export function summarizeAttendance(day: SummarySource, asOf: Date) {
     hasOvernightSessions: day.sessions.some(
       (session) =>
         session.endedAt &&
-        attendanceWorkDate(session.startedAt, day.timeZone) !==
-          attendanceWorkDate(session.endedAt, day.timeZone),
+        localDate(session.startedAt) !== localDate(session.endedAt),
     ),
     overnightRequiresReview:
       day.overnightRequiresReview &&
-      day.sessions.some(
-        (session) =>
-          attendanceWorkDate(session.startedAt, day.timeZone) !==
-          attendanceWorkDate(session.endedAt ?? asOf, day.timeZone),
-      ),
-    requiredMinutes: day.requiredMinutes,
-    requiredHours: day.requiredMinutes / 60,
+      day.sessions.some((session) => {
+        const startDate = localDate(session.startedAt)
+        const endDate = localDate(
+          session.endedAt ?? session.suspendedAt ?? asOf,
+        )
+        return (
+          startDate !== endDate &&
+          (startDate !== workDate || endDate > scheduledEndDate)
+        )
+      }),
+    baseRequiredMinutes: day.requiredMinutes,
+    approvedLeaveMinutes,
+    requiredMinutes: effectiveRequiredMinutes,
+    requiredHours: effectiveRequiredMinutes / 60,
     workedMilliseconds,
     workedMinutes: workedMilliseconds / 60000,
     workedHours: workedMilliseconds / 3600000,

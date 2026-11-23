@@ -219,7 +219,7 @@ export function TaskRowActions({
                   </SelectContent>
                 </Select>
                 {!stream.canAssign && (
-                  <p className="mt-1 text-[11px] text-[#738096]">
+                  <p className="mt-1 text-[11px] text-[#65718a]">
                     Only the department head can change assignments.
                   </p>
                 )}

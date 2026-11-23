@@ -1,5 +1,6 @@
 import {
   isForeignKeyViolation,
+  isPrismaCode,
   isRecordNotFound,
   isUniqueConflict,
 } from "../../lib/errors.js"
@@ -88,6 +89,14 @@ function uniqueConflict() {
     409,
     "A service, pricing template, or package with this name already exists",
   )
+}
+
+function pricingRangeError(error: unknown) {
+  if (isPrismaCode(error, "P2020"))
+    throw new ServicesError(
+      400,
+      "A service price is outside the supported range",
+    )
 }
 
 function publicSocialLinks(
@@ -188,6 +197,7 @@ export const servicesService = {
           409,
           "A pricing template with this name already exists",
         )
+      pricingRangeError(error)
       throw error
     }
   },
@@ -253,6 +263,7 @@ export const servicesService = {
     } catch (error) {
       await removeImageBestEffort(uploadedPath)
       if (isUniqueConflict(error)) throw uniqueConflict()
+      pricingRangeError(error)
       throw error
     }
   },
@@ -377,6 +388,7 @@ export const servicesService = {
     } catch (error) {
       await removeImageBestEffort(uploadedPath)
       if (isUniqueConflict(error)) throw uniqueConflict()
+      pricingRangeError(error)
       throw error
     }
   },

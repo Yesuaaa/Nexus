@@ -7,7 +7,7 @@
  * DATABASE_POOL_MAX, JWT_SECRET) and the image storage override are restored
  * when the owning test finishes.
  */
-import { randomBytes } from "node:crypto"
+import { createHash, randomBytes } from "node:crypto"
 import { readdir, readFile } from "node:fs/promises"
 import type { Server } from "node:http"
 import type { AddressInfo } from "node:net"
@@ -15,7 +15,7 @@ import type { TestContext } from "node:test"
 import { PGlite } from "@electric-sql/pglite"
 import { PGLiteSocketServer } from "@electric-sql/pglite-socket"
 import { createApp } from "../../src/app.js"
-import { getPrisma } from "../../src/lib/db.js"
+import { disconnectPrisma, getPrisma } from "../../src/lib/db.js"
 import {
   setServiceImageStorageForTests,
   type ServiceImageStorage,
@@ -44,6 +44,23 @@ export async function applyMigrations(
 ) {
   for (const name of await migrationNames())
     if (include(name)) await db.exec(await readMigration(name))
+}
+
+/** Adds Prisma-compatible ledger entries for migrations loaded by this harness. */
+export async function recordAppliedMigrations(db: PGlite) {
+  await db.exec(`CREATE TABLE public._prisma_migrations (
+    migration_name text PRIMARY KEY, checksum text NOT NULL,
+    finished_at timestamptz, rolled_back_at timestamptz
+  )`)
+  for (const name of await migrationNames()) {
+    const checksum = createHash("sha256")
+      .update(await readMigration(name))
+      .digest("hex")
+    await db.query(
+      `INSERT INTO public._prisma_migrations (migration_name, checksum, finished_at) VALUES ($1, $2, now())`,
+      [name, checksum],
+    )
+  }
 }
 
 /** A fake image store for tests that render profile/service image URLs. */
@@ -95,7 +112,7 @@ export async function startPgliteDatabase(
   const shutdownHooks: (() => unknown)[] = []
   t.after(async () => {
     for (const hook of shutdownHooks.reverse()) await hook()
-    await cleanup.prisma?.$disconnect()
+    if (cleanup.prisma) await disconnectPrisma()
     await cleanup.socket?.stop()
     await db.close()
     if (options.imageStorage) setServiceImageStorageForTests(undefined)

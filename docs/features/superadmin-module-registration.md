@@ -8,14 +8,14 @@ The shared [module registry](../../apps/api/src/features/modules/module-registry
 
 ## Registered modules
 
-| Module                  | Superadmin destination                 |
-| ----------------------- | -------------------------------------- |
-| Service Operations      | `/services`                            |
-| Project Management      | `/module/project-management`           |
-| People & HR             | `/employees`                           |
-| Attendance & Monitoring | `/attendance/dashboard`                |
-| Administration          | `/accounts`                            |
-| Billing & Finance       | Unavailable; disabled placeholder only |
+| Module               | Superadmin destination                 |
+| -------------------- | -------------------------------------- |
+| Service Operations   | `/services`                            |
+| Project Management   | `/module/project-management`           |
+| People & HR          | `/employees`                           |
+| Workforce Compliance | `/attendance/time-logs/overview`       |
+| Administration       | `/accounts`                            |
+| Billing & Finance    | Unavailable; disabled placeholder only |
 
 Superadmin inherits every implemented module through Phase 2A's `modules:access-all` capability. No Employee, Staff assignment, Department Head assignment, project membership, or Client identity is required. Ordinary-role selector rules remain unchanged.
 

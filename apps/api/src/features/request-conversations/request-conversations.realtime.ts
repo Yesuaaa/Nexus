@@ -11,6 +11,7 @@ export interface ConversationRealtime {
     onChange: () => void,
     onStatus: (connected: boolean) => void,
   ): Promise<() => Promise<void>>
+  shutdown?(): Promise<void>
 }
 
 type Listener = { onChange: () => void; onStatus: (connected: boolean) => void }
@@ -129,6 +130,24 @@ export function createConversationRealtime(): ConversationRealtime {
       } catch (error) {
         await release()
         throw error
+      }
+    },
+    async shutdown() {
+      const currentClient = client
+      if (!currentClient) return
+
+      try {
+        await currentClient.removeAllChannels()
+        const result = await currentClient.realtime.disconnect(
+          1000,
+          "API server shutdown",
+        )
+        if (result === "timeout") {
+          throw new Error("Realtime connection did not close before timeout")
+        }
+      } finally {
+        rooms.clear()
+        client = undefined
       }
     },
   }

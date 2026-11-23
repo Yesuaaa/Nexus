@@ -12,10 +12,12 @@ import {
   Contact,
   FolderKanban,
   Gauge,
+  History,
   Inbox,
   MessageSquareText,
   MessagesSquare,
   UsersRound,
+  WalletCards,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -29,8 +31,10 @@ import type { Account } from "@/features/auth/model/types"
 import {
   canAccessRequestInbox,
   canAccessProjectWorkspace,
+  canCreateProjectWorkspace,
 } from "@/features/auth/model/permissions"
 import {
+  findRoutePolicy,
   getNavigationLabel,
   getNavigationPolicies,
   isNavigationActive,
@@ -42,6 +46,7 @@ import {
 import { attendanceNavigation } from "@/features/attendance/model/navigation"
 import { useWorkspaceModuleId } from "@/features/workspaces/providers/workspace-provider"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
+import { Pill } from "@/components/ui/pill"
 
 import { focusRing, iconButtonClass } from "./styles"
 import {
@@ -89,14 +94,21 @@ function NavigationIcon({
     departments: DepartmentIcon,
     services: ServiceIcon,
     "service-requests": ClipboardList,
+    "module-service-operations": ClipboardList,
     calendar: CalendarDays,
     projects: FolderKanban,
     "project-workspace": FolderKanban,
     "request-inbox": Inbox,
     help: CircleHelp,
     employees: UsersRound,
-    "attendance-dashboard": DashboardIcon,
     "staff-workload": Gauge,
+    "staff-my-payroll": WalletCards,
+    "administrative-workload": Gauge,
+    "service-operation-logs": History,
+    "project-management-logs": History,
+    "people-hr-logs": History,
+    "workforce-compliance-logs": History,
+    "attendance-audit": History,
   }
   const icon = icons[policyId]
   return icon ? <RowIcon icon={icon} active={active} /> : null
@@ -121,14 +133,22 @@ function SidebarNavigationLink({
   if (!navigation) return null
   const label = labelOverride ?? getNavigationLabel(policy, account)
   const active = isNavigationActive(policy, pathname)
+  const href =
+    typeof navigation.href === "function"
+      ? navigation.href(account)
+      : navigation.href
+  const currentPolicy = findRoutePolicy(pathname)
+  const transitionTypes =
+    policy.moduleId === "service-operations" &&
+    currentPolicy?.moduleId === "service-operations" &&
+    href !== pathname
+      ? [href.endsWith("/overview") ? "nav-back" : "nav-forward"]
+      : undefined
 
   return (
     <Link
-      href={
-        typeof navigation.href === "function"
-          ? navigation.href(account)
-          : navigation.href
-      }
+      href={href}
+      transitionTypes={transitionTypes}
       aria-current={active ? "page" : undefined}
       className={cn(
         navLinkClass,
@@ -159,7 +179,17 @@ type NavGroup = {
   label: string
   icon: NavIcon
   visible: (account: Account) => boolean
-  links: { href: string; label: string; ariaLabel?: string }[]
+  links: {
+    href: string
+    label: string
+    ariaLabel?: string
+    match?: (pathname: string) => boolean
+    disabled?: boolean
+  }[]
+}
+
+function isGroupLinkActive(link: NavGroup["links"][number], pathname: string) {
+  return link.match?.(pathname) ?? link.href === pathname
 }
 
 /**
@@ -194,6 +224,79 @@ function moduleGroup(
   }
 }
 
+function payrollModuleGroup(visible: (account: Account) => boolean): NavGroup {
+  return {
+    kind: "group",
+    label: "Payroll",
+    icon: WalletCards,
+    visible,
+    links: [
+      {
+        href: "/module/payroll",
+        label: "Overview",
+        ariaLabel: "Payroll overview",
+      },
+      { href: "/module/payroll/runs", label: "Payroll Runs" },
+      {
+        href: "/module/payroll/compensation",
+        label: "Compensation",
+      },
+      {
+        href: "/module/payroll/approvals",
+        label: "Approvals",
+      },
+      {
+        href: "/module/payroll/disbursements",
+        label: "Disbursements",
+      },
+      {
+        href: "/module/payroll/reconciliation",
+        label: "Reconciliation",
+      },
+      {
+        href: "/module/payroll/payslips",
+        label: "Payslips & History",
+      },
+      { href: "/module/payroll/reports", label: "Reports" },
+      { href: "/module/payroll/settings", label: "Settings" },
+    ],
+  }
+}
+
+const administrativeRequestsPath = "/module/service-operations"
+
+function requestGroup(account: Account): NavGroup {
+  const links: NavGroup["links"] = []
+  if (canAccessRoute(account, administrativeRequestsPath)) {
+    links.push({
+      href: administrativeRequestsPath,
+      label: "Overview",
+      ariaLabel: "Request overview",
+    })
+  }
+  if (canAccessRoute(account, "/request-inbox/overview")) {
+    links.push({
+      href: "/request-inbox/overview",
+      label: "Overview",
+      ariaLabel: "Request overview",
+    })
+  }
+  if (canAccessRoute(account, "/request-inbox")) {
+    links.push({
+      href: "/request-inbox",
+      label: "Inbox",
+      ariaLabel: "Request Inbox",
+    })
+  }
+  return {
+    kind: "group",
+    label: "Request",
+    icon: Inbox,
+    visible: () => links.length > 0,
+    links,
+  }
+}
+
 function RowIcon({ icon: Icon, active }: { icon: NavIcon; active: boolean }) {
   return (
     <Icon
@@ -221,8 +324,13 @@ function groupTransition(
   href: string,
   pathname: string,
 ): string[] | undefined {
-  const inGroup = group.links.some((link) => link.href === pathname)
-  if (!inGroup || href === pathname) return undefined
+  const inGroup = group.links.some((link) => isGroupLinkActive(link, pathname))
+  const currentPolicy = findRoutePolicy(pathname)
+  const isServiceOperationsGroup =
+    (group.label === "Services" || group.label === "Request") &&
+    currentPolicy?.moduleId === "service-operations"
+  if ((!inGroup && !isServiceOperationsGroup) || href === pathname)
+    return undefined
   return [href.endsWith("/overview") ? "nav-back" : "nav-forward"]
 }
 
@@ -239,7 +347,9 @@ function GroupDisclosure({
   onToggle: () => void
 }) {
   const panelId = useId()
-  const groupActive = group.links.some((link) => link.href === pathname)
+  const groupActive = group.links.some((link) =>
+    isGroupLinkActive(link, pathname),
+  )
   return (
     <div className="min-w-0">
       <button
@@ -274,7 +384,27 @@ function GroupDisclosure({
         <div className="min-h-0 overflow-hidden">
           <div className="mt-0.5 mb-1 ml-[19px] grid gap-0.5 border-l border-[#e6e9ee] pl-2">
             {group.links.map((link) => {
-              const active = link.href === pathname
+              const active = isGroupLinkActive(link, pathname)
+              const className = cn(
+                rowClass,
+                "h-8 px-2.5 text-[12.5px]",
+                active && activeRowClass,
+              )
+              if (link.disabled)
+                return (
+                  <span
+                    key={link.href}
+                    className={cn(
+                      className,
+                      "cursor-default text-[#8a94a6] hover:bg-transparent hover:text-[#8a94a6]",
+                    )}
+                  >
+                    <span className="min-w-0 flex-1 truncate">
+                      {link.label}
+                    </span>
+                    <Pill tone="neutral">Coming soon</Pill>
+                  </span>
+                )
               return (
                 <Link
                   key={link.href}
@@ -283,12 +413,7 @@ function GroupDisclosure({
                   aria-label={link.ariaLabel}
                   aria-current={active ? "page" : undefined}
                   onClick={onNavigate}
-                  className={cn(
-                    rowClass,
-                    "h-8 px-2.5 text-[12.5px]",
-                    focusRing,
-                    active && activeRowClass,
-                  )}
+                  className={cn(className, focusRing)}
                 >
                   <span className="min-w-0 truncate">{link.label}</span>
                 </Link>
@@ -307,7 +432,9 @@ function GroupFlyout({
   pathname,
   onNavigate,
 }: Omit<RowProps, "collapsed"> & { group: NavGroup }) {
-  const groupActive = group.links.some((link) => link.href === pathname)
+  const groupActive = group.links.some((link) =>
+    isGroupLinkActive(link, pathname),
+  )
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -337,7 +464,20 @@ function GroupFlyout({
           {group.label}
         </DropdownMenuLabel>
         {group.links.map((link) => {
-          const active = link.href === pathname
+          const active = isGroupLinkActive(link, pathname)
+          if (link.disabled)
+            return (
+              <DropdownMenuItem
+                key={link.href}
+                disabled
+                className="rounded-md px-2 py-1.5 text-[13px] text-[#6f7b8e]"
+              >
+                <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                  <span className="truncate">{link.label}</span>
+                  <Pill tone="neutral">Coming soon</Pill>
+                </span>
+              </DropdownMenuItem>
+            )
           return (
             <DropdownMenuItem
               key={link.href}
@@ -378,19 +518,33 @@ export function Sidebar({
   onCloseDrawer: () => void
 }) {
   const pathname = usePathname()
-  // Groups follow the current page unless the user toggled them.
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
+  const showRequestsUnderService =
+    account.role === "SUPERADMIN" &&
+    canAccessRoute(account, "/services") &&
+    canAccessRoute(account, administrativeRequestsPath)
+  // Groups follow the current page until the user toggles one. Once toggled,
+  // the accordion keeps only the selected group open until navigation changes.
+  const [openGroupState, setOpenGroupState] = useState<{
+    pathname: string
+    group: string | null
+  } | null>(null)
+  const openGroup =
+    openGroupState?.pathname === pathname ? openGroupState.group : undefined
   function renderGroup(group: NavGroup) {
     const open =
-      openGroups[group.label] ??
-      group.links.some((link) => link.href === pathname)
+      openGroup === undefined
+        ? group.links.some((link) => isGroupLinkActive(link, pathname))
+        : openGroup === group.label
     const disclosure = (
       <GroupDisclosure
         group={group}
         pathname={pathname}
         open={open}
         onToggle={() =>
-          setOpenGroups((current) => ({ ...current, [group.label]: !open }))
+          setOpenGroupState({
+            pathname,
+            group: open ? null : group.label,
+          })
         }
         onNavigate={onCloseDrawer}
       />
@@ -417,10 +571,13 @@ export function Sidebar({
   }
 
   function renderPolicy(policy: RoutePolicy) {
+    if (policy.id === "module-payroll")
+      return renderGroup(payrollModuleGroup(policy.canAccess))
+
     const attendanceGroup = attendanceNavigation.find(
       (group) => group.id === policy.id,
     )
-    if (attendanceGroup && attendanceGroup.id !== "attendance-dashboard") {
+    if (attendanceGroup) {
       return renderGroup({
         kind: "group",
         label: attendanceGroup.label,
@@ -435,6 +592,54 @@ export function Sidebar({
           canAccessRoute(account, link.href),
         ),
       })
+    }
+    if (policy.id === "admin-project-management" && policy.canAccess(account)) {
+      const group = moduleGroup(
+        "Project Workspace",
+        "Project Workspace",
+        FolderKanban,
+        "/project-management",
+        policy.canAccess,
+      )
+      group.links[1].match = (path) =>
+        path !== "/project-management/overview" &&
+        isNavigationActive(policy, path)
+      return renderGroup(group)
+    }
+    if (
+      policy.id === "project-workspace" &&
+      canCreateProjectWorkspace(account)
+    ) {
+      const group = moduleGroup(
+        "Project Workspace",
+        "Project Workspace",
+        FolderKanban,
+        "/project-workspace",
+        canCreateProjectWorkspace,
+      )
+      group.links[1].match = (path) =>
+        path !== group.links[0].href && isNavigationActive(policy, path)
+      return renderGroup(group)
+    }
+    if (
+      policy.id === "module-service-operations" ||
+      policy.id === "request-inbox"
+    ) {
+      if (showRequestsUnderService && policy.id === "module-service-operations")
+        return null
+
+      const group = requestGroup(account)
+      const hasAdministrativeOverview = group.links.some(
+        (link) => link.href === administrativeRequestsPath,
+      )
+      // If a role can access both links, the overview policy renders the
+      // group once and the inbox policy is intentionally suppressed.
+      if (
+        policy.id === "module-service-operations" ||
+        (policy.id === "request-inbox" && !hasAdministrativeOverview)
+      )
+        return renderGroup(group)
+      return null
     }
     const props = {
       policy,
@@ -452,12 +657,24 @@ export function Sidebar({
       const names = {
         departments: ["Departments", "Department", DepartmentIcon],
         employees: ["Employees", "Employee", UsersRound],
-        services: ["Services", "Service", ServiceIcon],
+        services: ["Service", "Service", ServiceIcon],
       } as const
       const [label, singular, icon] = names[policy.id]
-      return renderGroup(
-        moduleGroup(label, singular, icon, `/${policy.id}`, policy.canAccess),
+      const group = moduleGroup(
+        label,
+        singular,
+        icon,
+        `/${policy.id}`,
+        policy.canAccess,
       )
+      if (policy.id === "services" && showRequestsUnderService) {
+        group.links.push({
+          href: administrativeRequestsPath,
+          label: "Request",
+          ariaLabel: "Request overview",
+        })
+      }
+      return renderGroup(group)
     }
     return <SidebarNavigationLink key={policy.id} {...props} />
   }
@@ -470,6 +687,11 @@ export function Sidebar({
   )
   const workspaceNavigation = activeModuleId
     ? mainNavigation.filter((policy) => policy.moduleId === activeModuleId)
+    : []
+  const systemToolNavigation = activeModuleId
+    ? getNavigationPolicies(account, "system-tool").filter(
+        (policy) => policy.moduleId === activeModuleId,
+      )
     : []
   const sharedNavigation = mainNavigation.filter(
     (policy) =>
@@ -517,44 +739,41 @@ export function Sidebar({
             so the first link lines up with the panel's top edge. */}
         <div
           className={cn(
-            "flex h-[69px] flex-none items-center gap-2 pr-3 pl-5",
+            "flex h-[69px] flex-none items-center gap-2 pr-3 pl-3",
             collapsed &&
-              "justify-center px-0 max-[767px]:justify-start max-[767px]:pr-3 max-[767px]:pl-5",
+              "justify-center px-0 max-[767px]:justify-start max-[767px]:pr-3 max-[767px]:pl-3",
           )}
         >
           <div
             className={cn(
-              "flex min-w-0 flex-1 flex-col items-start overflow-hidden whitespace-nowrap",
-              collapsed && "hidden max-[767px]:flex",
+              "flex min-w-0 flex-1 items-center justify-between gap-2 overflow-hidden whitespace-nowrap",
+              collapsed && "flex-none",
             )}
-            aria-label="EXP Digital Solutions Inc."
+            aria-label="Converyn"
           >
             <img
-              className="block w-[64px] flex-none"
-              src="/auth/exp-logo.svg"
-              alt="EXP"
+              className={cn(
+                "block h-[56px] w-[112px] flex-none object-contain",
+                collapsed && "hidden max-[767px]:block",
+              )}
+              src="/auth/converyn-logo-w-text.svg"
+              alt="Converyn"
             />
-            <span
-              data-portal-access-label
-              className="mt-1 text-[9px] leading-none font-semibold tracking-[0.16em] text-[#46618d]"
+            <button
+              type="button"
+              className={cn(
+                iconButtonClass,
+                "group relative size-8 max-[767px]:hidden",
+              )}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-expanded={!collapsed}
+              aria-controls="app-sidebar"
+              onClick={onToggleCollapse}
             >
-              {accessLabels[account.role]}
-            </span>
+              <PanelIcon className="size-[18px]" />
+              {collapsed && <CollapsedTooltip>Expand sidebar</CollapsedTooltip>}
+            </button>
           </div>
-          <button
-            type="button"
-            className={cn(
-              iconButtonClass,
-              "group relative size-8 max-[767px]:hidden",
-            )}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-expanded={!collapsed}
-            aria-controls="app-sidebar"
-            onClick={onToggleCollapse}
-          >
-            <PanelIcon className="size-[18px]" />
-            {collapsed && <CollapsedTooltip>Expand sidebar</CollapsedTooltip>}
-          </button>
           <button
             type="button"
             className={cn(iconButtonClass, "hidden size-8 max-[767px]:grid")}
@@ -574,6 +793,12 @@ export function Sidebar({
           )}
           aria-label="Main menu"
         >
+          <p
+            data-portal-access-label
+            className={cn(sectionLabelClass, "-mt-2 pt-0 max-[767px]:pt-0")}
+          >
+            {accessLabels[account.role]}
+          </p>
           {dashboardPolicy && (
             <SidebarNavigationLink
               policy={dashboardPolicy}
@@ -664,6 +889,19 @@ export function Sidebar({
                   </Link>
                 )}
             </>
+          )}
+
+          {systemToolNavigation.length > 0 && (
+            <div
+              role="group"
+              aria-labelledby="sidebar-system-tool"
+              className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-0.5"
+            >
+              <p id="sidebar-system-tool" className={sectionLabelClass}>
+                System Tool
+              </p>
+              {systemToolNavigation.map(renderPolicy)}
+            </div>
           )}
 
           {sharedNavigation.length > 0 && (

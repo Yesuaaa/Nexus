@@ -21,6 +21,7 @@ export default tseslint.config(
       ".pnpm-store/**",
       ".ci-tools/**",
       ".localappdata/**",
+      ".tmp/performance/**",
       "apps/mobile/**",
     ],
   },

@@ -62,6 +62,10 @@ The normal backend `tsx` launcher could not start because this environment repor
 
 The initial new mobile test clicked a row action at the viewport edge, where the existing shared zero-size menu anchor was hidden by clipping. Scrolling the complete row into view before interaction made the test exercise the visible menu normally; the shared menu was not changed in this phase.
 
+## People & HR Logs
+
+Superadmins can inspect recorded employee, department, team, and Staff login changes in the People & HR workspace. See [People & HR Logs](people-hr-logs.md) for access, filters, and history coverage.
+
 ## Restrictions and remaining work
 
 Superadmin remains outside ordinary employee self-service and operational participation. Head/team eligibility, employee status transitions, temporary Head coverage, protected department deletion, Staff login lifecycle and account ownership rules remain enforced by existing services. Admin credentials remain in Account Management. Staff and Department Head access to sensitive HR records is not expanded. No HR workflow, permission-management feature, automatic identity provisioning or staffing eligibility override was added. Existing uncommitted changes from earlier phases were preserved.

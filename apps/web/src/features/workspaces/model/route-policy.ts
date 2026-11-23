@@ -13,9 +13,12 @@ import {
   canAccessDepartmentManagement,
   canAccessEmployeeManagement,
   canAccessMessages,
+  canAccessPayroll,
+  canAccessMyPayroll,
   canInspectBusinessConversations,
   canAccessProjects,
   canAccessProjectWorkspace,
+  canCreateProjectWorkspace,
   canAccessRequestInbox,
   canAccessServiceCatalog,
   canAccessServiceManagement,
@@ -23,6 +26,7 @@ import {
 import type { Account } from "../../auth/model/types.ts"
 import {
   canAccessAdministrativeModules,
+  getModuleLogsLabel,
   moduleRegistry,
   type ModuleRegistration,
   type WorkspaceModuleId,
@@ -34,11 +38,29 @@ export const workspaceModuleLabels = Object.fromEntries(
   Object.entries(moduleRegistry).map(([id, module]) => [id, module.title]),
 ) as Record<WorkspaceModuleId, string>
 
+const payrollWorkspaceModuleId = moduleRegistry.payroll
+  .workspaceParent as WorkspaceModuleId
+const staffPayrollWorkspaceModuleId = moduleRegistry["my-payroll"]
+  .workspaceParent as WorkspaceModuleId
+
 export type RoutePolicyId =
   | `module-${string}`
+  | "payroll-compensation"
+  | "payroll-runs"
+  | "payroll-approvals"
+  | "payroll-disbursements"
+  | "payroll-reconciliation"
+  | "payroll-reports"
+  | "payroll-payslips"
+  | "staff-my-payroll"
+  | "staff-my-payroll-legacy"
+  | "staff-my-payroll-attendance-legacy"
+  | "payroll-settings"
   | "employees-overview"
-  | "attendance-dashboard"
   | "attendance-time-logs"
+  | "attendance-audit"
+  | "attendance-audit-legacy"
+  | "attendance-policy-assignments-legacy"
   | "attendance-requests"
   | "attendance-policies"
   | (typeof attendanceNavigation)[number]["links"][number]["id"]
@@ -59,9 +81,13 @@ export type RoutePolicyId =
   | "projects-deliverable"
   | "projects-detail"
   | "projects"
+  | "project-workspace-overview"
   | "project-workspace-new"
   | "project-workspace-detail"
   | "project-workspace"
+  | "admin-project-management"
+  | "admin-project-management-overview"
+  | "admin-project-management-department"
   | "departments"
   | "departments-overview"
   | "employees"
@@ -76,6 +102,11 @@ export type RoutePolicyId =
   | "booked-services"
   | "staff-workload"
   | "administrative-workload"
+  | "service-operation-logs"
+  | "project-management-logs"
+  | "people-hr-logs"
+  | "workforce-compliance-logs"
+  | "request-inbox-overview"
   | "request-inbox"
   | "profile"
   | "settings"
@@ -83,7 +114,7 @@ export type RoutePolicyId =
 export type RouteMatch =
   { kind: "exact" | "prefix"; path: string } | { kind: "pattern"; path: string }
 
-type NavigationLocation = "main" | "footer"
+type NavigationLocation = "main" | "system-tool" | "footer"
 
 type RouteNavigation = {
   href: string | ((account: Account) => string)
@@ -108,20 +139,27 @@ export function administrativeModulePolicies(
   registry: Readonly<Record<string, ModuleRegistration>> = moduleRegistry,
 ): RoutePolicy[] {
   return Object.entries(registry)
-    .filter(([, module]) => module.implemented)
+    .filter(([, module]) => module.implemented && !("staffOnly" in module))
     .map(([id, module]) => ({
       id: `module-${id}`,
       match: { kind: "exact", path: `/module/${id}` },
-      moduleId: id as WorkspaceModuleId,
-      canAccess: canAccessAdministrativeModules,
+      moduleId: ("workspaceParent" in module
+        ? module.workspaceParent
+        : id) as WorkspaceModuleId,
+      canAccess:
+        id === "payroll" ? canAccessPayroll : canAccessAdministrativeModules,
       ...(module.administrativePath === null || id === "service-operations"
         ? {
             navigation: {
               href: `/module/${id}`,
               label:
-                id === "service-operations" ? "Service Requests" : "Overview",
+                id === "service-operations"
+                  ? "Request Overview"
+                  : id === "payroll"
+                    ? module.title
+                    : "Overview",
               location: "main" as const,
-              order: 1,
+              order: id === "payroll" ? 40 : 1,
             },
           }
         : {}),
@@ -129,6 +167,66 @@ export function administrativeModulePolicies(
 }
 
 export const routePolicies: readonly RoutePolicy[] = [
+  {
+    id: "project-management-logs",
+    match: { kind: "exact", path: "/module/project-management/logs" },
+    moduleId: "project-management",
+    canAccess: (account) =>
+      account.role === "SUPERADMIN" &&
+      canAccessAdministrativeModules(account) &&
+      hasPermission(account, Permissions.ORGANIZATION_READ_ALL),
+    navigation: {
+      href: "/module/project-management/logs",
+      label: getModuleLogsLabel("project-management"),
+      location: "system-tool",
+      order: 0,
+    },
+  },
+  {
+    id: "service-operation-logs",
+    match: { kind: "exact", path: "/module/service-operations/logs" },
+    moduleId: "service-operations",
+    canAccess: (account) =>
+      account.role === "SUPERADMIN" &&
+      canAccessAdministrativeModules(account) &&
+      hasPermission(account, Permissions.ORGANIZATION_READ_ALL),
+    navigation: {
+      href: "/module/service-operations/logs",
+      label: getModuleLogsLabel("service-operations"),
+      location: "system-tool",
+      order: 0,
+    },
+  },
+  {
+    id: "people-hr-logs",
+    match: { kind: "exact", path: "/module/people-hr/logs" },
+    moduleId: "people-hr",
+    canAccess: (account) =>
+      account.role === "SUPERADMIN" &&
+      canAccessAdministrativeModules(account) &&
+      hasPermission(account, Permissions.ORGANIZATION_READ_ALL),
+    navigation: {
+      href: "/module/people-hr/logs",
+      label: getModuleLogsLabel("people-hr"),
+      location: "system-tool",
+      order: 0,
+    },
+  },
+  {
+    id: "workforce-compliance-logs",
+    match: { kind: "exact", path: "/module/attendance-monitoring/logs" },
+    moduleId: "attendance-monitoring",
+    canAccess: (account) =>
+      account.role === "SUPERADMIN" &&
+      canAccessAdministrativeModules(account) &&
+      hasPermission(account, Permissions.ORGANIZATION_READ_ALL),
+    navigation: {
+      href: "/module/attendance-monitoring/logs",
+      label: getModuleLogsLabel("attendance-monitoring"),
+      location: "system-tool",
+      order: 0,
+    },
+  },
   ...administrativeModulePolicies(),
   {
     id: "service-inquiries",
@@ -145,6 +243,78 @@ export const routePolicies: readonly RoutePolicy[] = [
     },
   },
   {
+    id: "payroll-compensation",
+    match: { kind: "exact", path: "/module/payroll/compensation" },
+    moduleId: payrollWorkspaceModuleId,
+    canAccess: canAccessPayroll,
+  },
+  {
+    id: "payroll-runs",
+    match: { kind: "exact", path: "/module/payroll/runs" },
+    moduleId: payrollWorkspaceModuleId,
+    canAccess: canAccessPayroll,
+  },
+  {
+    id: "payroll-approvals",
+    match: { kind: "exact", path: "/module/payroll/approvals" },
+    moduleId: payrollWorkspaceModuleId,
+    canAccess: canAccessPayroll,
+  },
+  {
+    id: "payroll-disbursements",
+    match: { kind: "exact", path: "/module/payroll/disbursements" },
+    moduleId: payrollWorkspaceModuleId,
+    canAccess: canAccessPayroll,
+  },
+  {
+    id: "payroll-reports",
+    match: { kind: "exact", path: "/module/payroll/reports" },
+    moduleId: payrollWorkspaceModuleId,
+    canAccess: canAccessPayroll,
+  },
+  {
+    id: "payroll-reconciliation",
+    match: { kind: "exact", path: "/module/payroll/reconciliation" },
+    moduleId: payrollWorkspaceModuleId,
+    canAccess: canAccessPayroll,
+  },
+  {
+    id: "payroll-payslips",
+    match: { kind: "exact", path: "/module/payroll/payslips" },
+    moduleId: payrollWorkspaceModuleId,
+    canAccess: canAccessPayroll,
+  },
+  {
+    id: "staff-my-payroll",
+    match: { kind: "exact", path: "/my-payroll" },
+    moduleId: staffPayrollWorkspaceModuleId,
+    canAccess: canAccessMyPayroll,
+    navigation: {
+      label: "My Payroll",
+      href: "/my-payroll",
+      location: "main",
+      order: 55,
+    },
+  },
+  {
+    id: "staff-my-payroll-legacy",
+    match: { kind: "exact", path: "/staff/my-payroll" },
+    moduleId: staffPayrollWorkspaceModuleId,
+    canAccess: canAccessMyPayroll,
+  },
+  {
+    id: "staff-my-payroll-attendance-legacy",
+    match: { kind: "exact", path: "/attendance/my-payroll" },
+    moduleId: staffPayrollWorkspaceModuleId,
+    canAccess: canAccessMyPayroll,
+  },
+  {
+    id: "payroll-settings",
+    match: { kind: "exact", path: "/module/payroll/settings" },
+    moduleId: payrollWorkspaceModuleId,
+    canAccess: canAccessPayroll,
+  },
+  {
     id: "administrative-workload",
     match: { kind: "exact", path: "/module/service-operations/workload" },
     moduleId: "service-operations",
@@ -157,6 +327,42 @@ export const routePolicies: readonly RoutePolicy[] = [
       location: "main",
       order: 80,
     },
+  },
+  {
+    id: "admin-project-management-overview",
+    match: { kind: "exact", path: "/project-management/overview" },
+    moduleId: "project-management",
+    canAccess: (account) =>
+      canAccessAdministrativeModules(account) &&
+      hasPermission(account, Permissions.ORGANIZATION_READ_ALL),
+  },
+  {
+    id: "admin-project-management",
+    match: { kind: "exact", path: "/project-management" },
+    moduleId: "project-management",
+    canAccess: (account) =>
+      canAccessAdministrativeModules(account) &&
+      hasPermission(account, Permissions.ORGANIZATION_READ_ALL) &&
+      hasPermission(account, Permissions.DEPARTMENTS_READ),
+    navigation: {
+      href: "/project-management",
+      label: "Project Workspace Management",
+      location: "main",
+      order: 120,
+      activeMatch: { kind: "prefix", path: "/project-management" },
+    },
+  },
+  {
+    id: "admin-project-management-department",
+    match: {
+      kind: "pattern",
+      path: "/project-management/departments/[departmentId]/projects",
+    },
+    moduleId: "project-management",
+    canAccess: (account) =>
+      canAccessAdministrativeModules(account) &&
+      hasPermission(account, Permissions.ORGANIZATION_READ_ALL) &&
+      hasPermission(account, Permissions.DEPARTMENTS_READ),
   },
   ...attendanceNavigation.flatMap((group, index): RoutePolicy[] => [
     ...group.links.map((link): RoutePolicy => ({
@@ -197,10 +403,34 @@ export const routePolicies: readonly RoutePolicy[] = [
             : group.links[0].href,
         label: group.label,
         location: "main",
-        order: group.id === "attendance-dashboard" ? 34 : 35 + index,
+        order: 35 + index,
       },
     },
   ]),
+  {
+    id: "attendance-audit",
+    match: { kind: "exact", path: "/attendance/audit" },
+    moduleId: "attendance-monitoring",
+    canAccess: canManageAttendance,
+    navigation: {
+      href: "/attendance/audit",
+      label: "Audit Trail",
+      location: "main",
+      order: 39,
+    },
+  },
+  {
+    id: "attendance-audit-legacy",
+    match: { kind: "exact", path: "/attendance/time-logs/audit" },
+    moduleId: "attendance-monitoring",
+    canAccess: canManageAttendance,
+  },
+  {
+    id: "attendance-policy-assignments-legacy",
+    match: { kind: "exact", path: "/attendance/policies/assignments" },
+    moduleId: "attendance-monitoring",
+    canAccess: canConfigureAttendance,
+  },
   {
     id: "attendance-adjustments",
     match: { kind: "exact", path: "/attendance/adjustments" },
@@ -301,6 +531,12 @@ export const routePolicies: readonly RoutePolicy[] = [
       activeMatch: { kind: "prefix", path: "/projects" },
       visible: (account) => account.role === "USER",
     },
+  },
+  {
+    id: "project-workspace-overview",
+    match: { kind: "exact", path: "/project-workspace/overview" },
+    moduleId: "project-management",
+    canAccess: canCreateProjectWorkspace,
   },
   {
     id: "project-workspace-new",
@@ -418,6 +654,12 @@ export const routePolicies: readonly RoutePolicy[] = [
       location: "main",
       order: 80,
     },
+  },
+  {
+    id: "request-inbox-overview",
+    match: { kind: "exact", path: "/request-inbox/overview" },
+    moduleId: "service-operations",
+    canAccess: canAccessRequestInbox,
   },
   {
     id: "request-inbox",

@@ -52,6 +52,7 @@ export function FilterSelect<T extends string>({
   className,
   triggerClassName,
   menuClassName,
+  fitOptions = false,
 }: {
   value: T
   options: FilterSelectOption<T>[]
@@ -69,6 +70,8 @@ export function FilterSelect<T extends string>({
   /** Trigger classes, e.g. a width. Merged over the standard toolbar style. */
   triggerClassName?: string
   menuClassName?: string
+  /** Wrap trigger and option labels within the matching trigger/popup width. */
+  fitOptions?: boolean
 }) {
   const selectedIndex = options.findIndex((option) => option.value === value)
   const selected = options[selectedIndex]
@@ -88,7 +91,12 @@ export function FilterSelect<T extends string>({
         }}
       >
         <SelectTrigger
-          className={cn(filterSelectTriggerClass, triggerClassName)}
+          className={cn(
+            filterSelectTriggerClass,
+            triggerClassName,
+            fitOptions &&
+              "h-auto min-h-[34px] whitespace-normal max-[560px]:h-auto max-[560px]:min-h-11 [&>span]:line-clamp-none [&>span]:[overflow-wrap:anywhere]",
+          )}
           aria-label={
             announceValue ? `${label}: ${selected?.label ?? ""}` : label
           }
@@ -98,12 +106,14 @@ export function FilterSelect<T extends string>({
         <SelectContent
           align={align === "right" ? "end" : "start"}
           className={menuClassName}
+          fitOptions={fitOptions}
         >
           {options.map((option, index) => (
             <SelectItem
               key={option.value || `option-${index}`}
               value={`option-${index}`}
               disabled={option.disabled}
+              wrapLabel={fitOptions}
             >
               {option.label}
             </SelectItem>

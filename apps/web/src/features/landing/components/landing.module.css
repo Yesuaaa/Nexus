@@ -4,11 +4,23 @@
   --landing-blue: #2f5bff;
   --landing-muted: color-mix(in srgb, #121214 66%, #f2f1ee);
   --landing-line: color-mix(in srgb, #121214 16%, #f2f1ee);
+  --landing-frame-width: 1360px;
+  position: relative;
+  isolation: isolate;
   overflow: clip;
   background: var(--landing-paper);
   color: var(--landing-ink);
   font-family: var(--font-inter), "Inter Variable", sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+.page::before {
+  position: absolute;
+  z-index: 50;
+  inset: 0 max(0px, calc((100% - var(--landing-frame-width)) / 2));
+  content: "";
+  pointer-events: none;
+  border-inline: 1px solid var(--landing-line);
 }
 
 .page a {
@@ -190,7 +202,7 @@
   color: var(--landing-blue);
 }
 .heroCopy > p {
-  max-width: 415px;
+  max-width: 560px;
   margin-top: 30px;
   color: var(--landing-muted);
   font-size: 16px;
@@ -201,6 +213,30 @@
   flex-wrap: wrap;
   gap: 14px;
   margin-top: 38px;
+}
+.heroSteps {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.heroSteps li {
+  display: grid;
+  gap: 8px;
+  max-width: 270px;
+}
+.heroSteps strong {
+  font-size: 15px;
+  line-height: 1.5;
+  font-weight: 600;
+}
+.heroSteps span {
+  color: var(--landing-muted);
+  font-size: 14px;
+  line-height: 1.65;
 }
 .buttonPrimary,
 .buttonSecondary,
@@ -821,6 +857,10 @@
   }
 }
 @media (max-width: 760px) {
+  .page::before {
+    display: none;
+  }
+
   .navbar {
     height: 76px;
     padding-inline: 24px;
@@ -865,6 +905,14 @@
     min-width: 0;
     font-size: 12px;
     gap: 16px;
+  }
+  .heroSteps {
+    grid-template-columns: 1fr;
+    gap: 22px;
+    margin-top: 0;
+  }
+  .heroSteps li {
+    max-width: 400px;
   }
   .marqueeHeading {
     padding-inline: 28px;

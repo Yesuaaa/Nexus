@@ -110,9 +110,12 @@ export function WorkflowNotifications() {
           aria-label={`Notifications${result?.unreadCount ? `, ${result.unreadCount} unread` : ""}`}
           className={`${iconButtonClass} relative data-[state=open]:outline-none`}
         >
-          <Bell size={21} strokeWidth={1.7} aria-hidden="true" />
+          <Bell size={18} strokeWidth={1.75} aria-hidden="true" />
           {Boolean(result?.unreadCount) && (
-            <span className="absolute top-0.5 right-0 grid min-w-4 place-items-center rounded-full bg-[#203f8c] px-1 text-[9px] text-white">
+            <span
+              aria-hidden="true"
+              className="absolute top-0.5 right-0 grid min-w-4 place-items-center rounded-full bg-[#203f8c] px-1 text-[9px] text-white"
+            >
               {result!.unreadCount > 99 ? "99+" : result!.unreadCount}
             </span>
           )}
@@ -143,17 +146,19 @@ export function WorkflowNotifications() {
             <DropdownMenuItem key={item.id} asChild>
               <Link
                 href={
-                  item.type.startsWith("ATTENDANCE_OVERTIME_")
-                    ? "/attendance/adjustments"
-                    : item.entityId &&
-                        [
-                          "PROJECT_ACTIVATED",
-                          "PROJECT_CANCELLATION_REQUESTED",
-                          "PROJECT_CANCELLATION_APPROVED",
-                          "PROJECT_CANCELLATION_DECLINED",
-                        ].includes(item.type)
-                      ? `/projects/${encodeURIComponent(item.entityId)}`
-                      : `/messages?request=${encodeURIComponent(item.requestId ?? "")}`
+                  item.entityId && item.type.startsWith("ATTENDANCE_")
+                    ? `/attendance/requests/${item.type.startsWith("ATTENDANCE_OVERTIME_") ? "overtime" : "corrections"}?request=${encodeURIComponent(item.entityId)}`
+                    : item.entityId && item.type.startsWith("LEAVE_")
+                      ? `/attendance/requests/leave?request=${encodeURIComponent(item.entityId)}`
+                      : item.entityId &&
+                          [
+                            "PROJECT_ACTIVATED",
+                            "PROJECT_CANCELLATION_REQUESTED",
+                            "PROJECT_CANCELLATION_APPROVED",
+                            "PROJECT_CANCELLATION_DECLINED",
+                          ].includes(item.type)
+                        ? `/projects/${encodeURIComponent(item.entityId)}`
+                        : `/messages?request=${encodeURIComponent(item.requestId ?? "")}`
                 }
                 onClick={() => {
                   if (!item.readAt) void read(item.id)

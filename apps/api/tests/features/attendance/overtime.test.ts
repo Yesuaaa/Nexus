@@ -33,7 +33,10 @@ test(
         },
       },
     })
-    async function actor(name: string, role: "STAFF" | "ADMIN" = "STAFF") {
+    async function actor(
+      name: string,
+      role: "STAFF" | "ADMIN" | "SUPERADMIN" = "STAFF",
+    ) {
       return prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
           data: { email: `${name}@ot.test`, passwordHash: "test", role },
@@ -245,7 +248,7 @@ test(
     const headInbox = await listWorkflowNotifications(head.user.id)
     assert.ok(headInbox.notifications.some((item) => item.entityId === auto.id))
     assert.ok(
-      (await listWorkflowNotifications(hr.user.id)).notifications.some(
+      !(await listWorkflowNotifications(hr.user.id)).notifications.some(
         (item) => item.entityId === auto.id,
       ),
     )
@@ -281,15 +284,40 @@ test(
       where: { employeeId: automatic.employee.id },
     })
     assert.equal(requests.length, 2)
+    const superadmin = await actor("superadmin", "SUPERADMIN")
+    const pending = requests.find((item) => item.status === "PENDING")!
+    assert.ok(pending)
+    const hidden = await autoManagement.adjustments(hr.user.id, {
+      scope: "team",
+      status: "PENDING",
+    })
+    assert.equal(hidden.total, 0)
+    const visible = await autoManagement.adjustments(superadmin.user.id, {
+      scope: "team",
+      status: "PENDING",
+    })
+    assert.ok(
+      visible.adjustments.some(
+        (item) =>
+          item.id === pending.id &&
+          item.capabilities.approve &&
+          item.capabilities.reject,
+      ),
+    )
+    const override = await autoManagement.reviewAdjustment(
+      superadmin.user.id,
+      pending.id,
+      {
+        decision: "APPROVED",
+        note: "Superadmin directly approves recorded overtime",
+      },
+    )
+    assert.equal(override.adjustment.status, "APPROVED")
+    assert.equal(override.adjustment.verifiedById, null)
     assert.equal(
       requests.reduce((sum, item) => sum + item.overtimeMinutes, 0),
       120,
     )
-    const latest = requests.find((item) => item.id !== auto.id)!
-    await autoManagement.reviewAdjustment(head.user.id, latest.id, {
-      decision: "REJECTED",
-      note: "Excess work was not authorized",
-    })
     now = new Date("2026-11-14T23:00:00+08:00")
     const overnight = await service.act(automatic.user.id, "clock-in", {})
     now = new Date("2026-11-15T02:00:00+08:00")
@@ -300,6 +328,17 @@ test(
       where: { employeeId: automatic.employee.id },
     })
     assert.equal(all.length, 3)
+    const overnightRequest = all.find(
+      (item) => item.sessionId === overnight.workday!.activeSessionId,
+    )!
+    await autoManagement.reviewAdjustment(
+      superadmin.user.id,
+      overnightRequest.id,
+      {
+        decision: "REJECTED",
+        note: "Superadmin rejects pending excess work",
+      },
+    )
     assert.equal(
       all.find((item) => item.sessionId === overnight.workday!.activeSessionId)!
         .overtimeMinutes,
@@ -313,16 +352,31 @@ test(
       (await listWorkflowNotifications(head.user.id)).notifications.length,
       0,
     )
+    const requesterInbox = await listWorkflowNotifications(automatic.user.id)
+    assert.deepEqual(
+      requesterInbox.notifications
+        .map(({ type, entityId, readAt }) => [type, entityId, readAt])
+        .sort(),
+      [
+        ["ATTENDANCE_OVERTIME_APPROVED", auto.id, null],
+        ["ATTENDANCE_OVERTIME_APPROVED", pending.id, null],
+        ["ATTENDANCE_OVERTIME_REJECTED", overnightRequest.id, null],
+        ["ATTENDANCE_OVERTIME_VERIFIED", auto.id, null],
+      ].sort(),
+    )
     assert.equal(
-      (await listWorkflowNotifications(automatic.user.id)).unreadCount,
-      0,
+      requesterInbox.unreadCount,
+      requesterInbox.notifications.length,
     )
     now = new Date("2026-11-15T09:00:00+08:00")
     const short = await service.act(outsider.user.id, "clock-in", {})
     now = new Date("2026-11-15T10:00:00+08:00")
-    await service.act(outsider.user.id, "clock-out", {
+    const closedShort = await service.act(outsider.user.id, "clock-out", {
       sessionId: short.workday!.activeSessionId!,
     })
+    assert.equal(closedShort.workday?.workedMinutes, 60)
+    assert.equal(closedShort.workday?.requiredMinutes, 480)
+    assert.equal(closedShort.workday?.excessMinutes, 0)
     assert.equal(
       await prisma.attendanceAdjustment.count({
         where: { employeeId: outsider.employee.id },

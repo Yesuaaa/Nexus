@@ -38,8 +38,8 @@ export function getWorkspaceModules(account: Account): WorkspaceModule[] {
   if (!canAccessAdministrativeModules(account)) {
     if (canAccessRoute(account, "/services"))
       add("service-operations", "/services")
-    else if (canAccessRoute(account, "/request-inbox"))
-      add("service-operations", "/request-inbox")
+    else if (canAccessRoute(account, "/request-inbox/overview"))
+      add("service-operations", "/request-inbox/overview")
     else if (canAccessRoute(account, "/clients"))
       add("service-operations", "/clients")
 
@@ -51,13 +51,20 @@ export function getWorkspaceModules(account: Account): WorkspaceModule[] {
     if (canAccessRoute(account, "/employees")) add("people-hr", "/employees")
     else if (canAccessRoute(account, "/departments"))
       add("people-hr", "/departments")
+    else if (canAccessRoute(account, "/module/payroll"))
+      add("people-hr", "/module/payroll")
 
     if (canAccessRoute(account, "/attendance/check-ins"))
       add(
         "attendance-monitoring",
-        canAccessRoute(account, "/attendance/dashboard")
+        canAccessRoute(account, "/attendance/time-logs/overview")
           ? "/attendance/overview"
           : "/attendance/check-ins",
+      )
+    else if (canAccessRoute(account, "/my-payroll"))
+      add(
+        moduleRegistry["my-payroll"].workspaceParent as WorkspaceModuleId,
+        "/my-payroll",
       )
     if (canAccessRoute(account, "/accounts")) add("administration", "/accounts")
   }

@@ -1,6 +1,9 @@
 import { expect, test, type Page } from "@playwright/test"
 import type { Account } from "../src/features/auth/model/types"
-import { Permissions } from "../src/features/auth/model/permissions"
+import {
+  canAccessPayroll,
+  Permissions,
+} from "../src/features/auth/model/permissions"
 import type { Department } from "../src/features/departments/api/departments-api"
 import type { Employee } from "../src/features/employees/api/employees-api"
 import type {
@@ -88,6 +91,9 @@ export function accountFor(
       Permissions.SERVICES_MANAGE,
     )
   }
+  if (role === "ADMIN")
+    permissions.push(Permissions.PAYROLL_READ, Permissions.PAYROLL_MANAGE)
+  if (role === "SUPERADMIN") permissions.push(Permissions.PAYROLL_READ)
   if (role === "SUPERADMIN") {
     permissions.push(
       Permissions.MODULES_ACCESS_ALL,
@@ -340,12 +346,28 @@ export async function mockApi(
       })
       return
     }
+    if (pathname === "/api/project-workspace/directory" && method === "GET") {
+      await route.fulfill({
+        json: {
+          rows: [],
+          total: 0,
+          page: 1,
+          pageSize: 10,
+          totalPages: 0,
+          hasWorkspaces: false,
+        },
+      })
+      return
+    }
     if (pathname.startsWith("/api/modules/") && method === "GET") {
       const id = pathname.split("/").at(-1) as keyof typeof moduleRegistry
       const module = Object.hasOwn(moduleRegistry, id)
         ? moduleRegistry[id]
         : undefined
-      if (!currentUser.permissions.includes(Permissions.MODULES_ACCESS_ALL)) {
+      if (
+        !canAccessPayroll(currentUser) &&
+        !currentUser.permissions.includes(Permissions.MODULES_ACCESS_ALL)
+      ) {
         await route.fulfill({
           status: 403,
           json: { error: "Administrative module access is required" },
@@ -493,6 +515,7 @@ export async function mockApi(
           !search ||
           employee.fullName.toLowerCase().includes(search) ||
           employee.employeeId.toLowerCase().includes(search) ||
+          (employee.contactNumber?.toLowerCase().includes(search) ?? false) ||
           (employee.email?.toLowerCase().includes(search) ?? false),
       )
       await route.fulfill({
@@ -570,6 +593,22 @@ export async function mockApi(
           status: 404,
           json: { error: "User not found" },
         })
+      }
+      return
+    }
+
+    const accountUpdateMatch = pathname.match(/^\/api\/users\/([^/]+)$/)
+    if (accountUpdateMatch && method === "PATCH") {
+      const targetId = decodeURIComponent(accountUpdateMatch[1])
+      const data = request.postDataJSON() as Partial<
+        Pick<Account, "fullName" | "email" | "contactNumber" | "role">
+      >
+      const target = users.find((user) => user.id === targetId)
+      if (target) {
+        Object.assign(target, data)
+        await route.fulfill({ json: { user: target } })
+      } else {
+        await route.fulfill({ status: 404, json: { error: "User not found" } })
       }
       return
     }

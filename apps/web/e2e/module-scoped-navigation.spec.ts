@@ -5,6 +5,7 @@ import {
   live,
   restoreSession,
 } from "./regression-support"
+import type { ProjectManagementOverview } from "../src/features/admin-project-management/api/project-management-api"
 
 configureRegressionTest()
 test.skip(live, "Module navigation regressions use isolated API fixtures")
@@ -12,6 +13,252 @@ test.skip(live, "Module navigation regressions use isolated API fixtures")
 function mainMenu(page: Page) {
   return page.getByRole("navigation", { name: "Main menu", exact: true })
 }
+
+const emptyProjectManagementOverview: ProjectManagementOverview = {
+  totals: {
+    totalProjects: 0,
+    planned: 0,
+    inProgress: 0,
+    onHold: 0,
+    completed: 0,
+    cancelled: 0,
+    workspaceGroups: 0,
+    departmentsWithProjects: 0,
+    projectsWithoutDepartment: 0,
+    projectsWithTasks: 0,
+    projectsWithoutTasks: 0,
+    totalTasks: 0,
+    completedTasks: 0,
+    activeProjects: 0,
+    activeProjectsWithoutLead: 0,
+    activeProjectsWithoutTeam: 0,
+    activeAssignments: 0,
+  },
+  statusDistribution: [],
+  departments: [],
+  topStaffAssignments: [],
+  recentlyUpdatedProjects: [],
+}
+
+for (const role of ["SUPERADMIN"] as const) {
+  test(`${role} enters the read-only Project Management directory`, async ({
+    page,
+  }) => {
+    const projectDataRequests: string[] = []
+    const departmentDirectoryRequests: string[] = []
+    page.on("request", (request) => {
+      const pathname = new URL(request.url()).pathname
+      if (
+        pathname.startsWith("/api/project-workspace") ||
+        pathname.startsWith("/api/project-conversations") ||
+        pathname.startsWith("/api/projects")
+      )
+        projectDataRequests.push(pathname)
+    })
+    await restoreSession(page, role)
+    await page.route("**/api/project-management/overview", (route) =>
+      route.fulfill({ json: emptyProjectManagementOverview }),
+    )
+    await page.route(
+      "**/api/departments/project-management-directory",
+      (route) => {
+        departmentDirectoryRequests.push(
+          new URL(route.request().url()).pathname,
+        )
+        return route.fulfill({ json: { departments: [] } })
+      },
+    )
+    await page.goto("/module")
+    await page
+      .getByRole("link", {
+        name: "Open Project Management workspace",
+        exact: true,
+      })
+      .click()
+    await expect(page).toHaveURL("/project-management/overview")
+    await mainMenu(page)
+      .getByRole("button", { name: "Project Workspace", exact: true })
+      .click()
+    await mainMenu(page)
+      .getByRole("link", {
+        name: "Project Workspace Management",
+        exact: true,
+      })
+      .click()
+    await expect(page).toHaveURL(/\/project-management$/)
+
+    const menu = mainMenu(page)
+    await expect(
+      menu.getByRole("link", {
+        name: "Project Workspace Management",
+        exact: true,
+      }),
+    ).toHaveAttribute("aria-current", "page")
+    await expect(
+      menu.getByRole("link", {
+        name: "Project Workspace overview",
+        exact: true,
+      }),
+    ).toBeVisible()
+    await expect(
+      menu.getByRole("link", { name: "Project Messages", exact: true }),
+    ).toHaveCount(0)
+    await expect(
+      menu.getByRole("link", { name: "Calendar", exact: true }),
+    ).toBeVisible()
+    await expect(
+      menu.getByRole("link", { name: "Internal Messages", exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole("heading", {
+        name: "Project Management",
+        exact: true,
+      }),
+    ).toBeVisible()
+    await expect(page.getByText("No departments created yet.")).toBeVisible()
+    expect(departmentDirectoryRequests).toContain(
+      "/api/departments/project-management-directory",
+    )
+    expect(projectDataRequests).toEqual([])
+
+    await menu
+      .getByRole("link", {
+        name: "Project Workspace overview",
+        exact: true,
+      })
+      .click()
+    await expect(page).toHaveURL(/\/project-management\/overview$/)
+    await expect(
+      page.getByRole("heading", {
+        name: "Project Workspace Overview",
+        exact: true,
+      }),
+    ).toBeVisible()
+    await expect(
+      page
+        .getByRole("navigation", { name: "Breadcrumb" })
+        .getByText("Overview"),
+    ).toBeVisible()
+    await expect(
+      page.getByText("Project metrics are not included in Phase 1."),
+    ).toBeVisible()
+
+    await menu
+      .getByRole("link", { name: "Switch Workspace", exact: true })
+      .click()
+    await expect(page).toHaveURL(/\/module$/)
+    expect(projectDataRequests).toEqual([])
+  })
+}
+
+const topbarActors = [
+  {
+    label: "Superadmin Administration",
+    role: "SUPERADMIN",
+    path: "/accounts",
+  },
+  {
+    label: "Superadmin Project Management",
+    role: "SUPERADMIN",
+    path: "/project-management",
+  },
+  { label: "Staff", role: "STAFF", path: "/project-workspace" },
+  {
+    label: "Department Head",
+    role: "STAFF",
+    path: "/project-workspace",
+    account: { headOf: { id: "design", name: "Design" } },
+  },
+  { label: "Client", role: "USER", path: "/dashboard" },
+] as const
+
+for (const actor of topbarActors) {
+  for (const viewport of [
+    { label: "desktop", width: 1440, expectedHeight: 60 },
+    { label: "tablet", width: 900, expectedHeight: 60 },
+    { label: "mobile", width: 390, expectedHeight: 58 },
+  ]) {
+    test(`${actor.label} topbar stays compact and aligned on ${viewport.label}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: viewport.width, height: 844 })
+      await restoreSession(page, actor.role, {
+        account: "account" in actor ? actor.account : undefined,
+      })
+      await page.goto(actor.path)
+
+      const topbar = page.locator("[data-portal-topbar]")
+      const topbarBox = await topbar.boundingBox()
+      expect(topbarBox).not.toBeNull()
+      if (!topbarBox) throw new Error("Topbar is not visible")
+      expect(topbarBox.height).toBe(viewport.expectedHeight)
+
+      const childCenterOffsets = await topbar.evaluate((element) => {
+        const bounds = element.getBoundingClientRect()
+        return Array.from(element.children)
+          .filter((child) => child.getBoundingClientRect().height > 0)
+          .map((child) => {
+            const childBounds = child.getBoundingClientRect()
+            return Math.abs(
+              childBounds.top +
+                childBounds.height / 2 -
+                (bounds.top + bounds.height / 2),
+            )
+          })
+      })
+      expect(childCenterOffsets.every((offset) => offset < 1)).toBe(true)
+
+      if (viewport.width >= 768) {
+        const sidebarBox = await page.locator("#app-sidebar").boundingBox()
+        expect(sidebarBox).not.toBeNull()
+        if (!sidebarBox) throw new Error("Sidebar is not visible")
+        expect(topbarBox.x - sidebarBox.x - sidebarBox.width).toBeCloseTo(8, 1)
+        expect(topbarBox.y + topbarBox.height).toBeCloseTo(
+          sidebarBox.y + viewport.expectedHeight,
+          1,
+        )
+      } else {
+        await expect(
+          page.getByRole("button", { name: "Open navigation menu" }),
+        ).toBeVisible()
+      }
+    })
+  }
+}
+
+test("Staff cannot access the Admin Project Management shell routes", async ({
+  page,
+}) => {
+  await restoreSession(page, "STAFF")
+  await page.goto("/project-management")
+  await expect(page).toHaveURL(/\/module$/)
+  await expect(
+    page.getByRole("link", {
+      name: "Open Project Management workspace",
+      exact: true,
+    }),
+  ).toHaveAttribute("href", "/project-workspace")
+})
+
+test("Admin cannot access the Superadmin Project Management routes", async ({
+  page,
+}) => {
+  await restoreSession(page, "ADMIN")
+  for (const path of [
+    "/project-management",
+    "/project-management/overview",
+    "/project-management/departments/department-1/projects",
+  ]) {
+    await page.goto(path)
+    await expect(page).toHaveURL(/\/module$/)
+  }
+  await expect(
+    page.getByRole("link", {
+      name: "Open Project Management workspace",
+      exact: true,
+    }),
+  ).toHaveCount(0)
+})
 
 test("Client moves directly between services and projects without switching workspaces", async ({
   page,
@@ -115,22 +362,16 @@ for (const workspace of [
 
     await page.getByRole("link", { name: /^Messages/ }).click()
     await expect(page).toHaveURL(/\/messages\?mode=internal$/)
-    await expect(menu.getByText(workspace.title, { exact: true })).toBeVisible()
-    await expect(
-      menu.getByRole("link", { name: workspace.link, exact: true }),
-    ).toBeVisible()
-    await expect(
-      menu.getByRole("link", { name: workspace.hidden, exact: true }),
-    ).toHaveCount(0)
+    await expect(page.locator("#app-sidebar")).toHaveCount(0)
 
     await page.goto("/messages?mode=internal")
     await page.reload()
-    await expect(menu.getByText(workspace.title, { exact: true })).toBeVisible()
+    await expect(page.locator("#app-sidebar")).toHaveCount(0)
     await expect(
       page.getByRole("button", { name: "Notifications", exact: true }),
     ).toBeVisible()
 
-    await menu.getByRole("link", { name: "Calendar", exact: true }).click()
+    await page.goto("/calendar")
     await expect(page).toHaveURL(/\/calendar$/)
     await expect(
       menu.getByRole("link", { name: workspace.link, exact: true }),
@@ -162,15 +403,7 @@ for (const workspace of [
       .toBeNull()
 
     await page.goto("/messages?mode=internal")
-    await expect(
-      menu.getByRole("link", { name: "Switch Workspace", exact: true }),
-    ).toBeVisible()
-    await expect(menu.getByText(workspace.title, { exact: true })).toHaveCount(
-      0,
-    )
-    await expect(
-      menu.getByRole("link", { name: workspace.link, exact: true }),
-    ).toHaveCount(0)
+    await expect(page.locator("#app-sidebar")).toHaveCount(0)
   })
 }
 
@@ -182,8 +415,7 @@ test("management access loss clears People & HR context", async ({ page }) => {
   )
   await page.getByRole("link", { name: /^Messages/ }).click()
   await expect(page).toHaveURL(/\/messages\?mode=internal$/)
-  const menu = mainMenu(page)
-  await expect(menu.getByText("People & HR", { exact: true })).toBeVisible()
+  await expect(page.locator("#app-sidebar")).toHaveCount(0)
 
   await page.route("**/api/auth/me", (route) =>
     route.fulfill({ json: { user: accountFor("ADMIN", { permissions: [] }) } }),
@@ -191,16 +423,7 @@ test("management access loss clears People & HR context", async ({ page }) => {
   await page.evaluate(() =>
     window.dispatchEvent(new Event("nexus:account-updated")),
   )
-  await expect(menu.getByText("People & HR", { exact: true })).toHaveCount(0)
-  await expect(
-    menu.getByRole("button", { name: "Attendance", exact: true }),
-  ).toHaveCount(0)
-  await expect(
-    menu.getByRole("link", { name: "Employee Management" }),
-  ).toHaveCount(0)
-  await expect(
-    menu.getByRole("link", { name: "Switch Workspace", exact: true }),
-  ).toBeVisible()
+  await expect(page.locator("#app-sidebar")).toHaveCount(0)
   await page.goto("/employees")
   await expect(page).toHaveURL(/\/module$/)
   await expect(page.locator("#app-sidebar")).toHaveCount(0)
@@ -216,14 +439,7 @@ test("remembered module context is isolated by account", async ({ page }) => {
     sessionStorage.setItem("nexus.workspace.actor", "people-hr"),
   )
   await page.goto("/messages?mode=internal")
-  const menu = mainMenu(page)
-  await expect(
-    menu.getByRole("link", { name: "Switch Workspace", exact: true }),
-  ).toBeVisible()
-  await expect(menu.getByText("People & HR", { exact: true })).toHaveCount(0)
-  await expect(
-    menu.getByRole("link", { name: "Employee Management" }),
-  ).toHaveCount(0)
+  await expect(page.locator("#app-sidebar")).toHaveCount(0)
 })
 
 test("authorized deep links replace the previous module and browser history restores it", async ({
@@ -295,6 +511,16 @@ test("department head keeps request and workload navigation in their approved mo
   await restoreSession(page, "STAFF", {
     account: { headOf: { id: "design", name: "Design" } },
   })
+  await page.route("**/api/request-inbox/overview", (route) =>
+    route.fulfill({
+      json: {
+        department: { id: "design", name: "Design" },
+        total: 0,
+        statusCounts: {},
+        recentRequests: [],
+      },
+    }),
+  )
   await page.route("**/api/request-inbox?**", (route) =>
     route.fulfill({
       json: {
@@ -315,9 +541,12 @@ test("department head keeps request and workload navigation in their approved mo
       exact: true,
     })
     .click()
-  await expect(page).toHaveURL(/\/request-inbox$/)
+  await expect(page).toHaveURL(/\/request-inbox\/overview$/)
   await expect(
-    menu.getByRole("link", { name: "Request Inbox", exact: true }),
+    menu.getByRole("button", { name: "Request", exact: true }),
+  ).toHaveAttribute("aria-expanded", "true")
+  await expect(
+    menu.getByRole("link", { name: "Request overview", exact: true }),
   ).toHaveAttribute("aria-current", "page")
   await expect(menu.getByRole("link", { name: "Staff Workload" })).toHaveCount(
     0,
@@ -337,7 +566,13 @@ test("department head keeps request and workload navigation in their approved mo
     .click()
   await expect(page).toHaveURL(/\/project-workspace$/)
   await expect(
-    menu.getByRole("link", { name: "Project Workspace", exact: true }),
+    menu.getByRole("button", { name: "Project Workspace", exact: true }),
+  ).toHaveAttribute("aria-expanded", "true")
+  await expect(
+    menu.getByRole("link", {
+      name: "Project Workspace Management",
+      exact: true,
+    }),
   ).toHaveAttribute("aria-current", "page")
   await expect(
     menu.getByRole("link", { name: "Staff Workload", exact: true }),
@@ -386,7 +621,7 @@ test("shared and compatibility deep links derive the correct navigation scope", 
           description: null,
           status: "IN_PROGRESS",
           startDate: null,
-          workspaceId: "workspace-1",
+          workspaceId: "group:workspace-1",
           serviceName: "Website Development",
           referenceNumber: "SR-WEB-001",
         },

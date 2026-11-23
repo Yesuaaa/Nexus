@@ -60,19 +60,20 @@ export function LandingPage() {
         <section className={styles.hero} aria-labelledby="hero-heading">
           <div className={styles.heroCopy} data-reveal>
             <h1 id="hero-heading">
-              Your next idea.
+              Creative ideas.
               <br />
-              <span>Made possible.</span>
+              Connected growth.
             </h1>
             <p>
-              We bring strategy, design, and technology together to move your
-              business forward. Explore what fits, share your vision, and start
-              with a conversation.
+              Bring your brand to life through creative content, digital
+              marketing, and web experiences designed around your goals.
             </p>
             <div className={styles.heroActions}>
               <Link href="/explore/services" className={styles.buttonPrimary}>
-                Let’s talk
-                <ArrowUpRight size={19} aria-hidden="true" />
+                Make an Inquiry
+              </Link>
+              <Link href="/login" className={styles.buttonSecondary}>
+                Sign in
               </Link>
             </div>
           </div>
@@ -140,6 +141,26 @@ export function LandingPage() {
               />
             </div>
           </div>
+          <ol className={styles.heroSteps} aria-label="How we work">
+            <li>
+              <strong>1. Discuss</strong>
+              <span>
+                Tell us about your goals, ideas, and the support you need.
+              </span>
+            </li>
+            <li>
+              <strong>2. Quote</strong>
+              <span>
+                Receive a clear scope, timeline, and tailored proposal.
+              </span>
+            </li>
+            <li>
+              <strong>3. Approve</strong>
+              <span>
+                Confirm the plan and let&apos;s bring the work to life.
+              </span>
+            </li>
+          </ol>
         </section>
 
         <ServiceMarquee />

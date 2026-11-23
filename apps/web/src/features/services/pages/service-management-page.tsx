@@ -251,6 +251,7 @@ export function ServiceManagementPage() {
           services={services}
           departments={departments}
           loading={loading}
+          initialLoading={loading && !catalog.data}
           error={error}
           canManage={canManage}
           onView={setDetailsTarget}

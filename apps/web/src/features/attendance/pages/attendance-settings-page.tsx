@@ -12,14 +12,16 @@ import { Button } from "@/components/ui/button"
 import { SearchField } from "@/components/ui/search-field"
 import { SearchEmptyState } from "@/components/ui/search-empty-state"
 import { Pill } from "@/components/ui/pill"
+import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import {
   ResponsiveDataTable,
+  ResponsiveDataTableBody,
   ResponsiveDataTableColumnHeader,
   ResponsiveDataTableHeader,
 } from "@/components/ui/responsive-data-table"
 import { TablePaginationFooter } from "@/components/ui/table-pagination-footer"
-import { useLocalTable } from "@/components/ui/use-local-table"
+import { usePaginatedList } from "@/components/ui/use-paginated-list"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import { AttendanceShell } from "../components/attendance-shell"
 import { ResourceStatus } from "../components/attendance-shared"
@@ -41,16 +43,18 @@ import {
 } from "lucide-react"
 import {
   attendancePolicies,
+  attendancePolicyPage,
   archiveAttendancePolicy,
   deleteAttendancePolicy,
   type AttendancePolicy,
+  type AttendancePolicyAssignment,
 } from "../api/attendance-api"
 
 const policyGrid =
   "grid grid-cols-[minmax(180px,1.4fr)_minmax(140px,1fr)_minmax(110px,.8fr)_minmax(120px,.8fr)_56px] items-center gap-3.5 @max-[820px]:grid-cols-[minmax(0,1fr)_auto]"
 
 function policyRowClass(
-  _policy: AttendancePolicy,
+  _policy: AttendancePolicy | null,
   _index: number,
   isLast: boolean,
 ) {
@@ -80,9 +84,6 @@ const policyActionItems: RowActionMenuItem<PolicyAction>[] = [
 ]
 
 export function AttendanceSettingsPage() {
-  const policies = useAsyncResource(attendancePolicies, [], {
-    fallbackError: "Couldn't load attendance policies.",
-  })
   const [search, setSearch] = useState("")
   const [archivedView, setArchivedView] = useState(false)
   const [confirmation, setConfirmation] = useState<{
@@ -94,22 +95,43 @@ export function AttendanceSettingsPage() {
   const [panel, setPanel] = useState<{
     mode: "create" | "assign"
     template?: AttendancePolicy
+    replacement?: AttendancePolicyAssignment
+    onBack?: () => void
   } | null>(null)
-  const [detailsPolicy, setDetailsPolicy] = useState<AttendancePolicy | null>(
-    null,
-  )
+  const [details, setDetails] = useState<{
+    policy: AttendancePolicy
+    assignmentPage?: number
+  } | null>(null)
   const query = search.trim().toLowerCase()
-  const rows = (policies.data?.policies ?? []).filter(
-    (policy) =>
-      Boolean(policy.archivedAt) === archivedView &&
-      `${policy.name} ${policy.timeZone}`.toLowerCase().includes(query),
-  )
-  const table = useLocalTable(rows, {
-    view: [query, archivedView],
-    loading: policies.loading,
+  const policies = usePaginatedList({
+    params: { search: query, archivedView },
+    load: ({ page, signal }) =>
+      attendancePolicyPage(
+        page,
+        signal,
+        archivedView ? "archived" : "active",
+        query,
+        10,
+      ),
+    rows: (result) => result.policies,
+    matches: (policy, term) =>
+      `${policy.name} ${policy.timeZone}`
+        .toLowerCase()
+        .includes(term.toLowerCase()),
+    initial: null,
+    fallbackError: "Couldn't load attendance policies.",
   })
+  const choices = useAsyncResource(
+    (signal) => attendancePolicies(signal, "active"),
+    [panel?.mode],
+    {
+      enabled: panel?.mode === "assign",
+      fallbackError: "Couldn't load policies for assignment.",
+    },
+  )
   function switchView(nextArchivedView: boolean) {
     if (nextArchivedView === archivedView) return
+    policies.setPage(1)
     setArchivedView(nextArchivedView)
     setSearch("")
   }
@@ -161,7 +183,11 @@ export function AttendanceSettingsPage() {
           label="Search attendance policies"
           placeholder="Search policies or timezone…"
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          maxLength={100}
+          onChange={(event) => {
+            setSearch(event.target.value)
+            policies.setPage(1)
+          }}
         />
         <ManagementViewToggle
           active={archivedView}
@@ -180,13 +206,13 @@ export function AttendanceSettingsPage() {
         attendance history.
       </p>
       <ResourceStatus
-        loading={policies.loading && !policies.data}
+        loading={false}
         error={policies.error}
         retry={policies.retry}
       />
       <ResponsiveDataTable
         label="Attendance policies"
-        aria-busy={policies.loading}
+        aria-busy={policies.loading || policies.searchPending}
       >
         <ResponsiveDataTableHeader
           className="@max-[820px]:sr-only"
@@ -208,138 +234,169 @@ export function AttendanceSettingsPage() {
             Actions
           </ResponsiveDataTableColumnHeader>
         </ResponsiveDataTableHeader>
-        <AnimatedSlotGridBody
-          items={table.visible}
-          viewKey={table.viewKey}
-          quickKey={search}
-          animateRows
-          getKey={(policy) => policy.id}
-          onRowsSettled={table.onRowsSettled}
-          rowClassName={policyRowClass}
-          ariaBusy={policies.loading && Boolean(policies.data)}
-          className="relative min-w-0 overflow-x-clip"
-          emptyContent={
-            policies.loading ? (
-              "Loading policies…"
-            ) : query ? (
-              <SearchEmptyState query={search} />
-            ) : archivedView ? (
-              "No archived policies."
-            ) : (
-              "No attendance policies. Create a policy and assign it to an employee to enable clock-in."
-            )
-          }
-          renderRow={(policy) => (
-            <>
-              <div
-                role="cell"
-                className="min-w-0 truncate font-medium @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-1"
-              >
-                {policy.name}
-              </div>
-              <div
-                role="cell"
-                className="min-w-0 break-words text-[#738096] @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-2"
-              >
-                <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
-                  Timezone
-                </span>
-                {policy.timeZone}
-              </div>
-              <div
-                role="cell"
-                className="@max-[820px]:col-start-1 @max-[820px]:row-start-3"
-              >
-                <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
-                  Required hours
-                </span>
-                {policy.days.reduce(
-                  (sum, day) => sum + day.requiredMinutes,
-                  0,
-                ) / 60}{" "}
-                hrs/week
-              </div>
-              <div
-                role="cell"
-                className="@max-[820px]:col-start-2 @max-[820px]:row-start-3 @max-[820px]:justify-self-end"
-              >
-                <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
-                  Assignments
-                </span>
-                <Pill tone="neutral">
-                  {policy._count?.assignments ?? 0} assignments
-                </Pill>
-              </div>
-              <div
-                role="cell"
-                className="flex justify-start @max-[820px]:col-start-2 @max-[820px]:row-start-1 @max-[820px]:justify-self-end"
-              >
-                <RowActionsMenu
-                  triggerId={`attendance-policy-actions-${policy.id}`}
-                  triggerLabel={`More actions for ${policy.name}`}
-                  menuLabel={`Actions for ${policy.name}`}
-                  items={
-                    policy.archivedAt
-                      ? [
-                          policyActionItems[0],
-                          {
-                            action: "restore",
-                            label: (
-                              <RowActionLabel icon={ArchiveRestore}>
-                                Restore
-                              </RowActionLabel>
-                            ),
-                          },
-                          {
-                            action: "delete",
-                            label: (
-                              <RowActionLabel icon={Trash2}>
-                                Delete permanently
-                              </RowActionLabel>
-                            ),
-                            separatorBefore: true,
-                            className: "text-destructive",
-                          },
-                        ]
-                      : [
-                          ...policyActionItems,
-                          {
-                            action: "archive",
-                            label: (
-                              <RowActionLabel icon={Archive}>
-                                Archive
-                              </RowActionLabel>
-                            ),
-                            separatorBefore: true,
-                          },
-                        ]
-                  }
-                  onAction={(action) => {
-                    setError("")
-                    if (action === "view") setDetailsPolicy(policy)
-                    else if (action === "assign")
-                      setPanel({ mode: "assign", template: policy })
-                    else if (action === "edit")
-                      setPanel({ mode: "create", template: policy })
-                    else setConfirmation({ policy, action })
-                  }}
-                />
-              </div>
-            </>
-          )}
-        />
+        {!policies.error &&
+        ((policies.loading && !policies.data) || policies.searchPending) ? (
+          <ResponsiveDataTableBody className="relative min-w-0 overflow-x-clip">
+            <DataTableSkeletonRows
+              label="attendance policies"
+              rowClassName={policyRowClass(null, 0, false)}
+              cellClassNames={[
+                "min-w-0 truncate font-medium @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-1",
+                "min-w-0 break-words text-[#738096] @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-2",
+                "@max-[820px]:col-start-1 @max-[820px]:row-start-3",
+                "@max-[820px]:col-start-2 @max-[820px]:row-start-3 @max-[820px]:justify-self-end",
+                "flex justify-start @max-[820px]:col-start-2 @max-[820px]:row-start-1 @max-[820px]:justify-self-end",
+              ]}
+              cellSkeletonClassNames={[
+                "h-3 w-3/4",
+                "h-3 w-2/3",
+                "h-3 w-1/2",
+                "h-5 w-20 rounded-full",
+                "size-8 rounded-[7px]",
+              ]}
+              rows={5}
+            />
+          </ResponsiveDataTableBody>
+        ) : (
+          <AnimatedSlotGridBody
+            items={policies.rows}
+            viewKey={policies.tableViewKey}
+            quickKey={search}
+            animateRows={false}
+            getKey={(policy) => policy.id}
+            onRowsSettled={policies.onRowsSettled}
+            rowClassName={policyRowClass}
+            ariaBusy={policies.loading && Boolean(policies.data)}
+            className="relative min-w-0 overflow-x-clip"
+            emptyContent={
+              query ? (
+                <SearchEmptyState query={search} />
+              ) : archivedView ? (
+                "No archived policies."
+              ) : (
+                "No attendance policies. Create a policy and assign it to an employee to enable clock-in."
+              )
+            }
+            renderRow={(policy) => (
+              <>
+                <div
+                  role="cell"
+                  className="min-w-0 truncate font-medium @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-1"
+                >
+                  {policy.name}
+                  <div className="text-xs font-normal text-[#738096]">
+                    {policy.scheduleMode === "FIXED"
+                      ? "Fixed schedule"
+                      : "Flexible"}
+                  </div>
+                </div>
+                <div
+                  role="cell"
+                  className="min-w-0 break-words text-[#738096] @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-2"
+                >
+                  <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
+                    Timezone
+                  </span>
+                  {policy.timeZone}
+                </div>
+                <div
+                  role="cell"
+                  className="@max-[820px]:col-start-1 @max-[820px]:row-start-3"
+                >
+                  <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
+                    Required hours
+                  </span>
+                  {policy.days.reduce(
+                    (sum, day) => sum + day.requiredMinutes,
+                    0,
+                  ) / 60}{" "}
+                  hrs/week
+                </div>
+                <div
+                  role="cell"
+                  className="@max-[820px]:col-start-2 @max-[820px]:row-start-3 @max-[820px]:justify-self-end"
+                >
+                  <span className="mr-1.5 hidden text-[#738096] @max-[820px]:inline">
+                    Assignments
+                  </span>
+                  <Pill tone="neutral">
+                    {policy._count?.assignments ?? 0} assignments
+                  </Pill>
+                </div>
+                <div
+                  role="cell"
+                  className="flex justify-start @max-[820px]:col-start-2 @max-[820px]:row-start-1 @max-[820px]:justify-self-end"
+                >
+                  <RowActionsMenu
+                    triggerId={`attendance-policy-actions-${policy.id}`}
+                    triggerLabel={`More actions for ${policy.name}`}
+                    menuLabel={`Actions for ${policy.name}`}
+                    items={
+                      policy.archivedAt
+                        ? [
+                            policyActionItems[0],
+                            {
+                              action: "restore",
+                              label: (
+                                <RowActionLabel icon={ArchiveRestore}>
+                                  Restore
+                                </RowActionLabel>
+                              ),
+                            },
+                            {
+                              action: "delete",
+                              label: (
+                                <RowActionLabel icon={Trash2}>
+                                  Delete permanently
+                                </RowActionLabel>
+                              ),
+                              separatorBefore: true,
+                              className: "text-destructive",
+                            },
+                          ]
+                        : [
+                            ...policyActionItems,
+                            {
+                              action: "archive",
+                              label: (
+                                <RowActionLabel icon={Archive}>
+                                  Archive
+                                </RowActionLabel>
+                              ),
+                              separatorBefore: true,
+                            },
+                          ]
+                    }
+                    onAction={(action) => {
+                      setError("")
+                      if (action === "view") setDetails({ policy })
+                      else if (action === "assign")
+                        setPanel({ mode: "assign", template: policy })
+                      else if (action === "edit")
+                        setPanel({ mode: "create", template: policy })
+                      else setConfirmation({ policy, action })
+                    }}
+                  />
+                </div>
+              </>
+            )}
+          />
+        )}
       </ResponsiveDataTable>
-      <TablePaginationFooter
-        {...table.footer}
-        label="Attendance policy pages"
-        onPageChange={table.setPage}
-      />
+      {policies.footer && !policies.searchPending && (
+        <TablePaginationFooter
+          {...policies.footer}
+          label="Attendance policy pages"
+          onPageChange={policies.setPage}
+        />
+      )}
       {panel && (
         <AttendancePolicyPanel
           {...panel}
-          policies={(policies.data?.policies ?? []).filter(
+          policies={(choices.data?.policies ?? []).filter(
             (policy) => !policy.archivedAt,
           )}
+          policyChoices={choices}
           onClose={() => setPanel(null)}
           onSaved={() => {
             setPanel(null)
@@ -347,10 +404,19 @@ export function AttendanceSettingsPage() {
           }}
         />
       )}
-      {detailsPolicy && (
+      {details && (
         <AttendancePolicyDetailsPanel
-          policy={detailsPolicy}
-          onClose={() => setDetailsPolicy(null)}
+          {...details}
+          onClose={() => setDetails(null)}
+          onReplace={(assignment, page) =>
+            setPanel({
+              mode: "assign",
+              template: details.policy,
+              replacement: assignment,
+              onBack: () =>
+                setDetails({ policy: details.policy, assignmentPage: page }),
+            })
+          }
         />
       )}
       {confirmation && (

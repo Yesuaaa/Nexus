@@ -2,7 +2,13 @@
 
 Developed: 2026-10-30
 
-The **Request Inbox** (`/request-inbox`) lets current department heads review and accept clients' booked services. It follows the existing directory layout, with search, ten requests per page, oldest-first ordering, and a responsive booking details panel. The default view shows bookings awaiting acceptance; the **Under review** view shows accepted bookings.
+## Request lifecycle (2026-11-15)
+
+Service Requests and Request Inbox use five lifecycle statuses: **Pending** (`SUBMITTED`, waiting for a Department Head to accept), **Under Review** (`UNDER_REVIEW`, accepted), **Activated** (`ACTIVATED`, assigned to staff/team with an activated project workspace), **Cancelled** (`CANCELLED`), and **Concluded** (`CONCLUDED`, accomplished). Consultation and quotation steps remain workflow metadata, not request status choices. Acceptance, project activation, workspace completion, and workspace cancellation update the shared request status transactionally. Holds retain Activated.
+
+Deploy migrations `20261115040000_request_lifecycle_statuses` and `20261115040100_normalize_request_lifecycle` before running the updated API. Existing records are reconciled from project status and acceptance; legacy Closed requests without completed projects become Cancelled. Old enum values remain for compatibility but are excluded from UI filters. These migrations do not alter conversation, file, or role permissions.
+
+The **Request** navigation group gives current department heads a department-only **Overview** (`/request-inbox/overview`) and **Inbox** (`/request-inbox`). The overview shows counts for awaiting action, under-review, active, and total visible requests plus recent scoped requests; it links to the Inbox for action. The Inbox lets heads review and accept clients' booked services. It follows the existing directory layout, with search, ten requests per page, oldest-first ordering, and a responsive booking details panel. The default view shows all visible statuses; the **Under review** view shows accepted bookings.
 
 ## Access and routing
 
@@ -15,6 +21,7 @@ Existing temporary head handoffs use the current `Department.headId`, so the out
 ## API and acceptance
 
 - `GET /api/request-inbox` supports `search`, `page`, and `view=pending|under-review`. Search matches service, package, reference, client name, or email. The response includes the department, requests, scoped total, page, and page size. Repeated or malformed supported filters return `400`.
+- `GET /api/request-inbox/overview` returns the same department-scoped total, status counts, and five most-recent visible requests. It does not expose organization-wide records.
 - `GET /api/request-inbox/:id` returns submitted booking requirements and the client's name, email, and contact number. Unknown and out-of-department references both return `404`.
 - `POST /api/request-inbox/:id/accept` accepts no editable booking fields. It conditionally moves `SUBMITTED` to `UNDER_REVIEW` and records acceptance in a transaction. For historical `UNDER_REVIEW` requests without an accepting department, **Start conversation** explicitly claims the conversation. The update checks department routing and head assignment again. Duplicate acceptance, competing acceptance, and other existing statuses return `409`; an out-of-department reference returns `404`.
 
@@ -32,4 +39,4 @@ The original inbox migration adds `UNDER_REVIEW` using `IF NOT EXISTS`. Migratio
 
 ## Verification
 
-PGlite API tests cover role and current-head checks, department isolation, safe fields, head handoffs, deactivated accounts, search, stable pagination, simultaneous and duplicate acceptance, terminal statuses, and client-visible updates. Migration tests verify both branches' combined history preserves records and defaults. Mocked browser tests cover desktop and phone review/acceptance, filters, pagination, failure retries, stale booking conflicts, and unauthorized navigation. Client booking browser tests also verify the shared details panel still works.
+PGlite API tests cover role and current-head checks, department isolation, scoped overview figures, safe fields, head handoffs, deactivated accounts, search, stable pagination, simultaneous and duplicate acceptance, terminal statuses, and client-visible updates. Migration tests verify both branches' combined history preserves records and defaults. Mocked browser tests cover the department overview plus desktop and phone review/acceptance, filters, pagination, failure retries, stale booking conflicts, and unauthorized navigation. Client booking browser tests also verify the shared details panel still works.

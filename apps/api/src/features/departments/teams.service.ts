@@ -52,6 +52,7 @@ export const teamsService = {
 
     try {
       const team = await prisma.$transaction(async (tx) => {
+        await lockRows(tx, "Department", departmentId, "share")
         const states = new Map<string, MemberState>()
         if (leadId) {
           await assertLeadershipCandidate(tx, leadId, {
@@ -114,7 +115,7 @@ export const teamsService = {
             where: { id: leadId },
             data: { departmentId, teamId: created.id },
           })
-          await syncEmployeeForUser(tx, leadId)
+          await syncEmployeeForUser(tx, leadId, operation)
         }
 
         if (memberIds) {
@@ -193,6 +194,7 @@ export const teamsService = {
 
     try {
       const updated = await prisma.$transaction(async (tx) => {
+        await lockRows(tx, "Department", departmentId, "share")
         const states = new Map<string, MemberState>()
         if (leadId) {
           await assertLeadershipCandidate(tx, leadId, {
@@ -223,7 +225,7 @@ export const teamsService = {
             states,
             await readUserMemberState(tx, beforeTeam.leadId, false),
           )
-          await syncEmployeeForUser(tx, beforeTeam.leadId)
+          await syncEmployeeForUser(tx, beforeTeam.leadId, operation)
         }
 
         if (leadId) {
@@ -235,7 +237,7 @@ export const teamsService = {
             where: { id: leadId },
             data: { departmentId, teamId },
           })
-          await syncEmployeeForUser(tx, leadId)
+          await syncEmployeeForUser(tx, leadId, operation)
         }
 
         for (const before of states.values())
@@ -305,7 +307,7 @@ export const teamsService = {
         data: { teamId: null },
       })
       for (const userId of before.syncUserIds) {
-        await syncEmployeeForUser(tx, userId)
+        await syncEmployeeForUser(tx, userId, operation)
       }
       await tx.team.delete({ where: { id: teamId } })
       for (const state of before.states.values())

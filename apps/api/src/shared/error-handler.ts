@@ -1,4 +1,10 @@
 import path from "node:path"
+import { recordProjectIncident } from "../features/project-management-logs/incidents.js"
+import { recordServiceIncident } from "../features/service-operation-logs/log-incidents.js"
+import {
+  logContext,
+  serviceLogEndpoint,
+} from "../features/service-operation-logs/log-context.js"
 import type {
   Request,
   Response,
@@ -6,6 +12,7 @@ import type {
   ErrorRequestHandler,
 } from "express"
 import { isTemporaryDatabaseError } from "../lib/database-read.js"
+import { isPrismaCode } from "../lib/errors.js"
 import { HttpError, prismaHttpError } from "./http-error.js"
 
 /**
@@ -154,6 +161,20 @@ type ResolvedError = {
   retryAfter?: string
 }
 
+function isPoolCheckoutTimeout(error: unknown): boolean {
+  // pg-pool emits this queue deadline as a plain, untyped Error.
+  return (
+    error instanceof Error &&
+    Object.getPrototypeOf(error) === Error.prototype &&
+    !("code" in error) &&
+    !("cause" in error) &&
+    error.message === "timeout exceeded when trying to connect" &&
+    /[\\/]pg-pool[\\/]index\.js:\d+:\d+\)?$/.test(
+      error.stack?.split("\n", 2)[1]?.trim() ?? "",
+    )
+  )
+}
+
 function resolveError(error: unknown): ResolvedError {
   if (error instanceof HttpError) {
     return {
@@ -197,7 +218,18 @@ function resolveError(error: unknown): ResolvedError {
     }
   }
 
-  if (isTemporaryDatabaseError(error)) {
+  // Keep the two deadline mappings HTTP-only. The shared classifier also controls read replay.
+  const transactionStartDeadline =
+    error instanceof Error &&
+    isPrismaCode(error, "P2028") &&
+    /^(?:Transaction API error: )?Unable to start a transaction in the given time\.?$/.test(
+      error.message,
+    )
+  if (
+    transactionStartDeadline ||
+    isPoolCheckoutTimeout(error) ||
+    isTemporaryDatabaseError(error)
+  ) {
     return {
       status: 503,
       message:
@@ -246,7 +278,17 @@ export const handleError: ErrorRequestHandler = (
 
   const { status, message, details, retryAfter } = resolveError(error)
   if (status >= 500) {
-    console.error("API request failed:", request.method, request.path, error)
+    void recordServiceIncident(request, status, error)
+    void recordProjectIncident(request, status, error)
+    console.error(
+      "API request failed",
+      {
+        correlationId: logContext.getStore()?.correlationId ?? "unavailable",
+        endpoint: serviceLogEndpoint(request) ?? "unavailable",
+        status,
+      },
+      error,
+    )
   }
 
   const source =

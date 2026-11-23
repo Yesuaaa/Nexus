@@ -1,0 +1,292 @@
+PW-001 apps/web/e2e/admin.spec.ts:16 Admin access and permissions > /accounts denies access when the server withholds its read permission | routes=/accounts | mode=MOCKED_APPLICATION_API | actual=passed
+PW-002 apps/web/e2e/admin.spec.ts:39 Admin access and permissions > /accounts does not expose protected content when session lookup fails | routes=/accounts | mode=MOCKED_APPLICATION_API | actual=passed
+PW-003 apps/web/e2e/admin.spec.ts:16 Admin access and permissions > /departments denies access when the server withholds its read permission | routes=/departments | mode=MOCKED_APPLICATION_API | actual=passed
+PW-004 apps/web/e2e/admin.spec.ts:39 Admin access and permissions > /departments does not expose protected content when session lookup fails | routes=/departments | mode=MOCKED_APPLICATION_API | actual=passed
+PW-005 apps/web/e2e/admin.spec.ts:16 Admin access and permissions > /employees denies access when the server withholds its read permission | routes=/employees | mode=MOCKED_APPLICATION_API | actual=passed
+PW-006 apps/web/e2e/admin.spec.ts:39 Admin access and permissions > /employees does not expose protected content when session lookup fails | routes=/employees | mode=MOCKED_APPLICATION_API | actual=passed
+PW-007 apps/web/e2e/admin.spec.ts:16 Admin access and permissions > /services denies access when the server withholds its read permission | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-008 apps/web/e2e/admin.spec.ts:39 Admin access and permissions > /services does not expose protected content when session lookup fails | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-009 apps/web/e2e/admin.spec.ts:16 Admin access and permissions > /clients denies access when the server withholds its read permission | routes=/clients | mode=MOCKED_APPLICATION_API | actual=passed
+PW-010 apps/web/e2e/admin.spec.ts:39 Admin access and permissions > /clients does not expose protected content when session lookup fails | routes=/clients | mode=MOCKED_APPLICATION_API | actual=passed
+PW-011 apps/web/e2e/auth-performance.spec.ts:4  > /login fetches its preloaded font without waiting for CSS | routes=/login | mode=FRONTEND_SERVER_OR_SECURITY_FIXTURE | actual=passed
+PW-012 apps/web/e2e/auth-performance.spec.ts:4  > /register fetches its preloaded font without waiting for CSS | routes=/register | mode=FRONTEND_SERVER_OR_SECURITY_FIXTURE | actual=passed
+PW-013 apps/web/e2e/auth-performance.spec.ts:48  > guest login form is visible before JavaScript hydrates | routes=/login | mode=FRONTEND_SERVER_OR_SECURITY_FIXTURE | actual=passed
+PW-014 apps/web/e2e/auth-performance.spec.ts:65  > mobile auth does not download or rotate hidden community photos | routes=/login | mode=FRONTEND_SERVER_OR_SECURITY_FIXTURE | actual=passed
+PW-015 apps/web/e2e/auth-performance.spec.ts:79  > standalone image optimizer resizes and compresses community photos | routes=/login,/register | mode=FRONTEND_SERVER_OR_SECURITY_FIXTURE | actual=passed
+PW-016 apps/web/e2e/auth-performance.spec.ts:107  > desktop carousel keeps keyboard controls and reduced-motion behavior | routes=/login | mode=FRONTEND_SERVER_OR_SECURITY_FIXTURE | actual=passed
+PW-017 apps/web/e2e/auth-performance.spec.ts:129  > the photo source matches the layout at its exact 850px breakpoint | routes=/login | mode=FRONTEND_SERVER_OR_SECURITY_FIXTURE | actual=passed
+PW-018 apps/web/e2e/auth-performance.spec.ts:146  > desktop cover images retain detail across the panel height | routes=/login | mode=FRONTEND_SERVER_OR_SECURITY_FIXTURE | actual=passed
+PW-019 apps/web/e2e/auth-styles.spec.ts:5  > /login renders with styles allowed by CSP | routes=/login | mode=FRONTEND_SERVER_OR_SECURITY_FIXTURE | actual=passed
+PW-020 apps/web/e2e/auth-styles.spec.ts:5  > /register renders with styles allowed by CSP | routes=/register | mode=FRONTEND_SERVER_OR_SECURITY_FIXTURE | actual=passed
+PW-021 apps/web/e2e/auth-styles.spec.ts:59  > route utilities stay styled across auth and portal navigation | routes=/login,/dashboard | mode=MOCKED_APPLICATION_API | actual=passed
+PW-022 apps/web/e2e/booked-services.spec.ts:35  > booking row status refreshes manually and after reconnection without polling | routes=/booked-services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-023 apps/web/e2e/booked-services.spec.ts:210  > clients browse, paginate and filter booked services at 1440px | routes=/booked-services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-024 apps/web/e2e/booked-services.spec.ts:332  > clients inspect booking details and return focus at 1440px | routes=/booked-services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-025 apps/web/e2e/booked-services.spec.ts:210  > clients browse, paginate and filter booked services at 390px | routes=/booked-services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-026 apps/web/e2e/booked-services.spec.ts:332  > clients inspect booking details and return focus at 390px | routes=/booked-services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-027 apps/web/e2e/booked-services.spec.ts:390  > a booking deep link opens details and closes back to the page | routes=/booked-services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-028 apps/web/e2e/booked-services.spec.ts:409  > clients retry unavailable lists and booking details | routes=/booked-services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-029 apps/web/e2e/booked-services.spec.ts:444  > client list and detail requests display loading states | routes=/booked-services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-030 apps/web/e2e/booked-services.spec.ts:484  > internal roles cannot open client bookings or fetch their data | routes=/booked-services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-031 apps/web/e2e/client-mutations.spec.ts:5  > client creation validates, retries conflicts and opens read-only details at 1440px | routes=/clients | mode=MOCKED_APPLICATION_API | actual=passed
+PW-032 apps/web/e2e/client-mutations.spec.ts:5  > client creation validates, retries conflicts and opens read-only details at 390px | routes=/clients | mode=MOCKED_APPLICATION_API | actual=passed
+PW-033 apps/web/e2e/client-service-requests.spec.ts:76  > client request history, filters, pagination and details at 1440px | routes=/service-requests | mode=MOCKED_APPLICATION_API | actual=passed
+PW-034 apps/web/e2e/client-service-requests.spec.ts:76  > client request history, filters, pagination and details at 390px | routes=/service-requests | mode=MOCKED_APPLICATION_API | actual=passed
+PW-035 apps/web/e2e/client-service-requests.spec.ts:190  > request history retries errors and shows the first-request empty state | routes=/service-requests | mode=MOCKED_APPLICATION_API | actual=passed
+PW-036 apps/web/e2e/client-service-requests.spec.ts:231  > history renders the manager lifecycle statuses | routes=/service-requests | mode=MOCKED_APPLICATION_API | actual=passed
+PW-037 apps/web/e2e/client-service-requests.spec.ts:280  > ADMIN cannot open client service requests or fetch their data | routes=/service-requests | mode=MOCKED_APPLICATION_API | actual=passed
+PW-038 apps/web/e2e/client-service-requests.spec.ts:280  > STAFF cannot open client service requests or fetch their data | routes=/service-requests | mode=MOCKED_APPLICATION_API | actual=passed
+PW-039 apps/web/e2e/client-service-requests.spec.ts:280  > SUPERADMIN cannot open client service requests or fetch their data | routes=/service-requests | mode=MOCKED_APPLICATION_API | actual=passed
+PW-040 apps/web/e2e/client-service-requests.spec.ts:297  > request history refreshes explicitly and keeps details status aligned without polling | routes=/service-requests | mode=MOCKED_APPLICATION_API | actual=passed
+PW-041 apps/web/e2e/client.spec.ts:16 Client service requests > client package card sizing with 0 packages at 390px | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-042 apps/web/e2e/client.spec.ts:16 Client service requests > client package card sizing with 1 packages at 390px | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-043 apps/web/e2e/client.spec.ts:16 Client service requests > client package card sizing with 2 packages at 390px | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-044 apps/web/e2e/client.spec.ts:16 Client service requests > client package card sizing with 0 packages at 1280px | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-045 apps/web/e2e/client.spec.ts:16 Client service requests > client package card sizing with 1 packages at 1280px | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-046 apps/web/e2e/client.spec.ts:16 Client service requests > client package card sizing with 2 packages at 1280px | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-047 apps/web/e2e/client.spec.ts:16 Client service requests > client package card sizing with 0 packages at 1920px | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-048 apps/web/e2e/client.spec.ts:16 Client service requests > client package card sizing with 1 packages at 1920px | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-049 apps/web/e2e/client.spec.ts:16 Client service requests > client package card sizing with 2 packages at 1920px | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-050 apps/web/e2e/client.spec.ts:94 Client service requests > client selects service packages and returns to the catalog at 1280px | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-051 apps/web/e2e/client.spec.ts:94 Client service requests > client selects service packages and returns to the catalog at 390px | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-052 apps/web/e2e/client.spec.ts:580 Client service requests > client catalog retries failures and resets pagination when filtering | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-053 apps/web/e2e/clients.spec.ts:14 Client management > SUPERADMIN client directory access and related records respect navigation guards | routes=/clients | mode=MOCKED_APPLICATION_API | actual=passed
+PW-054 apps/web/e2e/clients.spec.ts:14 Client management > ADMIN client directory access and related records respect navigation guards | routes=/clients | mode=MOCKED_APPLICATION_API | actual=passed
+PW-055 apps/web/e2e/clients.spec.ts:14 Client management > STAFF client directory access and related records respect navigation guards | routes=/clients | mode=MOCKED_APPLICATION_API | actual=passed
+PW-056 apps/web/e2e/clients.spec.ts:14 Client management > USER client directory access and related records respect navigation guards | routes=/clients | mode=MOCKED_APPLICATION_API | actual=passed
+PW-057 apps/web/e2e/clients.spec.ts:59 Client management > client retries a failed submission without changing its request reference at 1280px | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-058 apps/web/e2e/clients.spec.ts:154 Client management > client submits standard service and starts a clean request at 1280px | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-059 apps/web/e2e/clients.spec.ts:250 Client management > admin client form preserves input until explicitly cancelled at 1280px | routes=/clients | mode=MOCKED_APPLICATION_API | actual=passed
+PW-060 apps/web/e2e/clients.spec.ts:59 Client management > client retries a failed submission without changing its request reference at 390px | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-061 apps/web/e2e/clients.spec.ts:154 Client management > client submits standard service and starts a clean request at 390px | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-062 apps/web/e2e/clients.spec.ts:250 Client management > admin client form preserves input until explicitly cancelled at 390px | routes=/clients | mode=MOCKED_APPLICATION_API | actual=passed
+PW-063 apps/web/e2e/departments.spec.ts:13 Department management > employee account menu does not expose the retired employment status action | routes=/employees | mode=MOCKED_APPLICATION_API | actual=passed
+PW-064 apps/web/e2e/departments.spec.ts:36 Department management > department team creation reports authorization errors without adding a team | routes=/departments | mode=MOCKED_APPLICATION_API | actual=passed
+PW-065 apps/web/e2e/departments.spec.ts:116 Department management > admin can create, edit, delete departments and open member management | routes=/departments | mode=MOCKED_APPLICATION_API | actual=passed
+PW-066 apps/web/e2e/dropdown-positioning.spec.ts:52 Dropdown positioning > service pricing menus stay anchored above form controls at 1440px | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-067 apps/web/e2e/dropdown-positioning.spec.ts:81 Dropdown positioning > department presets stay visible over a scrolling dialog at 1440px | routes=/departments | mode=MOCKED_APPLICATION_API | actual=passed
+PW-068 apps/web/e2e/dropdown-positioning.spec.ts:52 Dropdown positioning > service pricing menus stay anchored above form controls at 390px | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-069 apps/web/e2e/dropdown-positioning.spec.ts:81 Dropdown positioning > department presets stay visible over a scrolling dialog at 390px | routes=/departments | mode=MOCKED_APPLICATION_API | actual=passed
+PW-070 apps/web/e2e/dropdown-positioning.spec.ts:102 Dropdown positioning > custom filter menus scroll when neither side can fit the full list | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-071 apps/web/e2e/employee-login.spec.ts:5  > employee profile and login controls at 1440px | routes=/employees | mode=MOCKED_APPLICATION_API | actual=passed
+PW-072 apps/web/e2e/employee-login.spec.ts:5  > employee profile and login controls at 390px | routes=/employees | mode=MOCKED_APPLICATION_API | actual=passed
+PW-073 apps/web/e2e/employees.spec.ts:14 Employee management > employee search keeps the summary in sync with row motion | routes=/employees | mode=MOCKED_APPLICATION_API | actual=passed
+PW-074 apps/web/e2e/employees.spec.ts:101 Employee management > employee row menus close the previous menu at 1440px | routes=/employees | mode=MOCKED_APPLICATION_API | actual=passed
+PW-075 apps/web/e2e/employees.spec.ts:101 Employee management > employee row menus close the previous menu at 390px | routes=/employees | mode=MOCKED_APPLICATION_API | actual=passed
+PW-076 apps/web/e2e/employees.spec.ts:155 Employee management > employee search, details, and login retirement controls preserve HR records | routes=/employees | mode=MOCKED_APPLICATION_API | actual=passed
+PW-077 apps/web/e2e/internal-conversations.spec.ts:144  > STAFF starts an internal chat and retries a saved message at 1440px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-078 apps/web/e2e/internal-conversations.spec.ts:144  > STAFF starts an internal chat and retries a saved message at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-079 apps/web/e2e/internal-conversations.spec.ts:144  > ADMIN starts an internal chat and retries a saved message at 1440px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-080 apps/web/e2e/internal-conversations.spec.ts:144  > ADMIN starts an internal chat and retries a saved message at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-081 apps/web/e2e/internal-conversations.spec.ts:144  > SUPERADMIN starts an internal chat and retries a saved message at 1440px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-082 apps/web/e2e/internal-conversations.spec.ts:144  > SUPERADMIN starts an internal chat and retries a saved message at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-083 apps/web/e2e/internal-conversations.spec.ts:258  > internal chat creation failure can be retried without navigating to an absent thread | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-084 apps/web/e2e/internal-conversations.spec.ts:288  > internal chat polling receives replies, clears unread state and disables unavailable recipients | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-085 apps/web/e2e/internal-conversations.spec.ts:333  > collapsed internal rail keeps chats and contacts within its width | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-086 apps/web/e2e/internal-conversations.spec.ts:413  > reading an internal chat clears its topbar badge immediately | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-087 apps/web/e2e/jwt-session.spec.ts:16  > expired access refreshes on login navigation and logout clears both tokens | routes=/login,/dashboard | mode=MOCKED_APPLICATION_API | actual=passed
+PW-088 apps/web/e2e/jwt-session.spec.ts:85  > the page script policy permits a nonce and blocks untrusted inline scripts | routes=/login | mode=FRONTEND_SERVER_OR_SECURITY_FIXTURE | actual=passed
+PW-089 apps/web/e2e/login-validation.spec.ts:4  > login validates both fields, preserves credentials, and prevents duplicate requests | routes=/login | mode=MOCKED_APPLICATION_API | actual=passed
+PW-090 apps/web/e2e/login-validation.spec.ts:74  > language selection is bounded, keyboard accessible, and localizes validation | routes=/login | mode=FRONTEND_SERVER_OR_SECURITY_FIXTURE | actual=passed
+PW-091 apps/web/e2e/messages-topbar.spec.ts:7  > USER sees unread chat totals in the topbar | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-092 apps/web/e2e/messages-topbar.spec.ts:7  > STAFF sees unread chat totals in the topbar | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-093 apps/web/e2e/messages-topbar.spec.ts:7  > ADMIN sees unread chat totals in the topbar | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-094 apps/web/e2e/messages-topbar.spec.ts:7  > SUPERADMIN sees unread chat totals in the topbar | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-095 apps/web/e2e/operational-loading.spec.ts:92  > /staff-workload shows skeleton rows until data arrives at 1440px | routes=/staff-workload | mode=MOCKED_APPLICATION_API | actual=passed
+PW-096 apps/web/e2e/operational-loading.spec.ts:92  > /request-inbox shows skeleton rows until data arrives at 1440px | routes=/request-inbox | mode=MOCKED_APPLICATION_API | actual=passed
+PW-097 apps/web/e2e/operational-loading.spec.ts:92  > /project-workspace shows skeleton rows until data arrives at 1440px | routes=/project-workspace | mode=MOCKED_APPLICATION_API | actual=passed
+PW-098 apps/web/e2e/operational-loading.spec.ts:92  > /staff-workload shows skeleton rows until data arrives at 390px | routes=/staff-workload | mode=MOCKED_APPLICATION_API | actual=passed
+PW-099 apps/web/e2e/operational-loading.spec.ts:92  > /request-inbox shows skeleton rows until data arrives at 390px | routes=/request-inbox | mode=MOCKED_APPLICATION_API | actual=passed
+PW-100 apps/web/e2e/operational-loading.spec.ts:92  > /project-workspace shows skeleton rows until data arrives at 390px | routes=/project-workspace | mode=MOCKED_APPLICATION_API | actual=passed
+PW-101 apps/web/e2e/portal-regression.spec.ts:13  > SUPERADMIN opens settings without losing its session and cannot open head-only workload | routes=/settings,/staff-workload | mode=MOCKED_APPLICATION_API | actual=passed
+PW-102 apps/web/e2e/portal-regression.spec.ts:13  > ADMIN opens settings without losing its session and cannot open head-only workload | routes=/settings,/staff-workload | mode=MOCKED_APPLICATION_API | actual=passed
+PW-103 apps/web/e2e/portal-regression.spec.ts:13  > STAFF opens settings without losing its session and cannot open head-only workload | routes=/settings,/staff-workload | mode=MOCKED_APPLICATION_API | actual=passed
+PW-104 apps/web/e2e/portal-regression.spec.ts:13  > USER opens settings without losing its session and cannot open head-only workload | routes=/settings,/staff-workload | mode=MOCKED_APPLICATION_API | actual=passed
+PW-105 apps/web/e2e/portal-regression.spec.ts:44  > department head opens workload with a Monday query and retains access after reload | routes=/staff-workload | mode=MOCKED_APPLICATION_API | actual=passed
+PW-106 apps/web/e2e/pricing-templates.spec.ts:58 Pricing template management > customizes shared templates and confirms deletion of unused templates at 1440px | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-107 apps/web/e2e/pricing-templates.spec.ts:58 Pricing template management > customizes shared templates and confirms deletion of unused templates at 390px | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-108 apps/web/e2e/pricing-templates.spec.ts:217 Pricing template management > failed template changes preserve input and deletion can be retried | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-109 apps/web/e2e/pricing-templates.spec.ts:271 Pricing template management > read-only service access hides pricing template management | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-110 apps/web/e2e/profile.spec.ts:5  > USER can manage their profile on desktop and mobile | routes=/profile,/settings | mode=MOCKED_APPLICATION_API | actual=passed
+PW-111 apps/web/e2e/profile.spec.ts:5  > STAFF can manage their profile on desktop and mobile | routes=/profile,/settings | mode=MOCKED_APPLICATION_API | actual=passed
+PW-112 apps/web/e2e/profile.spec.ts:5  > ADMIN can manage their profile on desktop and mobile | routes=/profile,/settings | mode=MOCKED_APPLICATION_API | actual=passed
+PW-113 apps/web/e2e/profile.spec.ts:5  > SUPERADMIN can manage their profile on desktop and mobile | routes=/profile,/settings | mode=MOCKED_APPLICATION_API | actual=passed
+PW-114 apps/web/e2e/project-pages-regression.spec.ts:22  > workspace archive and search keep active and ended projects separate at 1440px | routes=/project-workspace | mode=MOCKED_APPLICATION_API | actual=passed
+PW-115 apps/web/e2e/project-pages-regression.spec.ts:98  > projects detail recovers from a failed load after reload at 1440px | routes=/projects/[id] | mode=MOCKED_APPLICATION_API | actual=passed
+PW-116 apps/web/e2e/project-pages-regression.spec.ts:98  > project-workspace detail recovers from a failed load after reload at 1440px | routes=/project-workspace/[id] | mode=MOCKED_APPLICATION_API | actual=passed
+PW-117 apps/web/e2e/project-pages-regression.spec.ts:22  > workspace archive and search keep active and ended projects separate at 390px | routes=/project-workspace | mode=MOCKED_APPLICATION_API | actual=passed
+PW-118 apps/web/e2e/project-pages-regression.spec.ts:98  > projects detail recovers from a failed load after reload at 390px | routes=/projects/[id] | mode=MOCKED_APPLICATION_API | actual=passed
+PW-119 apps/web/e2e/project-pages-regression.spec.ts:98  > project-workspace detail recovers from a failed load after reload at 390px | routes=/project-workspace/[id] | mode=MOCKED_APPLICATION_API | actual=passed
+PW-120 apps/web/e2e/project-workspace.spec.ts:69  > client project workspace shows milestones and conversation handoff on mobile | routes=/projects/[id] | mode=MOCKED_APPLICATION_API | actual=passed
+PW-121 apps/web/e2e/project-workspace.spec.ts:94  > failed milestone updates preserve progress and can be retried at 1440px | routes=/projects/[id] | mode=MOCKED_APPLICATION_API | actual=passed
+PW-122 apps/web/e2e/project-workspace.spec.ts:94  > failed milestone updates preserve progress and can be retried at 390px | routes=/projects/[id] | mode=MOCKED_APPLICATION_API | actual=passed
+PW-123 apps/web/e2e/project-workspace.spec.ts:120  > assigned staff can complete and reopen a project milestone | routes=/projects/[id] | mode=MOCKED_APPLICATION_API | actual=passed
+PW-124 apps/web/e2e/regression-live.spec.ts:68 live test accounts > SUPERADMIN logs in and validates real feature access | routes=/login,/dashboard,/accounts,/departments,/employees,/services,/clients | mode=LIVE_BACKEND_OPT_IN | actual=skipped
+PW-125 apps/web/e2e/regression-live.spec.ts:68 live test accounts > ADMIN logs in and validates real feature access | routes=/login,/dashboard,/accounts,/departments,/employees,/services,/clients | mode=LIVE_BACKEND_OPT_IN | actual=skipped
+PW-126 apps/web/e2e/regression-live.spec.ts:68 live test accounts > STAFF logs in and validates real feature access | routes=/login,/dashboard,/accounts,/departments,/employees,/services,/clients | mode=LIVE_BACKEND_OPT_IN | actual=skipped
+PW-127 apps/web/e2e/regression-live.spec.ts:68 live test accounts > USER logs in and validates real feature access | routes=/login,/dashboard,/accounts,/departments,/employees,/services,/clients | mode=LIVE_BACKEND_OPT_IN | actual=skipped
+PW-128 apps/web/e2e/regression-live.spec.ts:212 live test accounts > deactivated account cannot establish a session | routes=/login,/dashboard | mode=LIVE_BACKEND_OPT_IN | actual=skipped
+PW-129 apps/web/e2e/regression.spec.ts:19 Authentication and session regression > temporary login failure shows a helpful explanation and permits a successful retry | routes=/login | mode=MOCKED_APPLICATION_API | actual=passed
+PW-130 apps/web/e2e/regression.spec.ts:58 Authentication and session regression > SUPERADMIN renews an expired access token and signs out both tokens | routes=/dashboard,/login | mode=MOCKED_APPLICATION_API | actual=passed
+PW-131 apps/web/e2e/regression.spec.ts:58 Authentication and session regression > ADMIN renews an expired access token and signs out both tokens | routes=/dashboard,/login | mode=MOCKED_APPLICATION_API | actual=passed
+PW-132 apps/web/e2e/regression.spec.ts:58 Authentication and session regression > STAFF renews an expired access token and signs out both tokens | routes=/dashboard,/login | mode=MOCKED_APPLICATION_API | actual=passed
+PW-133 apps/web/e2e/regression.spec.ts:58 Authentication and session regression > USER renews an expired access token and signs out both tokens | routes=/dashboard,/login | mode=MOCKED_APPLICATION_API | actual=passed
+PW-134 apps/web/e2e/regression.spec.ts:122 Authentication and session regression > parallel service reads share one refresh and retry with the new bearer token | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-135 apps/web/e2e/regression.spec.ts:176 Authentication and session regression > refresh HTTP 401 clears both tokens | routes=/login | mode=MOCKED_APPLICATION_API | actual=passed
+PW-136 apps/web/e2e/regression.spec.ts:176 Authentication and session regression > refresh HTTP 429 preserves the session for retry | routes=/login | mode=MOCKED_APPLICATION_API | actual=passed
+PW-137 apps/web/e2e/regression.spec.ts:176 Authentication and session regression > refresh HTTP 503 preserves the session for retry | routes=/login | mode=MOCKED_APPLICATION_API | actual=passed
+PW-138 apps/web/e2e/regression.spec.ts:231 Authentication and session regression > invalid access tokens clear the session without attempting refresh | routes=/dashboard | mode=MOCKED_APPLICATION_API | actual=passed
+PW-139 apps/web/e2e/regression.spec.ts:255 Authentication and session regression > a rejected renewed access token stops after one refresh | routes=/dashboard | mode=MOCKED_APPLICATION_API | actual=passed
+PW-140 apps/web/e2e/regression.spec.ts:279 Authentication and session regression > an expired service update retries the same payload once after refresh | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-141 apps/web/e2e/regression.spec.ts:330 Authentication and session regression > persistent storage cannot restore an authenticated session | routes=/accounts | mode=FRONTEND_SERVER_OR_SECURITY_FIXTURE | actual=passed
+PW-142 apps/web/e2e/regression.spec.ts:348 Authentication and session regression > /login offers email authentication without removed social providers | routes=/login | mode=MOCKED_APPLICATION_API | actual=passed
+PW-143 apps/web/e2e/regression.spec.ts:348 Authentication and session regression > /register offers email authentication without removed social providers | routes=/register | mode=MOCKED_APPLICATION_API | actual=passed
+PW-144 apps/web/e2e/regression.spec.ts:365 Authentication and session regression > auth pages render server HTML and unknown routes return 404 | routes=/login,/register | mode=FRONTEND_SERVER_OR_SECURITY_FIXTURE | actual=passed
+PW-145 apps/web/e2e/regression.spec.ts:381 Authentication and session regression > anonymous home and protected deep links redirect to login | routes=/dashboard,/accounts,/departments,/employees,/services,/clients | mode=FRONTEND_SERVER_OR_SECURITY_FIXTURE | actual=passed
+PW-146 apps/web/e2e/regression.spec.ts:401 Authentication and session regression > login preserves the loader, session, success toast, and sign-out | routes=/login,/dashboard | mode=MOCKED_APPLICATION_API | actual=passed
+PW-147 apps/web/e2e/regression.spec.ts:444 Authentication and session regression > invalid login credentials show toast error and retain entered email | routes=/login | mode=MOCKED_APPLICATION_API | actual=passed
+PW-148 apps/web/e2e/regression.spec.ts:470 Authentication and session regression > registration input validation prevents submission on invalid fields | routes=/register | mode=FRONTEND_SERVER_OR_SECURITY_FIXTURE | actual=passed
+PW-149 apps/web/e2e/regression.spec.ts:493 Authentication and session regression > duplicate email registration displays inline server error alert | routes=/register | mode=MOCKED_APPLICATION_API | actual=passed
+PW-150 apps/web/e2e/regression.spec.ts:522 Authentication and session regression > registration keeps the existing API contract and opens the Client dashboard | routes=/register,/dashboard | mode=MOCKED_APPLICATION_API | actual=passed
+PW-151 apps/web/e2e/regression.spec.ts:554 Authentication and session regression > stored Filipino language hydrates and survives auth navigation | routes=/login,/register | mode=FRONTEND_SERVER_OR_SECURITY_FIXTURE | actual=passed
+PW-152 apps/web/e2e/regression.spec.ts:568 Authentication and session regression > ADMIN keeps their session when opening login or registration directly | routes=/login,/register,/dashboard | mode=MOCKED_APPLICATION_API | actual=passed
+PW-153 apps/web/e2e/regression.spec.ts:568 Authentication and session regression > SUPERADMIN keeps their session when opening login or registration directly | routes=/login,/register,/dashboard | mode=MOCKED_APPLICATION_API | actual=passed
+PW-154 apps/web/e2e/regression.spec.ts:568 Authentication and session regression > STAFF keeps their session when opening login or registration directly | routes=/login,/register,/dashboard | mode=MOCKED_APPLICATION_API | actual=passed
+PW-155 apps/web/e2e/regression.spec.ts:568 Authentication and session regression > USER keeps their session when opening login or registration directly | routes=/login,/register,/dashboard | mode=MOCKED_APPLICATION_API | actual=passed
+PW-156 apps/web/e2e/regression.spec.ts:596 Authentication and session regression > opening login with an expired token allows sign-in | routes=/login | mode=MOCKED_APPLICATION_API | actual=passed
+PW-157 apps/web/e2e/regression.spec.ts:614 Authentication and session regression > login session checks preserve the token during a server error and can retry | routes=/login | mode=MOCKED_APPLICATION_API | actual=passed
+PW-158 apps/web/e2e/regression.spec.ts:642 Authentication and session regression > expired sessions clear the token and return to login | routes=/dashboard | mode=MOCKED_APPLICATION_API | actual=passed
+PW-159 apps/web/e2e/request-conversations.spec.ts:498  > department-head chat loads and polls each booking workflow once | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-160 apps/web/e2e/request-conversations.spec.ts:531  > client sees the latest uploaded specialist profile at 1440px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-161 apps/web/e2e/request-conversations.spec.ts:531  > client sees the latest uploaded specialist profile at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-162 apps/web/e2e/request-conversations.spec.ts:716  > top bar opens the conversation list on a separate page at 1440px | routes=/messages,/dashboard | mode=MOCKED_APPLICATION_API | actual=passed
+PW-163 apps/web/e2e/request-conversations.spec.ts:716  > top bar opens the conversation list on a separate page at 390px | routes=/messages,/dashboard | mode=MOCKED_APPLICATION_API | actual=passed
+PW-164 apps/web/e2e/request-conversations.spec.ts:744  > messages page handles an empty inbox and a failed conversation list | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-165 apps/web/e2e/request-conversations.spec.ts:770  > STAFF without client requests can open internal Messages | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-166 apps/web/e2e/request-conversations.spec.ts:770  > ADMIN without client requests can open internal Messages | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-167 apps/web/e2e/request-conversations.spec.ts:770  > SUPERADMIN without client requests can open internal Messages | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-168 apps/web/e2e/request-conversations.spec.ts:812  > acceptance opens a two-way conversation at 1440px | routes=/messages,/request-inbox | mode=MOCKED_APPLICATION_API | actual=passed
+PW-169 apps/web/e2e/request-conversations.spec.ts:812  > acceptance opens a two-way conversation at 390px | routes=/messages,/request-inbox | mode=MOCKED_APPLICATION_API | actual=passed
+PW-170 apps/web/e2e/request-conversations.spec.ts:877  > failed sends retain the draft and retry the same message without duplication | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-171 apps/web/e2e/request-conversations.spec.ts:905  > staff edit and delete their message with client synchronization at 1440px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-172 apps/web/e2e/request-conversations.spec.ts:905  > staff edit and delete their message with client synchronization at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-173 apps/web/e2e/request-conversations.spec.ts:1018  > reconnection recovers history, loads earlier messages and clears revoked conversations | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-174 apps/web/e2e/request-conversations.spec.ts:1163  > head schedules general and multiple-service meetings independently of booking stage at 1440px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-175 apps/web/e2e/request-conversations.spec.ts:1340  > client requests a reschedule for a general conversation meeting at 1440px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-176 apps/web/e2e/request-conversations.spec.ts:1163  > head schedules general and multiple-service meetings independently of booking stage at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-177 apps/web/e2e/request-conversations.spec.ts:1340  > client requests a reschedule for a general conversation meeting at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-178 apps/web/e2e/request-conversations.spec.ts:1414  > USER keeps one shared conversation while viewing booking details at 1440px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-179 apps/web/e2e/request-conversations.spec.ts:1414  > USER keeps one shared conversation while viewing booking details at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-180 apps/web/e2e/request-conversations.spec.ts:1414  > STAFF keeps one shared conversation while viewing booking details at 1440px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-181 apps/web/e2e/request-conversations.spec.ts:1414  > STAFF keeps one shared conversation while viewing booking details at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-182 apps/web/e2e/request-conversations.spec.ts:1572  > department head chooses a tool before its booking at 1440px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-183 apps/web/e2e/request-conversations.spec.ts:1572  > department head chooses a tool before its booking at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-184 apps/web/e2e/request-conversations.spec.ts:1701  > quotation options refresh eligibility and show an empty state at 1440px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-185 apps/web/e2e/request-conversations.spec.ts:1701  > quotation options refresh eligibility and show an empty state at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-186 apps/web/e2e/request-conversations.spec.ts:1750  > shared timeline keeps booking cards usable without selecting them at 1440px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-187 apps/web/e2e/request-conversations.spec.ts:1750  > shared timeline keeps booking cards usable without selecting them at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-188 apps/web/e2e/request-conversations.spec.ts:1934  > pagination and head handoff retain direct conversation entries | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-189 apps/web/e2e/request-conversations.spec.ts:1973  > collapsed rail opens department conversations directly | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-190 apps/web/e2e/request-conversations.spec.ts:2001  > department heads keep clients with identical names in separate conversations | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-191 apps/web/e2e/request-conversations.spec.ts:2205  > USER retains chat details with none current bookings at 1440px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-192 apps/web/e2e/request-conversations.spec.ts:2205  > USER retains chat details with ended current bookings at 1440px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-193 apps/web/e2e/request-conversations.spec.ts:2205  > USER retains chat details with none current bookings at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-194 apps/web/e2e/request-conversations.spec.ts:2205  > USER retains chat details with ended current bookings at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-195 apps/web/e2e/request-conversations.spec.ts:2287  > USER keeps ended bookings in the shared conversation but hides them from context | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-196 apps/web/e2e/request-conversations.spec.ts:2205  > STAFF retains chat details with none current bookings at 1440px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-197 apps/web/e2e/request-conversations.spec.ts:2205  > STAFF retains chat details with ended current bookings at 1440px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-198 apps/web/e2e/request-conversations.spec.ts:2205  > STAFF retains chat details with none current bookings at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-199 apps/web/e2e/request-conversations.spec.ts:2205  > STAFF retains chat details with ended current bookings at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-200 apps/web/e2e/request-conversations.spec.ts:2287  > STAFF keeps ended bookings in the shared conversation but hides them from context | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-201 apps/web/e2e/request-conversations.spec.ts:2314  > STAFF only sees relevant tools for active projects at 1440px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-202 apps/web/e2e/request-conversations.spec.ts:2314  > USER only sees relevant tools for active projects at 1440px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-203 apps/web/e2e/request-conversations.spec.ts:2314  > STAFF only sees relevant tools for active projects at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-204 apps/web/e2e/request-conversations.spec.ts:2314  > USER only sees relevant tools for active projects at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-205 apps/web/e2e/request-inbox.spec.ts:31  > inbox rows refresh when a booking status changes elsewhere at 1440px | routes=/request-inbox | mode=MOCKED_APPLICATION_API | actual=passed
+PW-206 apps/web/e2e/request-inbox.spec.ts:56  > status filtering, sorting and exact-request chat feedback at 1440px | routes=/request-inbox | mode=MOCKED_APPLICATION_API | actual=passed
+PW-207 apps/web/e2e/request-inbox.spec.ts:31  > inbox rows refresh when a booking status changes elsewhere at 390px | routes=/request-inbox | mode=MOCKED_APPLICATION_API | actual=passed
+PW-208 apps/web/e2e/request-inbox.spec.ts:56  > status filtering, sorting and exact-request chat feedback at 390px | routes=/request-inbox | mode=MOCKED_APPLICATION_API | actual=passed
+PW-209 apps/web/e2e/request-inbox.spec.ts:171  > chat icons open the exact accepted request and report access failures | routes=/request-inbox | mode=MOCKED_APPLICATION_API | actual=passed
+PW-210 apps/web/e2e/request-inbox.spec.ts:399  > failed delete preserves the booking after cancellation and retry at 1440px | routes=/request-inbox | mode=MOCKED_APPLICATION_API | actual=passed
+PW-211 apps/web/e2e/request-inbox.spec.ts:399  > failed delete preserves the booking after cancellation and retry at 390px | routes=/request-inbox | mode=MOCKED_APPLICATION_API | actual=passed
+PW-212 apps/web/e2e/request-inbox.spec.ts:450  > department head reviews and accepts booked services at 1440px | routes=/request-inbox | mode=MOCKED_APPLICATION_API | actual=passed
+PW-213 apps/web/e2e/request-inbox.spec.ts:450  > department head reviews and accepts booked services at 390px | routes=/request-inbox | mode=MOCKED_APPLICATION_API | actual=passed
+PW-214 apps/web/e2e/request-inbox.spec.ts:564  > head can retry failures and a concurrent acceptance refreshes stale details | routes=/request-inbox | mode=MOCKED_APPLICATION_API | actual=passed
+PW-215 apps/web/e2e/request-inbox.spec.ts:618  > STAFF with head=false cannot open the head-only inbox | routes=/request-inbox | mode=MOCKED_APPLICATION_API | actual=passed
+PW-216 apps/web/e2e/request-inbox.spec.ts:618  > ADMIN with head=true cannot open the head-only inbox | routes=/request-inbox | mode=MOCKED_APPLICATION_API | actual=passed
+PW-217 apps/web/e2e/request-inbox.spec.ts:618  > SUPERADMIN with head=true cannot open the head-only inbox | routes=/request-inbox | mode=MOCKED_APPLICATION_API | actual=passed
+PW-218 apps/web/e2e/request-inbox.spec.ts:618  > USER with head=true cannot open the head-only inbox | routes=/request-inbox | mode=MOCKED_APPLICATION_API | actual=passed
+PW-219 apps/web/e2e/request-workflow.spec.ts:222  > workflow refreshes queue while a previous read is pending | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-220 apps/web/e2e/request-workflow.spec.ts:260  > sent quotation shows its reference for clients at 1280px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-221 apps/web/e2e/request-workflow.spec.ts:260  > sent quotation shows its reference for department heads at 1280px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-222 apps/web/e2e/request-workflow.spec.ts:260  > sent quotation shows its reference for clients at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-223 apps/web/e2e/request-workflow.spec.ts:260  > sent quotation shows its reference for department heads at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-224 apps/web/e2e/request-workflow.spec.ts:280  > sent quotation falls back to the request ID for bookings without a reference | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-225 apps/web/e2e/request-workflow.spec.ts:292  > the conversation records formal quotation approval through a structured action | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-226 apps/web/e2e/request-workflow.spec.ts:380  > requested documents can be uploaded and submitted without leaving the requirement | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-227 apps/web/e2e/request-workflow.spec.ts:454  > clients submit five requirement attachments and retry safely at 1600px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-228 apps/web/e2e/request-workflow.spec.ts:454  > clients submit five requirement attachments and retry safely at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-229 apps/web/e2e/request-workflow.spec.ts:572  > quotation acceptance removes the separate agreement from the commencement checklist | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-230 apps/web/e2e/request-workflow.spec.ts:638  > request detail information rejects blank and whitespace-only instructions | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-231 apps/web/e2e/request-workflow.spec.ts:675  > quotation form formats amounts and uses custom date and time controls at 1280px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-232 apps/web/e2e/request-workflow.spec.ts:885  > quotation revisions preserve all items and edits across steps at 1280px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-233 apps/web/e2e/request-workflow.spec.ts:675  > quotation form formats amounts and uses custom date and time controls at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-234 apps/web/e2e/request-workflow.spec.ts:885  > quotation revisions preserve all items and edits across steps at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-235 apps/web/e2e/request-workflow.spec.ts:979  > declining a quotation requires confirmation and cancel preserves it | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-236 apps/web/e2e/request-workflow.spec.ts:1006  > department heads can confirm payment or reject it with a required reason | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-237 apps/web/e2e/request-workflow.spec.ts:1090  > head verifies payment, assigns staff and activates a workspace at 1440px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-238 apps/web/e2e/request-workflow.spec.ts:1090  > head verifies payment, assigns staff and activates a workspace at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-239 apps/web/e2e/request-workflow.spec.ts:1360  > expired quotations have no formal approval controls | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-240 apps/web/e2e/request-workflow.spec.ts:1377  > client retries a consultation reschedule without changing the confirmed schedule at 1440px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-241 apps/web/e2e/request-workflow.spec.ts:1466  > sandbox checkout automatically verifies payment after a retry at 1440px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-242 apps/web/e2e/request-workflow.spec.ts:1544  > client previews and retries payment evidence upload at 1440px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-243 apps/web/e2e/request-workflow.spec.ts:1377  > client retries a consultation reschedule without changing the confirmed schedule at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-244 apps/web/e2e/request-workflow.spec.ts:1466  > sandbox checkout automatically verifies payment after a retry at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-245 apps/web/e2e/request-workflow.spec.ts:1544  > client previews and retries payment evidence upload at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-246 apps/web/e2e/request-workflow.spec.ts:1673  > mobile request context collapses and activated projects have a workspace link | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-247 apps/web/e2e/request-workflow.spec.ts:1719  > head manages internal tools from chat details at 1440px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-248 apps/web/e2e/request-workflow.spec.ts:1719  > head manages internal tools from chat details at 390px | routes=/messages | mode=MOCKED_APPLICATION_API | actual=passed
+PW-249 apps/web/e2e/responsive-data-table.spec.ts:113 Responsive data table pilot > preserves client sorting, filtering, actions, states, and accessibility | routes=/clients | mode=MOCKED_APPLICATION_API | actual=passed
+PW-250 apps/web/e2e/responsive-data-table.spec.ts:170 Responsive data table pilot > keeps client rows usable without horizontal page overflow on mobile | routes=/clients | mode=MOCKED_APPLICATION_API | actual=passed
+PW-251 apps/web/e2e/services.spec.ts:15 Service management > read-only service permission hides every mutation action | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-252 apps/web/e2e/services.spec.ts:47 Service management > service wizard persists consultation and single recurring pricing after reload | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-253 apps/web/e2e/services.spec.ts:182 Service management > service packages are exclusive with pricing and can be replaced during editing | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-254 apps/web/e2e/services.spec.ts:293 Service management > service deletion requires deactivation and explicit confirmation | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-255 apps/web/e2e/services.spec.ts:328 Service management > service descriptions render untrusted markup as text | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-256 apps/web/e2e/services.spec.ts:366 Service management > service list handles HTTP 403 and recovers on retry | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-257 apps/web/e2e/services.spec.ts:366 Service management > service list handles HTTP 500 and recovers on retry | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-258 apps/web/e2e/services.spec.ts:395 Service management > service creation with Pricing validates department selection and preserves rejected edits | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-259 apps/web/e2e/services.spec.ts:395 Service management > service creation with Packages validates department selection and preserves rejected edits | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-260 apps/web/e2e/services.spec.ts:604 Service management > services cannot be created without a responsible department | routes=/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-261 apps/web/e2e/session-revocation.spec.ts:119  > password logout choice preserves both browsers until confirmed | routes=/settings | mode=MOCKED_APPLICATION_API | actual=passed
+PW-262 apps/web/e2e/session-revocation.spec.ts:172  > individual session revocation redirects the other browser and transient checks do not | routes=/settings | mode=MOCKED_APPLICATION_API | actual=passed
+PW-263 apps/web/e2e/settings.spec.ts:4  > USER settings persist and sessions can be revoked | routes=/settings | mode=MOCKED_APPLICATION_API | actual=passed
+PW-264 apps/web/e2e/settings.spec.ts:4  > STAFF settings persist and sessions can be revoked | routes=/settings | mode=MOCKED_APPLICATION_API | actual=passed
+PW-265 apps/web/e2e/settings.spec.ts:4  > ADMIN settings persist and sessions can be revoked | routes=/settings | mode=MOCKED_APPLICATION_API | actual=passed
+PW-266 apps/web/e2e/settings.spec.ts:4  > SUPERADMIN settings persist and sessions can be revoked | routes=/settings | mode=MOCKED_APPLICATION_API | actual=passed
+PW-267 apps/web/e2e/staff-workload.spec.ts:5  > department head manages capacity and reviews real allocation state | routes=/staff-workload | mode=MOCKED_APPLICATION_API | actual=passed
+PW-268 apps/web/e2e/staff-workload.spec.ts:487  > department head can reassign or remove allocations for former staff | routes=/staff-workload | mode=MOCKED_APPLICATION_API | actual=passed
+PW-269 apps/web/e2e/staff.spec.ts:14 Staff and role navigation > SUPERADMIN restores its layout, navigation, and deep-link permissions | routes=/dashboard,/accounts,/departments,/employees,/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-270 apps/web/e2e/staff.spec.ts:14 Staff and role navigation > ADMIN restores its layout, navigation, and deep-link permissions | routes=/dashboard,/accounts,/departments,/employees,/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-271 apps/web/e2e/staff.spec.ts:14 Staff and role navigation > STAFF restores its layout, navigation, and deep-link permissions | routes=/dashboard,/accounts,/departments,/employees,/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-272 apps/web/e2e/staff.spec.ts:14 Staff and role navigation > USER restores its layout, navigation, and deep-link permissions | routes=/dashboard,/accounts,/departments,/employees,/services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-273 apps/web/e2e/superadmin.spec.ts:14 Superadmin account management > search previews loaded accounts before the server responds | routes=/accounts | mode=MOCKED_APPLICATION_API | actual=passed
+PW-274 apps/web/e2e/superadmin.spec.ts:73 Superadmin account management > superadmin changes a listed account password at 390px | routes=/accounts | mode=MOCKED_APPLICATION_API | actual=passed
+PW-275 apps/web/e2e/superadmin.spec.ts:73 Superadmin account management > superadmin changes a listed account password at 1280px | routes=/accounts | mode=MOCKED_APPLICATION_API | actual=passed
+PW-276 apps/web/e2e/superadmin.spec.ts:197 Superadmin account management > superadmin cannot edit their own role or account status | routes=/accounts | mode=MOCKED_APPLICATION_API | actual=passed
+PW-277 apps/web/e2e/superadmin.spec.ts:219 Superadmin account management > superadmin can search accounts, modify user roles, and deactivate/reactivate users | routes=/accounts | mode=MOCKED_APPLICATION_API | actual=passed
+PW-278 apps/web/e2e/superadmin.spec.ts:280 Superadmin account management > superadmin can restore a soft-deleted account at 390px | routes=/accounts | mode=MOCKED_APPLICATION_API | actual=passed
+PW-279 apps/web/e2e/superadmin.spec.ts:280 Superadmin account management > superadmin can restore a soft-deleted account at 1280px | routes=/accounts | mode=MOCKED_APPLICATION_API | actual=passed
+PW-280 apps/web/e2e/superadmin.spec.ts:381 Superadmin account management > superadmin can move an inactive account to Trash and delete it permanently | routes=/accounts | mode=MOCKED_APPLICATION_API | actual=passed
+PW-281 apps/web/e2e/table-interactions.spec.ts:115  > workspace, team, task and deliverable tables use shared row transitions at 1440px | routes=/dashboard,/project-workspace,/project-workspace/[id] | mode=MOCKED_APPLICATION_API | actual=passed
+PW-282 apps/web/e2e/table-interactions.spec.ts:115  > workspace, team, task and deliverable tables use shared row transitions at 390px | routes=/dashboard,/project-workspace,/project-workspace/[id] | mode=MOCKED_APPLICATION_API | actual=passed
+PW-283 apps/web/e2e/table-interactions.spec.ts:273  > /clients previews and clears search before responses at 1440px | routes=/clients | mode=MOCKED_APPLICATION_API | actual=passed
+PW-284 apps/web/e2e/table-interactions.spec.ts:273  > /employees previews and clears search before responses at 1440px | routes=/employees | mode=MOCKED_APPLICATION_API | actual=passed
+PW-285 apps/web/e2e/table-interactions.spec.ts:273  > /booked-services previews and clears search before responses at 1440px | routes=/booked-services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-286 apps/web/e2e/table-interactions.spec.ts:273  > /request-inbox previews and clears search before responses at 1440px | routes=/request-inbox | mode=MOCKED_APPLICATION_API | actual=passed
+PW-287 apps/web/e2e/table-interactions.spec.ts:273  > /service-requests previews and clears search before responses at 1440px | routes=/service-requests | mode=MOCKED_APPLICATION_API | actual=passed
+PW-288 apps/web/e2e/table-interactions.spec.ts:273  > /clients previews and clears search before responses at 390px | routes=/clients | mode=MOCKED_APPLICATION_API | actual=passed
+PW-289 apps/web/e2e/table-interactions.spec.ts:273  > /employees previews and clears search before responses at 390px | routes=/employees | mode=MOCKED_APPLICATION_API | actual=passed
+PW-290 apps/web/e2e/table-interactions.spec.ts:273  > /booked-services previews and clears search before responses at 390px | routes=/booked-services | mode=MOCKED_APPLICATION_API | actual=passed
+PW-291 apps/web/e2e/table-interactions.spec.ts:273  > /request-inbox previews and clears search before responses at 390px | routes=/request-inbox | mode=MOCKED_APPLICATION_API | actual=passed
+PW-292 apps/web/e2e/table-interactions.spec.ts:273  > /service-requests previews and clears search before responses at 390px | routes=/service-requests | mode=MOCKED_APPLICATION_API | actual=passed

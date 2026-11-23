@@ -14,7 +14,7 @@ const task: CalendarEvent = {
   location: null,
   staff: "Staff",
   pending: false,
-  href: "/project-workspace/project-1",
+  href: "/project-workspace/ungrouped-project%3Aproject-1",
   completed: false,
   deadline: true,
   project: { id: "project-1", name: "Brand project" },
@@ -111,7 +111,10 @@ for (const role of ["STAFF", "ADMIN", "SUPERADMIN", "USER"] as const) {
           ).toBeVisible()
           await expect(
             day.getByRole("link", { name: "View Prepare designs" }),
-          ).toHaveAttribute("href", "/project-workspace/project-1")
+          ).toHaveAttribute(
+            "href",
+            "/project-workspace/ungrouped-project%3Aproject-1",
+          )
         } else {
           await expect(
             day.getByRole("link", { name: "View Prepare designs" }),

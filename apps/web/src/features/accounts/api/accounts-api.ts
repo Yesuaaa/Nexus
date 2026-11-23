@@ -69,6 +69,21 @@ export function changeAccountRole(id: string, role: AccountRole) {
   )
 }
 
+export function updateAccount(
+  id: string,
+  data: {
+    fullName: string
+    email: string
+    contactNumber: string
+    role: AccountRole
+  },
+) {
+  return apiRequest<{ user: Account }>(`/api/users/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  })
+}
+
 export function changeAccountStatus(id: string, isActive: boolean) {
   return apiRequest<{ user: Account }>(
     `/api/users/${encodeURIComponent(id)}/status`,

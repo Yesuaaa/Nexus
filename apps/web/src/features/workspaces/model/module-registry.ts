@@ -6,6 +6,11 @@ export const moduleRegistry = registry
 export type WorkspaceModuleId = keyof typeof registry
 export type ModuleRegistration = (typeof registry)[WorkspaceModuleId]
 
+export function getModuleLogsLabel(moduleId: WorkspaceModuleId): string {
+  if (moduleId === "people-hr") return `${moduleRegistry[moduleId].title} Logs`
+  return `${moduleRegistry[moduleId].title.split(" ")[0]} Logs`
+}
+
 export function canAccessAdministrativeModules(account: Account): boolean {
   return Boolean(
     account.isActive &&
@@ -19,7 +24,13 @@ export function getAdministrativeModuleEntries<
 >(account: Account, definitions: T) {
   if (!canAccessAdministrativeModules(account)) return []
   return (Object.keys(definitions) as (keyof T & string)[])
-    .filter((id) => definitions[id].implemented)
+    .filter((id) => {
+      const module = definitions[id]
+      return (
+        module.implemented &&
+        !("staffOnly" in module || "workspaceParent" in module)
+      )
+    })
     .map((id) => ({
       id,
       title: definitions[id].title,

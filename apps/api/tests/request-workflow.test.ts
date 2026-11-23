@@ -312,6 +312,16 @@ test(
   { timeout: 180_000 },
   async (t) => {
     const { prisma, db, origin } = await startPgliteApp(t)
+    const originalEnvironment = process.env.NODE_ENV
+    const originalSimulator = process.env.WORKFLOW_LOCAL_PAYMENT_SIMULATOR
+    delete process.env.WORKFLOW_LOCAL_PAYMENT_SIMULATOR
+    t.after(() => {
+      if (originalEnvironment === undefined) delete process.env.NODE_ENV
+      else process.env.NODE_ENV = originalEnvironment
+      if (originalSimulator === undefined)
+        delete process.env.WORKFLOW_LOCAL_PAYMENT_SIMULATOR
+      else process.env.WORKFLOW_LOCAL_PAYMENT_SIMULATOR = originalSimulator
+    })
     async function user(name: string, role: Role) {
       const record = await prisma!.user.create({
         data: {
@@ -1202,7 +1212,7 @@ test(
               beforeVerification.version,
             )
           ).status,
-          409,
+          403,
         )
         assert.equal(
           (
@@ -1487,9 +1497,14 @@ test(
     )
 
     await t.test(
-      "sandbox checkout verifies payment once and enables staffing and activation without another agreement",
+      "sandbox checkout requires server opt-in and preserves the existing staffing gate",
       async () => {
         for (const requiresAgreement of [false, true]) {
+          const permittedEnvironment = requiresAgreement
+            ? "development"
+            : "test"
+          process.env.NODE_ENV = permittedEnvironment
+          process.env.WORKFLOW_LOCAL_PAYMENT_SIMULATOR = "true"
           const sandboxService = await prisma!.service.create({
             data: {
               name: `Sandbox checkout ${requiresAgreement ? "with" : "without"} agreement`,
@@ -1531,6 +1546,42 @@ test(
             },
             id,
           )
+          const pendingPayment = await prisma.workflowPayment.findUniqueOrThrow(
+            {
+              where: { requestId: id },
+            },
+          )
+          const eventCount = await prisma.workflowEvent.count({
+            where: { requestId: id },
+          })
+          const receiptCount = await prisma.workflowActionReceipt.count({
+            where: { requestId: id },
+          })
+          const rejectedActionId = randomUUID()
+          for (const scenario of [
+            { environment: "production", optIn: "true" },
+            { environment: "staging", optIn: "true" },
+            { environment: undefined, optIn: "true" },
+            { environment: permittedEnvironment, optIn: "false" },
+            { environment: permittedEnvironment, optIn: undefined },
+          ]) {
+            if (scenario.environment === undefined) delete process.env.NODE_ENV
+            else process.env.NODE_ENV = scenario.environment
+            if (scenario.optIn === undefined)
+              delete process.env.WORKFLOW_LOCAL_PAYMENT_SIMULATOR
+            else process.env.WORKFLOW_LOCAL_PAYMENT_SIMULATOR = scenario.optIn
+            const rejected = await send(
+              client,
+              command,
+              approved.version,
+              rejectedActionId,
+              id,
+            )
+            assert.equal(rejected.status, 403)
+            assert.match(await rejected.text(), /Sandbox checkout is disabled/)
+          }
+          process.env.NODE_ENV = permittedEnvironment
+          process.env.WORKFLOW_LOCAL_PAYMENT_SIMULATOR = "true"
           assert.equal(
             (await send(head, command, approved.version, randomUUID(), id))
               .status,
@@ -1548,7 +1599,44 @@ test(
             ).status,
             404,
           )
-          const actionId = randomUUID()
+          await prisma.user.update({
+            where: { id: client.id },
+            data: { isActive: false },
+          })
+          try {
+            assert.equal(
+              (await send(client, command, approved.version, randomUUID(), id))
+                .status,
+              401,
+            )
+          } finally {
+            await prisma.user.update({
+              where: { id: client.id },
+              data: { isActive: true },
+            })
+          }
+          assert.deepEqual(
+            await prisma.workflowPayment.findUniqueOrThrow({
+              where: { requestId: id },
+            }),
+            pendingPayment,
+          )
+          assert.equal((await read(client, id)).version, approved.version)
+          assert.equal(
+            await prisma.workflowFile.count({ where: { requestId: id } }),
+            0,
+          )
+          assert.equal(
+            await prisma.workflowEvent.count({ where: { requestId: id } }),
+            eventCount,
+          )
+          assert.equal(
+            await prisma.workflowActionReceipt.count({
+              where: { requestId: id },
+            }),
+            receiptCount,
+          )
+          const actionId = rejectedActionId
           const attempts = await Promise.all([
             send(client, command, approved.version, actionId, id),
             send(client, command, approved.version, actionId, id),
@@ -1617,6 +1705,7 @@ test(
             "PLANNED",
           )
         }
+        delete process.env.WORKFLOW_LOCAL_PAYMENT_SIMULATOR
       },
     )
 
@@ -1760,6 +1849,14 @@ test(
         )
         assert.equal(activated.state, "ACTIVE_PROJECT")
         assert.equal(
+          (
+            await prisma!.serviceRequest.findUniqueOrThrow({
+              where: { id: fixedRequest.id },
+            })
+          ).status,
+          "ACTIVATED",
+        )
+        assert.equal(
           await prisma!.workflowApproval.count({
             where: { requestId: fixedRequest.id },
           }),
@@ -1896,12 +1993,18 @@ test(
           })),
         })
         const earlierReadAt = new Date("2026-10-01T00:00:00Z")
+        const tiedCreatedAt = new Date("2099-01-01T00:00:00Z")
+        const noticeIds = eventIds.map(
+          (_, index) => `notice-order-${String(index).padStart(2, "0")}`,
+        )
         await prisma!.workflowNotification.createMany({
           data: [
             ...eventIds.map((eventId, index) => ({
+              id: noticeIds[index]!,
               eventId,
               requestId: request.id,
               userId: client.id,
+              createdAt: tiedCreatedAt,
               readAt: index === 45 ? earlierReadAt : null,
             })),
             {
@@ -1922,7 +2025,10 @@ test(
           }
         }
         const before = await list()
-        assert.equal(before.notifications.length, 40)
+        assert.deepEqual(
+          before.notifications.map(({ id }) => id),
+          noticeIds.slice(6, 46).reverse(),
+        )
         assert.ok(before.unreadCount >= 45)
         await prisma!.user.update({
           where: { id: client.id },
@@ -1935,8 +2041,26 @@ test(
           data: { settings: {} },
         })
         const restored = await list()
-        assert.equal(restored.notifications.length, 40)
-        assert.equal(restored.unreadCount, before.unreadCount)
+        assert.deepEqual(restored, before)
+
+        const markRead = (id: string, headers: typeof client.headers) =>
+          fetch(`${endpoint}/${id}/read`, { method: "PATCH", headers })
+        assert.equal(
+          (await markRead(noticeIds[46]!, client.headers)).status,
+          404,
+        )
+        assert.equal(
+          (await markRead(noticeIds[0]!, otherClient.headers)).status,
+          404,
+        )
+        assert.deepEqual(await list(), before)
+        assert.equal(
+          (await markRead(noticeIds[0]!, client.headers)).status,
+          200,
+        )
+        const afterSingle = await list()
+        assert.deepEqual(afterSingle.notifications, before.notifications)
+        assert.equal(afterSingle.unreadCount, before.unreadCount - 1)
 
         assert.equal(
           (await fetch(`${endpoint}/read-all`, { method: "PATCH" })).status,

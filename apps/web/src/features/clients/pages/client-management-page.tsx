@@ -78,7 +78,6 @@ export function ClientManagementPage() {
   const [search, setSearch] = useState("")
   const query = search.trim()
   const [status, setStatus] = useState<ClientStatus>("")
-  const [animateRows, setAnimateRows] = useState(true)
   const [sortBy, setSortBy] = useState<ClientSort>("createdAt")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
   const filtered = Boolean(query || status)
@@ -95,13 +94,11 @@ export function ClientManagementPage() {
   const { setPage } = list
 
   function sort(key: ClientSort) {
-    setAnimateRows(true)
     setSortOrder(sortBy === key && sortOrder === "asc" ? "desc" : "asc")
     setSortBy(key)
     setPage(1)
   }
   function clearFilters() {
-    setAnimateRows(true)
     setSearch("")
     setStatus("")
     setPage(1)
@@ -138,7 +135,6 @@ export function ClientManagementPage() {
             value={search}
             maxLength={100}
             onChange={(event) => {
-              setAnimateRows(true)
               setSearch(event.target.value)
               setPage(1)
             }}
@@ -150,7 +146,6 @@ export function ClientManagementPage() {
             options={statusOptions}
             triggerClassName="w-[135px]"
             onChange={(value) => {
-              setAnimateRows(true)
               setStatus(value)
               setPage(1)
             }}
@@ -162,7 +157,6 @@ export function ClientManagementPage() {
               options={sortOptions}
               triggerClassName="w-[180px]"
               onChange={(value) => {
-                setAnimateRows(true)
                 const [key, order] = value.split(":")
                 setSortBy(key as ClientSort)
                 setSortOrder(order as "asc" | "desc")
@@ -185,7 +179,6 @@ export function ClientManagementPage() {
           viewKey={list.tableViewKey}
           onRowsSettled={list.onRowsSettled}
           quickKey={query}
-          animateRows={animateRows}
           loading={list.loading}
           error={list.error}
           emptyMessage={
@@ -204,7 +197,9 @@ export function ClientManagementPage() {
           onView={(client) => setSelectedClient({ client, tab: "overview" })}
         />
         <TableSearchStatus
-          active={list.loading && list.previewing}
+          active={
+            list.loading && list.previewing && Boolean(list.preview?.length)
+          }
           label="clients"
         />
         {list.footer && (
@@ -212,7 +207,6 @@ export function ClientManagementPage() {
             {...list.footer}
             label="Client pages"
             onPageChange={(nextPage) => {
-              setAnimateRows(true)
               setPage(nextPage)
             }}
           />

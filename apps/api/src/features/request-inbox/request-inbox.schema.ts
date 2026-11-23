@@ -7,6 +7,8 @@ export type InboxFilters = {
   view:
     | "pending"
     | "under-review"
+    | "activated"
+    | "concluded"
     | "all"
     | "awaiting-information"
     | "ready-for-quotation"
@@ -31,6 +33,8 @@ export function parseInboxFilters(
     ![
       "pending",
       "under-review",
+      "activated",
+      "concluded",
       "all",
       "awaiting-information",
       "ready-for-quotation",

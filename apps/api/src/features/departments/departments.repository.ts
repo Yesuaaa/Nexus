@@ -21,6 +21,12 @@ import { lockRows } from "../../shared/db/locks.js"
 import { paginate } from "../../shared/query/pagination.js"
 import { departmentSummarySelect } from "../../shared/query/selects.js"
 import {
+  notifyPendingLeaveAfterHeadChange,
+  notifyPendingLeaveAfterPlacement,
+} from "../leave/leave.repository.js"
+import { notifyPendingAdjustmentsAfterHeadChange } from "../attendance/attendance.pending-notifications.js"
+import { beginAttendancePlacement } from "../employees/attendance-placement-history.js"
+import {
   employeeInclude,
   clearFormerDepartmentHeadTitle,
   syncEmployeeForUser,
@@ -68,6 +74,49 @@ export function withoutTemporaryHeadTracking<
   return fields
 }
 
+const departmentListInclude = {
+  head: {
+    select: {
+      id: true,
+      email: true,
+      fullName: true,
+      role: true,
+    },
+  },
+  _count: {
+    select: { employees: true, teams: true, services: true },
+  },
+} satisfies Prisma.DepartmentInclude
+
+async function findDepartmentsWithCounts() {
+  const prisma = getPrisma()!
+  return prisma.department.findMany({
+    orderBy: { name: "asc" },
+    include: departmentListInclude,
+  })
+}
+
+async function countProjectsByDepartmentIds(departmentIds: string[]) {
+  if (!departmentIds.length) return new Map<string, number>()
+  const prisma = getPrisma()!
+  const counts = await prisma.$queryRaw<
+    { departmentId: string; projectCount: number }[]
+  >(Prisma.sql`
+    SELECT r."acceptedDepartmentId" AS "departmentId",
+      COUNT(DISTINCT p.id)::int AS "projectCount"
+    FROM "Project" p
+    INNER JOIN "ServiceRequest" r ON r.id = p."requestId"
+    WHERE r."acceptedDepartmentId" IN (${Prisma.join(departmentIds)})
+    GROUP BY r."acceptedDepartmentId"
+  `)
+  return new Map(
+    counts.map(({ departmentId, projectCount }) => [
+      departmentId,
+      projectCount,
+    ]),
+  )
+}
+
 export const departmentsRepository = {
   async listDepartmentDirectory() {
     // Cross-department coordination needs identifiers and Head names, not HR
@@ -82,23 +131,65 @@ export const departmentsRepository = {
   },
 
   async listDepartmentsWithCounts() {
+    return findDepartmentsWithCounts()
+  },
+
+  async listProjectManagementDepartmentsWithCounts() {
+    const departments = await findDepartmentsWithCounts()
+    const projectCounts = await countProjectsByDepartmentIds(
+      departments.map(({ id }) => id),
+    )
+    return departments.map((department) => ({
+      ...department,
+      projectCount: projectCounts.get(department.id) ?? 0,
+    }))
+  },
+
+  async getProjectManagementDepartmentDetails(departmentId: string) {
     const prisma = getPrisma()!
-    return prisma.department.findMany({
-      orderBy: { name: "asc" },
-      include: {
-        head: {
-          select: {
-            id: true,
-            email: true,
-            fullName: true,
-            role: true,
+    const [department, projectCounts] = await Promise.all([
+      prisma.department.findUnique({
+        where: { id: departmentId },
+        select: {
+          id: true,
+          name: true,
+          color: true,
+          code: true,
+          description: true,
+          headId: true,
+          createdAt: true,
+          updatedAt: true,
+          head: {
+            select: {
+              id: true,
+              fullName: true,
+              role: true,
+              position: true,
+            },
+          },
+          employees: {
+            select: {
+              id: true,
+              userId: true,
+              fullName: true,
+              position: true,
+              user: {
+                select: { id: true, fullName: true, role: true },
+              },
+            },
+            orderBy: [{ fullName: "asc" }, { employeeId: "asc" }],
           },
         },
-        _count: {
-          select: { employees: true, teams: true, services: true },
-        },
-      },
-    })
+      }),
+      countProjectsByDepartmentIds([departmentId]),
+    ])
+    if (!department) return null
+    return {
+      ...department,
+      members: department.employees,
+      memberCount: department.employees.length,
+      projectCount: projectCounts.get(departmentId) ?? 0,
+    }
   },
 
   /**
@@ -347,6 +438,10 @@ export const departmentsRepository = {
       }
 
       await recordDepartmentChanges(tx, operation, current, saved)
+      if (headChanged) {
+        await notifyPendingLeaveAfterHeadChange(tx, id)
+        await notifyPendingAdjustmentsAfterHeadChange(tx, id)
+      }
 
       return tx.department.findUniqueOrThrow({
         where: { id: saved.id },
@@ -368,15 +463,21 @@ export const departmentsRepository = {
         where: { departmentId: id },
         data: { departmentId: null, teamId: null },
       })
-      await tx.employee.updateMany({
+      await beginAttendancePlacement(tx, operation)
+      const movedEmployees = await tx.employee.updateManyAndReturn({
         where: { departmentId: id },
         data: { departmentId: null, teamId: null },
+        select: { id: true },
       })
       for (const userId of before.syncUserIds) {
-        await syncEmployeeForUser(tx, userId)
+        await syncEmployeeForUser(tx, userId, operation)
       }
       await tx.department.delete({ where: { id } })
       await writeDepartmentDeletionWorkforce(tx, operation, before)
+      await notifyPendingLeaveAfterPlacement(
+        tx,
+        movedEmployees.map(({ id }) => id),
+      )
     })
   },
 
@@ -388,6 +489,7 @@ export const departmentsRepository = {
   ) {
     const prisma = getPrisma()!
     return prisma.$transaction(async (tx) => {
+      await lockRows(tx, "Department", departmentId, "share")
       const beforeStates = new Map<string, MemberState>()
       const remember = (state: MemberState) => {
         const key = state.user
@@ -478,38 +580,47 @@ export const departmentsRepository = {
       }
 
       for (const employeeId of requestedEmployeeIds) {
-        const employee = await tx.employee.findUnique({
-          where: { id: employeeId },
-          select: { id: true, departmentId: true, teamId: true },
-        })
-        if (!employee) {
-          throw new EmployeeError(404, "Employee not found")
-        }
+        const before = await readEmployeeMemberState(tx, employeeId)
+        const employee = before.employee!
+        if (employee.departmentId && employee.departmentId !== departmentId)
+          throw new EmployeeError(
+            409,
+            "Employee assignment changed; refresh and retry",
+          )
         const currentTeam = employee.teamId
           ? await tx.team.findUnique({
               where: { id: employee.teamId },
               select: { departmentId: true },
             })
           : null
-        remember(await readEmployeeMemberState(tx, employee.id))
-        await updateEmployee(tx, employee.id, {
-          departmentId,
-          ...(currentTeam?.departmentId !== departmentId
-            ? { teamId: null }
-            : {}),
-        })
+        remember(before)
+        await updateEmployee(
+          tx,
+          employee.id,
+          {
+            departmentId,
+            ...(currentTeam?.departmentId !== departmentId
+              ? { teamId: null }
+              : {}),
+          },
+          { operation, placementOnly: true },
+        )
       }
 
       for (const userId of requestedUserIds) {
-        const user = await tx.user.findUnique({
-          where: { id: userId },
-          select: { id: true, teamId: true },
-        })
-        if (!user) {
-          throw new EmployeeError(404, "User not found")
-        }
-        remember(await readUserMemberState(tx, user.id, false))
-        await syncEmployeeForUser(tx, user.id)
+        const before = await readUserMemberState(tx, userId, false)
+        const user = before.user!
+        if (
+          [user.departmentId, before.employee?.departmentId].some(
+            (id) => id && id !== departmentId,
+          )
+        )
+          throw new EmployeeError(
+            409,
+            "Employee assignment changed; refresh and retry",
+          )
+        remember(before)
+        await syncEmployeeForUser(tx, user.id, operation)
         const employee = await tx.employee.findUnique({
           where: { userId: user.id },
           select: { id: true, departmentId: true, teamId: true },
@@ -530,7 +641,7 @@ export const departmentsRepository = {
                 : {}),
             },
           })
-          await syncEmployeeForUser(tx, user.id)
+          await syncEmployeeForUser(tx, user.id, operation)
         } else {
           const currentTeam = employee.teamId
             ? await tx.team.findUnique({
@@ -538,12 +649,17 @@ export const departmentsRepository = {
                 select: { departmentId: true },
               })
             : null
-          await updateEmployee(tx, employee.id, {
-            departmentId,
-            ...(currentTeam?.departmentId !== departmentId
-              ? { teamId: null }
-              : {}),
-          })
+          await updateEmployee(
+            tx,
+            employee.id,
+            {
+              departmentId,
+              ...(currentTeam?.departmentId !== departmentId
+                ? { teamId: null }
+                : {}),
+            },
+            { operation, placementOnly: true },
+          )
         }
       }
 

@@ -2,6 +2,8 @@
 
 Developed: 2026-11-15.
 
+Update (2026-11-16): `PATCH /api/users/:id` supports Superadmin account edits for full name, email, contact number and role. The row-action Edit account panel replaces the inline Access column and bulk save. Profile and role updates share one transaction and operation ID; profile history stores only changed field names. Role changes retain self-role, department-head/team-lead and linked-Employee promotion guards. Trashed accounts cannot be edited. Profile edits do not overwrite existing Employee HR details or change department/team assignment. Password and active-status changes retain their separate guarded actions.
+
 All seven existing `/api/users` mutation endpoints now persist the authenticated Superadmin responsible for material changes. They use the [Phase 4B.4B.1 foundation](administrative-attribution-persistence-foundation.md) and implement the Account Management portion of the [Phase 4B.4A design](administrative-mutation-attribution-audit.md). Account creation/role synchronization and permanent-deletion workforce effects share the root operation ID. **No Account Management endpoint is deferred or left without attribution for its current material effects.** No-op rules and concurrency test limitations are described below.
 
 Client Management and Employee Management endpoints are not integrated. Their shared lifecycle/synchronization services retain their existing signatures and behavior. Department/Team workflows, permissions, frontend contracts, schema and migrations are unchanged. There is no new history API, history UI, Diagnostics, or centralized System Logs.

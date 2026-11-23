@@ -4,7 +4,11 @@ import { createManagementOperation } from "../../shared/management-history.js"
 import { isUniqueConflict, isWriteConflict } from "../../lib/errors.js"
 import { assertStrongPassword } from "../../shared/password-policy.js"
 import { insensitive, parsePage } from "../../shared/query/pagination.js"
-import { isContactNumber, normalizedEmail } from "../../shared/validation.js"
+import {
+  isContactNumber,
+  isPlainObject,
+  normalizedEmail,
+} from "../../shared/validation.js"
 import { hashPassword } from "../auth/auth.password.js"
 import { isDepartmentHeadTitle } from "../departments/leadership.policy.js"
 import { syncEmployeeForUser } from "../employees/employees.service.js"
@@ -342,6 +346,63 @@ export const usersService = {
       )
       return { user: publicUser(updated) }
     } catch (error) {
+      if (isWriteConflict(error)) throw new UsersError(409, CHANGED)
+      throw error
+    }
+  },
+
+  async updateUser(auth: AuthContext, targetId: string, input: unknown) {
+    if (auth.user.role !== Role.SUPERADMIN)
+      throw new UsersError(403, "Insufficient permissions")
+    if (!isPlainObject(input))
+      throw new UsersError(400, "Provide account details")
+    const allowed = ["fullName", "email", "contactNumber", "role"]
+    if (Object.keys(input).some((key) => !allowed.includes(key)))
+      throw new UsersError(400, "Unsupported account field")
+    const target = await findManageableAccount(auth.user.role, targetId)
+    const email = normalizedEmail(input.email)
+    if (!email) throw new UsersError(400, "Provide a valid email")
+    if (
+      typeof input.fullName !== "string" ||
+      input.fullName.trim().length < 2 ||
+      input.fullName.trim().length > 100
+    )
+      throw new UsersError(400, "Provide a full name of 2 to 100 characters")
+    if (
+      input.contactNumber !== null &&
+      input.contactNumber !== undefined &&
+      (typeof input.contactNumber !== "string" ||
+        (input.contactNumber.trim() !== "" &&
+          !isContactNumber(input.contactNumber.trim())))
+    )
+      throw new UsersError(400, "Provide a valid contact number")
+    const role = input.role ?? target.role
+    if (typeof role !== "string" || !Object.values(Role).includes(role as Role))
+      throw new UsersError(400, "Invalid role")
+    if (role !== target.role)
+      assertNotSelf(auth.user.id, targetId, "You cannot change your own role")
+    if (!canAssignRole(auth.user.role, target.role, role as Role))
+      throw new UsersError(403, "You cannot assign that role")
+    try {
+      const user = await usersRepository.changeUserRoleWithSync(
+        targetId,
+        target.role,
+        role as Role,
+        syncEmployeeForUser,
+        createManagementOperation(auth),
+        {
+          fullName: input.fullName.trim(),
+          email,
+          contactNumber:
+            typeof input.contactNumber === "string"
+              ? input.contactNumber.trim() || null
+              : null,
+        },
+      )
+      return { user: publicUser(user) }
+    } catch (error) {
+      if (isUniqueConflict(error))
+        throw new UsersError(409, "Email is already registered")
       if (isWriteConflict(error)) throw new UsersError(409, CHANGED)
       throw error
     }

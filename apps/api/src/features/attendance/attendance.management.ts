@@ -1,4 +1,7 @@
-import { Prisma } from "../../generated/prisma/client.js"
+import {
+  Prisma,
+  type AttendanceScheduleMode,
+} from "../../generated/prisma/client.js"
 import { isDeepStrictEqual } from "node:util"
 import { getPrisma } from "../../lib/db.js"
 import { lockRows } from "../../shared/db/locks.js"
@@ -10,7 +13,12 @@ import {
 } from "../../shared/query/pagination.js"
 import { parseQueryString } from "../../shared/query-helpers.js"
 import { isPlainObject, isRecordId, isUuidV4 } from "../../shared/validation.js"
-import { actor, selfEmployee, policyAt } from "./attendance.service.js"
+import {
+  actor,
+  selfEmployee,
+  selfEmployeeWithDepartmentLock,
+  policyAt,
+} from "./attendance.service.js"
 import { hasPermission, Permission } from "../auth/auth.permissions.js"
 import {
   hasOperationalCapability,
@@ -22,16 +30,54 @@ import {
   attendanceTimeZone,
   attendanceWorkDate,
 } from "./attendance.validation.js"
+import { attendanceRepository } from "./attendance.repository.js"
 import {
-  attendanceRepository,
-  attendanceWorkdayInclude,
-} from "./attendance.repository.js"
+  attendanceReportOverview,
+  attendanceReportPage,
+} from "./attendance.reporting.js"
 import { summarizeAttendance } from "./attendance.summary.js"
+import { notifyPendingAdjustment } from "./attendance.pending-notifications.js"
 import {
   notifyOvertime,
+  hrAdjustmentScope,
+  hasPendingWorkdayCorrection,
   submitRecordedOvertime,
 } from "./attendance.overtime.js"
 import { parseAttendanceHistory } from "./attendance.schema.js"
+import { setAttendanceAuditContext as context } from "../workforce-compliance-logs/write-context.js"
+import {
+  approvedLeaveForDate,
+  approvedLeaveOverlappingInterval,
+} from "../leave/leave.repository.js"
+
+type PolicyAssignmentStatus = "SCHEDULED" | "ENDED" | "CURRENT" | "CANCELLED"
+
+function policyAssignmentStatusAt(asOf: Date, timeZone: string) {
+  const instant = Prisma.sql`${asOf.toISOString()}::timestamptz`
+  // Match attendance_policy_at and the cancellation trigger at ambiguous midnight.
+  return Prisma.sql`CASE
+    WHEN "cancelledAt" IS NOT NULL THEN 'CANCELLED'
+    WHEN ${instant} < ("effectiveFrom"::timestamp AT TIME ZONE ${timeZone})
+      THEN 'SCHEDULED'
+    WHEN ${instant} >= attendance_assignment_end_at("employeeId", "effectiveUntil", ${timeZone})
+      THEN 'ENDED'
+    ELSE 'CURRENT'
+  END`
+}
+
+function attendanceEmployeeIdentity<
+  T extends {
+    fullName: string
+    employeeId: string
+    user: { fullName: string | null } | null
+  },
+>(employee: T) {
+  const { user, ...identity } = employee
+  const name = [employee.fullName, user?.fullName]
+    .map((value) => value?.trim())
+    .find((value) => value && !value.includes("@"))
+  return { ...identity, fullName: name || `Employee ${employee.employeeId}` }
+}
 
 async function managementScope(
   tx: Prisma.TransactionClient,
@@ -85,6 +131,7 @@ function policyInput(body: unknown) {
   const input = object(body, [
     "name",
     "timeZone",
+    "scheduleMode",
     "days",
     "unpaidBreaksEnabled",
     "overnightRequiresReview",
@@ -94,12 +141,27 @@ function policyInput(body: unknown) {
     typeof input.overnightRequiresReview !== "boolean"
   )
     fail(400, "Choose break and overnight policy options")
+  const requestedMode = input.scheduleMode
+  if (
+    requestedMode !== undefined &&
+    requestedMode !== "FLEXIBLE" &&
+    requestedMode !== "FIXED"
+  )
+    fail(400, "Choose a flexible or fixed schedule")
+  const scheduleMode: AttendanceScheduleMode = requestedMode ?? "FLEXIBLE"
+  const unpaidBreaksEnabled = input.unpaidBreaksEnabled
   return {
-    name: text(input.name, 1, 100),
-    timeZone: validated(() => attendanceTimeZone(input.timeZone)),
-    days: validated(() => attendancePolicyDays(input.days)),
-    unpaidBreaksEnabled: input.unpaidBreaksEnabled,
-    overnightRequiresReview: input.overnightRequiresReview,
+    explicitMode: requestedMode !== undefined,
+    rules: {
+      name: text(input.name, 1, 100),
+      timeZone: validated(() => attendanceTimeZone(input.timeZone)),
+      scheduleMode,
+      unpaidBreaksEnabled,
+      overnightRequiresReview: input.overnightRequiresReview,
+    },
+    days: validated(() =>
+      attendancePolicyDays(input.days, scheduleMode, unpaidBreaksEnabled),
+    ),
   }
 }
 async function lockedPolicy(tx: Prisma.TransactionClient, policyId: string) {
@@ -110,14 +172,6 @@ async function lockedPolicy(tx: Prisma.TransactionClient, policyId: string) {
   })
   if (!policy) fail(404, "Attendance policy not found")
   return policy
-}
-async function context(
-  tx: Prisma.TransactionClient,
-  userId: string,
-  reason: string,
-) {
-  await tx.$executeRaw`SELECT set_config('app.attendance_actor_id', ${userId}, true)`
-  await tx.$executeRaw`SELECT set_config('app.attendance_reason', ${reason}, true)`
 }
 function sessionSnapshot(
   session: NonNullable<
@@ -148,27 +202,44 @@ async function validateCorrection(
       400,
       "Correction timestamps must be ordered and cannot be in the future",
     )
+  if (
+    (await approvedLeaveOverlappingInterval(tx, employeeId, start, end)).length
+  )
+    fail(
+      409,
+      "Proposed attendance crosses approved leave; ask HR to reverse the leave first",
+    )
   const session = sessionId
     ? await attendanceRepository.session(tx, employeeId, sessionId)
     : null
   if (sessionId && !session) fail(404, "Attendance session not found")
-  if (session) {
-    if (
-      await tx.attendanceAdjustment.findFirst({
-        where: {
-          type: "OVERTIME",
-          status: { in: ["PENDING", "VERIFIED", "APPROVED"] },
-          session: { workdayId: session.workdayId },
-        },
+  const day = session
+    ? await tx.attendanceWorkday.findUniqueOrThrow({
+        where: { id: session.workdayId },
       })
-    )
-      fail(
-        409,
-        "Resolve overtime requests for this workday before correcting attendance",
-      )
-    const day = await tx.attendanceWorkday.findUniqueOrThrow({
-      where: { id: session.workdayId },
+    : null
+  const workDate = day
+    ? day.workDate.toISOString().slice(0, 10)
+    : (await policyAt(tx, employeeId, start, true))?.workDate
+  if (!workDate)
+    fail(409, "No policy is assigned for the missing session's starting date")
+  if (
+    await tx.attendanceAdjustment.findFirst({
+      where: {
+        type: "OVERTIME",
+        status: { in: ["PENDING", "VERIFIED", "APPROVED"] },
+        session: { workday: { employeeId, workDate: new Date(workDate) } },
+      },
+      select: { id: true },
     })
+  )
+    fail(
+      409,
+      "Resolve overtime requests for this workday before correcting attendance",
+    )
+  if (await approvedLeaveForDate(tx, employeeId, workDate))
+    fail(409, "Approved leave covers this attendance workday")
+  if (session && day) {
     if (
       attendanceWorkDate(start, day.timeZone) !==
       attendanceWorkDate(session.startedAt, day.timeZone)
@@ -184,8 +255,7 @@ async function validateCorrection(
         409,
         "The proposed session must contain its recorded breaks; end any open break first",
       )
-  } else if (!(await policyAt(tx, employeeId, start)))
-    fail(409, "No policy is assigned for the missing session's starting date")
+  }
   if (
     await tx.attendanceWorkSession.findFirst({
       where: {
@@ -210,6 +280,13 @@ async function validateOvertime(
 ) {
   if (end <= start || end > now)
     fail(400, "Overtime must be recorded work in the past")
+  if (
+    (await approvedLeaveOverlappingInterval(tx, employeeId, start, end)).length
+  )
+    fail(
+      409,
+      "Overtime overlaps approved leave. Ask HR to reconcile the leave first.",
+    )
   const session = await tx.attendanceWorkSession.findFirst({
     where: {
       employeeId,
@@ -262,16 +339,7 @@ async function validateOvertime(
     Math.floor(summarizeAttendance(day, now).excessMinutes)
   )
     fail(409, "Requested overtime exceeds the workday's unclaimed excess hours")
-  if (
-    await tx.attendanceAdjustment.findFirst({
-      where: {
-        employeeId,
-        type: "CORRECTION",
-        status: "PENDING",
-        session: { workdayId: day.id! },
-      },
-    })
-  )
+  if (await hasPendingWorkdayCorrection(tx, day))
     fail(
       409,
       "Resolve pending attendance corrections before requesting overtime",
@@ -294,9 +362,14 @@ async function adjustmentScope(
 ): Promise<Prisma.AttendanceAdjustmentWhereInput> {
   if (scope !== undefined && scope !== "mine" && scope !== "team")
     fail(400, "Invalid adjustment scope")
-  return scope === "team"
-    ? { employee: { departmentId: await managementScope(tx, userId) } }
-    : { employeeId: (await selfEmployee(tx, userId)).id }
+  if (scope !== "team")
+    return { employeeId: (await selfEmployee(tx, userId)).id }
+  const departmentId = await managementScope(tx, userId)
+  const user = await actor(tx, userId)
+  return {
+    employee: { departmentId },
+    ...(user.role === "ADMIN" ? await hrAdjustmentScope(tx) : {}),
+  }
 }
 
 /** Review eligibility only. Attendance validation, locks and stages still apply. */
@@ -311,26 +384,24 @@ function adjustmentReviewAccess(
   ownEmployeeId: string | undefined,
   organization: boolean,
   management = true,
+  superadmin = false,
+  exception = false,
 ) {
   const own =
     request.requestedById === userId || request.employeeId === ownEmployeeId
   const reviewable =
-    request.status === "PENDING" ||
-    (request.type === "OVERTIME" && request.status === "VERIFIED")
+    request.status === "PENDING" || request.status === "VERIFIED"
+  const finalReview = request.status === "VERIFIED" || exception
   const allowed = management && !own && reviewable
   return {
     own,
     reviewable,
-    approve:
+    approve: allowed && (superadmin || (organization && finalReview)),
+    verify: allowed && !organization && request.status === "PENDING",
+    reject:
       allowed &&
-      (request.type !== "OVERTIME" ||
-        (organization && request.status === "VERIFIED")),
-    verify:
-      allowed &&
-      !organization &&
-      request.type === "OVERTIME" &&
-      request.status === "PENDING",
-    reject: allowed && (organization || request.status === "PENDING"),
+      (superadmin ||
+        (organization ? finalReview : request.status === "PENDING")),
   }
 }
 
@@ -362,10 +433,13 @@ export function createAttendanceManagement(clock: () => Date) {
         "page",
         "employeeId",
         "departmentId",
-        ...(audit ? ["recordsOnly"] : []),
+        ...(audit ? ["recordsOnly", "search"] : []),
       ])
       if (input.recordsOnly !== undefined && input.recordsOnly !== "true")
         fail(400, "Invalid record audit filter")
+      const search = audit ? parseQueryString(input.search) : ""
+      if (search === null || search.length > 100)
+        fail(400, "Invalid attendance search")
       const range = parseAttendanceHistory(
         { from: input.from, to: input.to, page: input.page },
         clock(),
@@ -427,6 +501,16 @@ export function createAttendanceManagement(clock: () => Date) {
               ...(employeeId || departmentId
                 ? { employee: { is: employee } }
                 : {}),
+              ...insensitive<Prisma.AttendanceAuditWhereInput>(search, [
+                "action",
+                "entityType",
+                "reason",
+                "actorId",
+                (filter) => ({ employee: { is: { fullName: filter } } }),
+                (filter) => ({ employee: { is: { employeeId: filter } } }),
+                (filter) => ({ actor: { is: { fullName: filter } } }),
+                (filter) => ({ actor: { is: { email: filter } } }),
+              ]),
             }
             const { rows, ...paging } = await paginate(
               range.page,
@@ -434,6 +518,11 @@ export function createAttendanceManagement(clock: () => Date) {
                 rows: (db, window) =>
                   db.attendanceAudit.findMany({
                     where,
+                    omit: {
+                      operationId: true,
+                      correlationId: true,
+                      actorRoleAtTime: true,
+                    },
                     include: {
                       actor: { select: { fullName: true } },
                       employee: { select: { fullName: true } },
@@ -461,41 +550,37 @@ export function createAttendanceManagement(clock: () => Date) {
               })),
             }
           }
-          const where: Prisma.AttendanceWorkdayWhereInput = {
-            workDate: { gte: range.from, lte: range.to },
-            employee: { is: employee },
-          }
-          const { rows, ...paging } = await paginate(
-            range.page,
-            {
-              rows: (db, window) =>
-                db.attendanceWorkday.findMany({
-                  where,
-                  include: {
-                    ...attendanceWorkdayInclude,
-                    employee: {
-                      select: {
-                        id: true,
-                        fullName: true,
-                        employeeId: true,
-                        departmentId: true,
-                        department: { select: { name: true } },
-                      },
-                    },
-                  },
-                  orderBy: [{ workDate: "desc" }, { id: "desc" }],
-                  ...window,
-                }),
-              count: (db) => db.attendanceWorkday.count({ where }),
-            },
-            { tx },
+          const { rows, ...paging } = await attendanceReportPage(
+            tx,
+            range,
+            { employeeId, departmentId },
+            now,
+          )
+          const suspendedRows = rows.filter(({ day }) =>
+            day.sessions.some(
+              (session) => !session.endedAt && session.suspendedAt,
+            ),
+          )
+          const canManageReconciliation =
+            suspendedRows.length > 0 &&
+            hasPermission(
+              (await actor(tx, userId)).role,
+              Permission.EMPLOYEES_MANAGE,
+            )
+          const reconcilableWorkdays = new Set(
+            canManageReconciliation
+              ? suspendedRows
+                  .filter(({ employee }) => employee.user?.id !== userId)
+                  .map(({ day }) => day.id)
+              : [],
           )
           return {
             asOf: now,
             ...paging,
-            workdays: rows.map((day) => ({
-              ...summarizeAttendance(day, now),
-              employee: day.employee,
+            workdays: rows.map(({ day, employee }) => ({
+              ...day,
+              employee: attendanceEmployeeIdentity(employee),
+              canReconcile: reconcilableWorkdays.has(day.id),
             })),
           }
         },
@@ -536,6 +621,7 @@ export function createAttendanceManagement(clock: () => Date) {
                     fullName: true,
                     employeeId: true,
                     departmentId: true,
+                    user: { select: { fullName: true } },
                   },
                   orderBy: [{ fullName: "asc" }, { id: "asc" }],
                   ...window,
@@ -544,7 +630,7 @@ export function createAttendanceManagement(clock: () => Date) {
             },
             { tx },
           )
-          return { employees: rows, ...paging }
+          return { employees: rows.map(attendanceEmployeeIdentity), ...paging }
         },
         { isolationLevel: "RepeatableRead" },
       )
@@ -583,24 +669,17 @@ export function createAttendanceManagement(clock: () => Date) {
           )
             fail(404, "Department not found")
           const now = clock()
-          const rows = await tx.attendanceWorkday.findMany({
-            where: {
-              workDate: { gte: range.from, lte: range.to },
-              ...(employee ? { employeeId: employee.id } : {}),
-              ...(departmentId ? { employee: { departmentId } } : {}),
-            },
-            include: {
-              ...attendanceWorkdayInclude,
-              employee: { select: { fullName: true } },
-            },
-            take: 10001,
-          })
-          if (rows.length > 10000)
-            fail(
-              400,
-              "Narrow the overview date range to at most 10,000 records",
-            )
-          const days = rows.map((day) => summarizeAttendance(day, now))
+          const rows = await attendanceReportOverview(
+            tx,
+            range,
+            { employeeId: employee?.id, departmentId },
+            now,
+          )
+          const days = rows.map(({ day }) => day)
+          const recorded = rows.filter(({ day }) => day.id !== null)
+          const approvedLeave = days.filter(
+            (day) => day.approvedLeaveMinutes > 0,
+          )
           const statusBreakdown = {
             NOT_STARTED: 0,
             IN_PROGRESS: 0,
@@ -613,19 +692,20 @@ export function createAttendanceManagement(clock: () => Date) {
             const status = day.status as keyof typeof statusBreakdown
             statusBreakdown[status] += 1
           }
-          const sessions = rows.flatMap((day) => day.sessions)
-          const open = sessions.filter((session) => !session.endedAt)
+          const sessions = recorded.flatMap(({ day }) => day.sessions)
+          const unfinished = sessions.filter((session) => !session.endedAt)
+          const open = unfinished.filter((session) => !session.suspendedAt)
           const onBreak = open.filter((session) =>
             session.breaks.some((pause) => !pause.endedAt && !pause.isPaid),
           ).length
-          const recentActivity = rows
-            .flatMap((day) =>
+          const recentActivity = recorded
+            .flatMap(({ day, employee }) =>
               day.sessions.flatMap((session) => [
                 {
                   id: session.id + ":in",
                   action: "CLOCK_IN" as const,
                   at: session.startedAt,
-                  employeeName: day.employee.fullName,
+                  employeeName: employee.fullName,
                 },
                 ...(session.endedAt
                   ? [
@@ -633,7 +713,7 @@ export function createAttendanceManagement(clock: () => Date) {
                         id: session.id + ":out",
                         action: "CLOCK_OUT" as const,
                         at: session.endedAt,
-                        employeeName: day.employee.fullName,
+                        employeeName: employee.fullName,
                       },
                     ]
                   : []),
@@ -642,7 +722,7 @@ export function createAttendanceManagement(clock: () => Date) {
                     id: pause.id + ":start",
                     action: "BREAK_START" as const,
                     at: pause.startedAt,
-                    employeeName: day.employee.fullName,
+                    employeeName: employee.fullName,
                   },
                   ...(pause.endedAt
                     ? [
@@ -650,7 +730,7 @@ export function createAttendanceManagement(clock: () => Date) {
                           id: pause.id + ":end",
                           action: "BREAK_END" as const,
                           at: pause.endedAt,
-                          employeeName: day.employee.fullName,
+                          employeeName: employee.fullName,
                         },
                       ]
                     : []),
@@ -665,12 +745,13 @@ export function createAttendanceManagement(clock: () => Date) {
           return {
             checkIns: {
               employees: new Set(
-                rows
-                  .filter((day) => day.sessions.length)
-                  .map((day) => day.employeeId),
+                recorded
+                  .filter(({ day }) => day.sessions.length)
+                  .map(({ day }) => day.employeeId),
               ).size,
               total: sessions.length,
-              closed: sessions.length - open.length,
+              closed: sessions.length - unfinished.length,
+              suspended: unfinished.length - open.length,
               working: open.length - onBreak,
               onBreak,
               recentActivity,
@@ -681,8 +762,14 @@ export function createAttendanceManagement(clock: () => Date) {
               : departmentId
                 ? "DEPARTMENT"
                 : "ORGANIZATION",
-            recordedDays: days.length,
-            employees: new Set(days.map((day) => day.employeeId)).size,
+            recordedDays: recorded.length,
+            employees: new Set(recorded.map(({ day }) => day.employeeId)).size,
+            approvedLeaveDays: approvedLeave.length,
+            approvedLeaveHours:
+              approvedLeave.reduce(
+                (sum, day) => sum + day.approvedLeaveMinutes,
+                0,
+              ) / 60,
             workedHours: days.reduce((sum, day) => sum + day.workedHours, 0),
             requiredHours: days.reduce(
               (sum, day) => sum + day.requiredHours,
@@ -705,35 +792,75 @@ export function createAttendanceManagement(clock: () => Date) {
         { isolationLevel: "RepeatableRead" },
       )
     },
-    async policies(userId: string) {
-      return getPrisma()!.$transaction(async (tx) => {
-        await managementScope(tx, userId, true)
-        const [totalPolicies, activePolicies, assignmentPeriods] =
-          await Promise.all([
-            tx.attendancePolicy.count(),
-            tx.attendancePolicy.count({ where: { archivedAt: null } }),
-            tx.attendancePolicyAssignment.count(),
-          ])
-        return {
-          summary: {
-            totalPolicies,
-            activePolicies,
-            archivedPolicies: totalPolicies - activePolicies,
-            assignmentPeriods,
-          },
-          policies: await tx.attendancePolicy.findMany({
-            include: {
-              days: { orderBy: { weekday: "asc" } },
-              _count: { select: { assignments: true } },
+    async policies(userId: string, query: Record<string, unknown> = {}) {
+      object(query, ["page", "search", "status", "size"])
+      const page = parsePage(query.page)
+      const search = parseQueryString(query.search)
+      if (
+        page === null ||
+        search === null ||
+        search.length > 100 ||
+        (query.size !== undefined &&
+          query.size !== "10" &&
+          query.size !== "200") ||
+        (query.status !== undefined &&
+          query.status !== "active" &&
+          query.status !== "archived")
+      )
+        fail(400, "Invalid policy directory filters")
+      const pageSize = query.size === "10" ? 10 : 200
+      const where: Prisma.AttendancePolicyWhereInput = {
+        ...(query.status === "active"
+          ? { archivedAt: null }
+          : query.status === "archived"
+            ? { archivedAt: { not: null } }
+            : {}),
+        ...insensitive<Prisma.AttendancePolicyWhereInput>(search, [
+          "name",
+          "timeZone",
+        ]),
+      }
+      return getPrisma()!.$transaction(
+        async (tx) => {
+          await managementScope(tx, userId, true)
+          const [totalPolicies, activePolicies, assignmentPeriods] =
+            await Promise.all([
+              tx.attendancePolicy.count(),
+              tx.attendancePolicy.count({ where: { archivedAt: null } }),
+              tx.attendancePolicyAssignment.count({
+                where: { cancelledAt: null },
+              }),
+            ])
+          return {
+            page,
+            pageSize,
+            total:
+              search || query.status
+                ? await tx.attendancePolicy.count({ where })
+                : totalPolicies,
+            summary: {
+              totalPolicies,
+              activePolicies,
+              archivedPolicies: totalPolicies - activePolicies,
+              assignmentPeriods,
             },
-            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-            take: 200,
-          }),
-        }
-      })
+            policies: await tx.attendancePolicy.findMany({
+              include: {
+                days: { orderBy: { weekday: "asc" } },
+                _count: { select: { assignments: true } },
+              },
+              orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+              where,
+              skip: (page - 1) * pageSize,
+              take: pageSize,
+            }),
+          }
+        },
+        { isolationLevel: "RepeatableRead" },
+      )
     },
     async createPolicy(userId: string, body: unknown) {
-      const { days, ...input } = policyInput(body)
+      const { days, rules: input } = policyInput(body)
       return getPrisma()!.$transaction(async (tx) => {
         await managementScope(tx, userId, true)
         const zones = await tx.$queryRaw<
@@ -754,12 +881,31 @@ export function createAttendanceManagement(clock: () => Date) {
       })
     },
     async updatePolicy(userId: string, policyId: string, body: unknown) {
-      const { days, ...input } = policyInput(body)
+      const { days, explicitMode, rules: input } = policyInput(body)
       return getPrisma()!.$transaction(async (tx) => {
         await managementScope(tx, userId, true)
         const policy = await lockedPolicy(tx, policyId)
+        if (policy.scheduleMode === "FIXED" && !explicitMode)
+          fail(
+            409,
+            "Choose a schedule type when editing a fixed attendance policy",
+          )
         if (policy.archivedAt)
           fail(409, "Restore the archived policy before editing it")
+        const futureLeave = await tx.leaveRequestDay.findFirst({
+          where: {
+            assignment: { policyId },
+            request: { status: "APPROVED" },
+            workDate: {
+              gte: new Date(attendanceWorkDate(clock(), policy.timeZone)),
+            },
+          },
+        })
+        if (futureLeave)
+          fail(
+            409,
+            "Reverse future approved leave before editing its attendance policy",
+          )
         if (policy._count.assignments && policy.timeZone !== input.timeZone)
           fail(
             409,
@@ -880,33 +1026,198 @@ export function createAttendanceManagement(clock: () => Date) {
             },
             { tx },
           )
-          const today = attendanceWorkDate(clock(), policy.timeZone)
+          const asOf = clock()
+          const statuses = rows.length
+            ? await tx.$queryRaw<
+                { id: string; status: PolicyAssignmentStatus }[]
+              >`
+                SELECT id, ${policyAssignmentStatusAt(asOf, policy.timeZone)} AS status
+                FROM "AttendancePolicyAssignment"
+                WHERE id IN (${Prisma.join(rows.map(({ id }) => id))})
+              `
+            : []
+          const statusById = new Map(
+            statuses.map(({ id, status }) => [id, status]),
+          )
           return {
             ...paging,
             assignments: rows.map((assignment) => ({
               ...assignment,
-              status:
-                assignment.effectiveFrom.toISOString().slice(0, 10) > today
-                  ? "SCHEDULED"
-                  : assignment.effectiveUntil &&
-                      assignment.effectiveUntil.toISOString().slice(0, 10) <=
-                        today
-                    ? "ENDED"
-                    : "CURRENT",
+              status: statusById.get(assignment.id)!,
             })),
           }
         },
         { isolationLevel: "RepeatableRead" },
       )
     },
+    async unassignPolicy(userId: string, assignmentId: string, body?: unknown) {
+      const { expectedStatus } = object(body ?? {}, ["expectedStatus"])
+      if (
+        expectedStatus !== undefined &&
+        expectedStatus !== "CURRENT" &&
+        expectedStatus !== "SCHEDULED"
+      )
+        fail(400, "Choose an active or scheduled assignment")
+      return getPrisma()!.$transaction(async (tx) => {
+        await managementScope(tx, userId, true)
+        const initial = await tx.attendancePolicyAssignment.findUnique({
+          where: { id: assignmentId },
+        })
+        if (!initial) fail(404, "Policy assignment not found")
+        await lockRows(tx, "Employee", initial.employeeId)
+        const assignment =
+          await tx.attendancePolicyAssignment.findUniqueOrThrow({
+            where: { id: assignmentId },
+            include: { policy: true },
+          })
+        if (assignment.cancelledAt && expectedStatus === undefined)
+          return { unassigned: true }
+        const now = clock()
+        const [{ status }] = await tx.$queryRaw<
+          { status: PolicyAssignmentStatus }[]
+        >`
+          SELECT ${policyAssignmentStatusAt(now, assignment.policy.timeZone)} AS status
+          FROM "AttendancePolicyAssignment"
+          WHERE id = ${assignmentId}
+        `
+        if (expectedStatus && status !== expectedStatus)
+          fail(
+            409,
+            "The assignment status changed. Refresh and choose an action again.",
+          )
+        const scheduled = status === "SCHEDULED"
+        const today = attendanceWorkDate(now, assignment.policy.timeZone)
+        const tomorrow = new Date(today)
+        tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
+        if (
+          await tx.leaveRequestDay.findFirst({
+            where: {
+              assignmentId,
+              ...(scheduled ? {} : { workDate: { gte: tomorrow } }),
+              request: {
+                status: { in: ["SUBMITTED", "VERIFIED", "APPROVED"] },
+              },
+            },
+          })
+        )
+          fail(
+            409,
+            "Resolve future leave requests before ending this assignment",
+          )
+        if (
+          status === "ENDED" ||
+          (!scheduled &&
+            assignment.effectiveUntil &&
+            assignment.effectiveUntil <= tomorrow)
+        )
+          fail(409, "This assignment has already ended or is already ending")
+        await context(
+          tx,
+          userId,
+          scheduled
+            ? "Cancelled scheduled attendance assignment"
+            : "Ended attendance assignment",
+        )
+        if (scheduled) {
+          if (await tx.attendanceWorkday.findFirst({ where: { assignmentId } }))
+            fail(
+              409,
+              "This assignment has recorded attendance and cannot be cancelled",
+            )
+          const leaveHistory = await tx.leaveRequestDay.findFirst({
+            where: { assignmentId },
+            select: { id: true },
+          })
+          if (leaveHistory) {
+            await tx.attendancePolicyAssignment.update({
+              where: { id: assignmentId },
+              data: { cancelledAt: now },
+            })
+          } else {
+            await tx.attendancePolicyAssignment.delete({
+              where: { id: assignmentId },
+            })
+          }
+          const next = await tx.attendancePolicyAssignment.findFirst({
+            where: {
+              employeeId: assignment.employeeId,
+              cancelledAt: null,
+              effectiveFrom: { gt: assignment.effectiveFrom },
+            },
+            orderBy: { effectiveFrom: "asc" },
+          })
+          let restoredId: string | null = null
+          let restoredUntil = assignment.replacedUntil
+          if (assignment.replacedAssignmentId) {
+            if (next && (!restoredUntil || next.effectiveFrom < restoredUntil))
+              restoredUntil = next.effectiveFrom
+            const restored = await tx.attendancePolicyAssignment.updateMany({
+              where: {
+                id: assignment.replacedAssignmentId,
+                employeeId: assignment.employeeId,
+                cancelledAt: null,
+                effectiveUntil: assignment.effectiveFrom,
+              },
+              data: { effectiveUntil: restoredUntil },
+            })
+            if (restored.count) restoredId = assignment.replacedAssignmentId
+          }
+          if (next?.replacedAssignmentId === assignment.id) {
+            const continues =
+              restoredUntil?.getTime() === next.effectiveFrom.getTime() &&
+              assignment.replacedUntil?.getTime() !==
+                next.effectiveFrom.getTime()
+            await tx.attendancePolicyAssignment.update({
+              where: { id: next.id },
+              data: {
+                replacedAssignmentId: continues ? restoredId : null,
+                replacedUntil:
+                  continues && restoredId ? assignment.replacedUntil : null,
+              },
+            })
+          }
+        } else {
+          const lastRecordedDay = await tx.attendanceWorkday.findFirst({
+            where: { assignmentId, workDate: { gte: tomorrow } },
+            orderBy: { workDate: "desc" },
+            select: { workDate: true },
+          })
+          if (lastRecordedDay) {
+            const blockedDate = lastRecordedDay.workDate
+              .toISOString()
+              .slice(0, 10)
+            const endDate = tomorrow.toISOString().slice(0, 10)
+            fail(
+              409,
+              `Attendance is already recorded for ${blockedDate} under this policy. Ending coverage on ${endDate} in ${assignment.policy.timeZone} would exclude that workday. Find it in Time Logs → Records by selecting this employee and filtering by work date.`,
+            )
+          }
+          await tx.attendancePolicyAssignment.update({
+            where: { id: assignmentId },
+            data: { effectiveUntil: tomorrow },
+          })
+        }
+        return { unassigned: true }
+      })
+    },
     async assignPolicy(userId: string, body: unknown) {
-      const input = object(body, ["employeeId", "policyId", "effectiveFrom"])
+      const input = object(body, [
+        "employeeId",
+        "policyId",
+        "effectiveFrom",
+        "replacesAssignmentId",
+      ])
       const employeeId = id(input.employeeId),
         policyId = id(input.policyId)
+      const replacesAssignmentId =
+        input.replacesAssignmentId === undefined
+          ? undefined
+          : id(input.replacesAssignmentId)
       const from = parseAttendanceHistory(
         { from: input.effectiveFrom, to: input.effectiveFrom },
         clock(),
       ).from
+      const effectiveDate = from.toISOString().slice(0, 10)
       return getPrisma()!.$transaction(
         async (tx) => {
           await managementScope(tx, userId, true)
@@ -925,25 +1236,73 @@ export function createAttendanceManagement(clock: () => Date) {
             fail(404, "Employee or policy not found")
           if (policy.days.length !== 7)
             fail(409, "Configure all seven weekdays before assignment")
-          if (
-            from.toISOString().slice(0, 10) <
-            attendanceWorkDate(clock(), policy.timeZone)
-          )
+          if (effectiveDate < attendanceWorkDate(clock(), policy.timeZone))
             fail(400, "Policy assignments must start today or later")
           const overlapping = await tx.attendancePolicyAssignment.findMany({
             where: {
               employeeId,
+              cancelledAt: null,
               OR: [{ effectiveUntil: null }, { effectiveUntil: { gt: from } }],
             },
           })
-          if (overlapping.some((item) => item.effectiveFrom >= from))
-            fail(409, "An assignment already starts on or after that date")
           if (
-            await tx.attendanceWorkday.findFirst({
-              where: { employeeId, workDate: { gte: from } },
+            await tx.leaveRequestDay.findFirst({
+              where: {
+                employeeId,
+                workDate: { gte: from },
+                request: { status: "APPROVED" },
+              },
             })
           )
-            fail(409, "Choose a date after existing attendance records")
+            fail(
+              409,
+              "Reverse future approved leave before changing its policy assignment",
+            )
+          if (overlapping.some((item) => item.effectiveFrom >= from))
+            fail(409, "An assignment already starts on or after that date")
+          if (replacesAssignmentId) {
+            const previous = overlapping.find(
+              (item) => item.id === replacesAssignmentId,
+            )
+            if (!previous || previous.policyId === policyId)
+              fail(
+                409,
+                "Choose a different policy and a date covered by the assignment you are replacing",
+              )
+          }
+          const lastRecordedDay = await tx.attendanceWorkday.findFirst({
+            where: { employeeId, workDate: { gte: from } },
+            orderBy: { workDate: "desc" },
+            select: { workDate: true },
+          })
+          if (lastRecordedDay) {
+            const blockedDate = lastRecordedDay.workDate
+              .toISOString()
+              .slice(0, 10)
+            fail(
+              409,
+              `Attendance is already recorded for ${blockedDate}. Choose an effective date after that workday. Find it in Time Logs → Records by selecting this employee and filtering by work date.`,
+            )
+          }
+          // The new policy supplies the cutoff even for a period already ending on this date.
+          const [{ conflict }] = await tx.$queryRaw<{ conflict: boolean }[]>`
+            SELECT EXISTS (
+              SELECT 1
+              FROM "AttendancePolicyAssignment" previous
+              JOIN "AttendancePolicy" outgoing ON outgoing.id = previous."policyId"
+              WHERE previous."employeeId" = ${employeeId}
+                AND previous."cancelledAt" IS NULL
+                AND previous."effectiveFrom" < ${effectiveDate}::date
+                AND (previous."effectiveUntil" IS NULL OR previous."effectiveUntil" >= ${effectiveDate}::date)
+                AND (previous."effectiveFrom"::timestamp AT TIME ZONE outgoing."timeZone")
+                  >= (${effectiveDate}::date::timestamp AT TIME ZONE ${policy.timeZone})
+            ) AS conflict
+          `
+          if (conflict)
+            fail(
+              409,
+              "Choose an effective date whose midnight is after the previous assignment starts",
+            )
           await context(tx, userId, "Assigned attendance policy version")
           for (const item of overlapping)
             await tx.attendancePolicyAssignment.update({
@@ -952,11 +1311,70 @@ export function createAttendanceManagement(clock: () => Date) {
             })
           return {
             assignment: await tx.attendancePolicyAssignment.create({
-              data: { employeeId, policyId, effectiveFrom: from },
+              data: {
+                employeeId,
+                policyId,
+                effectiveFrom: from,
+                replacedAssignmentId: overlapping[0]?.id,
+                replacedUntil: overlapping[0]?.effectiveUntil,
+              },
             }),
           }
         },
         { isolationLevel: "ReadCommitted" },
+      )
+    },
+    async adjustmentDetail(userId: string, adjustmentId: string) {
+      return getPrisma()!.$transaction(
+        async (tx) => {
+          const user = await actor(tx, userId)
+          if (user.role === "USER") fail(403, "Workforce access required")
+          const employee = await tx.employee.findUnique({
+            where: { userId },
+            select: { id: true },
+          })
+          const head =
+            user.role === "STAFF"
+              ? await tx.department.findUnique({
+                  where: { headId: userId },
+                  select: { id: true },
+                })
+              : null
+          const organization = hasPermission(
+            user.role,
+            Permission.EMPLOYEES_READ,
+          )
+          const scope: Prisma.AttendanceAdjustmentWhereInput[] = [
+            { requestedById: userId },
+          ]
+          if (employee) scope.push({ employeeId: employee.id })
+          if (head) scope.push({ employee: { departmentId: head.id } })
+          if (user.role === "ADMIN" && organization)
+            scope.push(await hrAdjustmentScope(tx))
+          const row = await tx.attendanceAdjustment.findFirst({
+            where: {
+              id: adjustmentId,
+              ...(user.role === "SUPERADMIN" && organization
+                ? {}
+                : { OR: scope }),
+            },
+            include: adjustmentInclude,
+          })
+          if (!row) fail(404, "Attendance request not found")
+          const { approve, verify, reject } = adjustmentReviewAccess(
+            row,
+            userId,
+            employee?.id,
+            organization,
+            organization || head?.id === row.employee.departmentId,
+            user.role === "SUPERADMIN",
+            user.role === "ADMIN" && organization,
+          )
+          return {
+            adjustment: { ...row, capabilities: { approve, verify, reject } },
+          }
+        },
+        { isolationLevel: "RepeatableRead" },
       )
     },
     async adjustmentOverview(userId: string, query: Record<string, unknown>) {
@@ -964,6 +1382,14 @@ export function createAttendanceManagement(clock: () => Date) {
       return getPrisma()!.$transaction(
         async (tx) => {
           const where = await adjustmentScope(tx, userId, query.scope)
+          const exceptions = await tx.attendanceAdjustment.groupBy({
+            by: ["type"],
+            where: {
+              AND: [where, await hrAdjustmentScope(tx)],
+              status: "PENDING",
+            },
+            _count: { _all: true },
+          })
           const rows = await tx.attendanceAdjustment.groupBy({
             by: ["type", "status"],
             where,
@@ -976,6 +1402,11 @@ export function createAttendanceManagement(clock: () => Date) {
               status: row.status,
               count: row._count._all,
               overtimeMinutes: row._sum.overtimeMinutes ?? 0,
+              awaitingHrPending:
+                row.status === "PENDING"
+                  ? (exceptions.find((item) => item.type === row.type)?._count
+                      ._all ?? 0)
+                  : 0,
             })),
           }
         },
@@ -1023,7 +1454,7 @@ export function createAttendanceManagement(clock: () => Date) {
           const where: Prisma.AttendanceAdjustmentWhereInput = {
             ...(query.type ? { type: String(query.type) } : {}),
             ...(status ? { status } : {}),
-            ...scopeWhere,
+            AND: [scopeWhere],
             ...insensitive<Prisma.AttendanceAdjustmentWhereInput>(search, [
               "reason",
               (filter) => ({ employee: { is: { fullName: filter } } }),
@@ -1052,6 +1483,8 @@ export function createAttendanceManagement(clock: () => Date) {
                 ownEmployee?.id,
                 hasPermission(user.role, Permission.EMPLOYEES_READ),
                 query.scope === "team",
+                user.role === "SUPERADMIN",
+                user.role === "ADMIN" && query.scope === "team",
               )
               return { ...row, capabilities: { approve, verify, reject } }
             }),
@@ -1093,7 +1526,7 @@ export function createAttendanceManagement(clock: () => Date) {
       const reason = text(input.reason, 5)
       return getPrisma()!.$transaction(
         async (tx) => {
-          const employee = await selfEmployee(tx, userId, true)
+          const employee = await selfEmployeeWithDepartmentLock(tx, userId)
           const existing = await tx.attendanceAdjustment.findUnique({
             where: { requestKey },
           })
@@ -1135,7 +1568,11 @@ export function createAttendanceManagement(clock: () => Date) {
             type === "CORRECTION" &&
             sessionId &&
             (await tx.attendanceAdjustment.findFirst({
-              where: { sessionId, status: "PENDING", type: "CORRECTION" },
+              where: {
+                sessionId,
+                status: { in: ["PENDING", "VERIFIED"] },
+                type: "CORRECTION",
+              },
             }))
           )
             fail(409, "This session already has a pending correction")
@@ -1154,8 +1591,7 @@ export function createAttendanceManagement(clock: () => Date) {
               requestedById: userId,
             },
           })
-          if (type === "OVERTIME")
-            await notifyOvertime(tx, adjustment.id, "PENDING")
+          await notifyPendingAdjustment(tx, adjustment.id)
           return { adjustment }
         },
         { isolationLevel: "ReadCommitted" },
@@ -1199,17 +1635,43 @@ export function createAttendanceManagement(clock: () => Date) {
           const request = await tx.attendanceAdjustment.findUniqueOrThrow({
             where: { id: adjustmentId },
           })
+          const reviewer = await actor(tx, userId)
+          if (currentEmployee.departmentId !== snapshot.employee.departmentId)
+            fail(409, "Employee placement changed; refresh and try again")
+          const exception =
+            reviewer.role === "ADMIN" &&
+            request.status === "PENDING" &&
+            Boolean(
+              await tx.attendanceAdjustment.findFirst({
+                where: { id: request.id, ...(await hrAdjustmentScope(tx)) },
+                select: { id: true },
+              }),
+            )
           const access = adjustmentReviewAccess(
             request,
             userId,
             currentEmployee.userId === userId ? currentEmployee.id : undefined,
             !currentScope,
+            true,
+            reviewer.role === "SUPERADMIN",
+            exception,
           )
           if (access.own)
             fail(403, "You cannot review your own attendance request")
           const overtime = request.type === "OVERTIME"
           if (!access.reviewable)
             fail(409, "This request has already been reviewed")
+          if (
+            reviewer.role === "ADMIN" &&
+            request.status === "PENDING" &&
+            !exception
+          )
+            fail(
+              403,
+              "Department Head verification is required before HR review",
+            )
+          if (currentScope && request.status === "VERIFIED")
+            fail(403, "HR must finalize verified requests")
           await context(tx, userId, note)
           if (overtime) {
             if (!currentScope && decision === "APPROVED" && !access.approve)
@@ -1267,6 +1729,20 @@ export function createAttendanceManagement(clock: () => Date) {
                 409,
                 "Attendance changed after submission; request a new correction",
               )
+            if (currentScope) {
+              const adjustment = await tx.attendanceAdjustment.update({
+                where: { id: request.id },
+                data: {
+                  status: "VERIFIED",
+                  verifiedById: userId,
+                  verifiedAt: clock(),
+                  verificationNote: note,
+                },
+                include: adjustmentInclude,
+              })
+              await notifyOvertime(tx, request.id, "VERIFIED")
+              return { adjustment }
+            }
             if (session)
               await tx.attendanceWorkSession.update({
                 where: { id: session.id },
@@ -1284,7 +1760,7 @@ export function createAttendanceManagement(clock: () => Date) {
                 },
               })
           }
-          if (overtime) await notifyOvertime(tx, request.id, decision)
+          await notifyOvertime(tx, request.id, decision)
           const adjustment = await tx.attendanceAdjustment.update({
             where: { id: request.id },
             data: {
@@ -1296,20 +1772,23 @@ export function createAttendanceManagement(clock: () => Date) {
             include: adjustmentInclude,
           })
           if (!overtime && currentEmployee.userId) {
-            const session = await tx.attendanceWorkSession.findFirst({
-              where: {
-                employeeId: request.employeeId,
-                ...(request.sessionId
-                  ? { id: request.sessionId }
-                  : {
-                      startedAt: request.proposedStartedAt,
-                      endedAt: request.proposedEndedAt,
-                    }),
-              },
-            })
-            if (session) {
+            // The Department and Employee locks also cover automatic overtime routing.
+            const policy = request.sessionId
+              ? null
+              : await policyAt(
+                  tx,
+                  request.employeeId,
+                  request.proposedStartedAt,
+                )
+            const workday = request.sessionId
+              ? { sessions: { some: { id: request.sessionId } } }
+              : policy
+                ? { workDate: new Date(policy.workDate) }
+                : null
+            if (workday) {
               const sessions = await tx.attendanceWorkSession.findMany({
-                where: { workdayId: session.workdayId },
+                where: { employeeId: request.employeeId, workday },
+                select: { id: true },
                 orderBy: { startedAt: "asc" },
               })
               for (const item of sessions)

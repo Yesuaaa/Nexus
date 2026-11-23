@@ -9,9 +9,57 @@ import {
   elapsedWork,
   duration,
   attendanceDate,
+  deviceDateTime,
+  deviceDateTimeOccurrences,
 } from "../src/features/attendance/model/attendance.ts"
-import { Permissions } from "../src/features/auth/model/permissions.ts"
+import {
+  canAccessPersonalAttendance,
+  Permissions,
+} from "../src/features/auth/model/permissions.ts"
 import { formatDateTime } from "../src/lib/format.ts"
+
+test("correction times resolve device-zone gaps, folds, and ordinary intervals", (t) => {
+  const originalZone = process.env.TZ
+  t.after(() => {
+    if (originalZone === undefined) delete process.env.TZ
+    else process.env.TZ = originalZone
+  })
+  process.env.TZ = "America/Los_Angeles"
+  const occurrences = (value) =>
+    deviceDateTimeOccurrences(value).map((date) => date.toISOString())
+
+  assert.deepEqual(occurrences("2026-03-08T02:30"), [])
+  assert.deepEqual(occurrences("2026-02-30T09:00"), [])
+  const starts = occurrences("2026-11-01T01:45")
+  const ends = occurrences("2026-11-01T01:15")
+  assert.deepEqual(starts, [
+    "2026-11-01T08:45:00.000Z",
+    "2026-11-01T09:45:00.000Z",
+  ])
+  assert.deepEqual(ends, [
+    "2026-11-01T08:15:00.000Z",
+    "2026-11-01T09:15:00.000Z",
+  ])
+  assert.equal(Date.parse(ends[1]) - Date.parse(starts[0]), 30 * 60000)
+  assert.equal(Date.parse(ends[0]) - Date.parse(starts[1]), -90 * 60000)
+  assert.equal(deviceDateTime(starts[0]), "2026-11-01T01:45")
+  assert.equal(deviceDateTime(starts[1]), "2026-11-01T01:45")
+  assert.deepEqual(occurrences("2026-11-05T23:30"), [
+    "2026-11-06T07:30:00.000Z",
+  ])
+
+  process.env.TZ = "Australia/Lord_Howe"
+  assert.deepEqual(occurrences("2026-04-05T01:45"), [
+    "2026-04-04T14:45:00.000Z",
+    "2026-04-04T15:15:00.000Z",
+  ])
+  assert.deepEqual(occurrences("2026-10-04T02:15"), [])
+
+  process.env.TZ = "Asia/Manila"
+  assert.deepEqual(occurrences("2026-11-01T01:45"), [
+    "2026-10-31T17:45:00.000Z",
+  ])
+})
 
 test("shared timestamp formatting preserves UTC and overnight local calendar dates", () => {
   const timestamp = "2026-11-13T20:00:00Z"
@@ -43,7 +91,12 @@ test("attendance navigation grants self-service independently of employee manage
     )
   }
   assert.equal(canAccessRoute(staff, "/employees"), false)
-  for (const path of ["/attendance/dashboard", "/attendance/records"]) {
+  for (const path of [
+    "/attendance/time-logs/overview",
+    "/attendance/records",
+    "/attendance/audit",
+    "/attendance/time-logs/audit",
+  ]) {
     assert.equal(canAccessRoute(staff, path), false)
     assert.equal(canAccessRoute(head, path), true)
     assert.equal(canAccessRoute(admin, path), true)
@@ -133,4 +186,48 @@ test("all attendance navigation pages preserve module ownership and role boundar
       for (const role of ["USER", "SUPERADMIN"])
         assert.equal(canAccessRoute({ ...staff, role }, link.href), false)
     }
+})
+
+test("[PG-003-F001-A001-T001] personal attendance selection requires active STAFF or ADMIN", () => {
+  const account = (role, isActive = true, permissions = []) => ({
+    role,
+    isActive,
+    permissions,
+    headOf: null,
+  })
+
+  assert.equal(canAccessPersonalAttendance(account("STAFF")), true)
+  assert.equal(canAccessPersonalAttendance(account("ADMIN", true, [])), true)
+  assert.equal(canAccessPersonalAttendance(account("USER")), false)
+  assert.equal(canAccessPersonalAttendance(account("SUPERADMIN")), false)
+  assert.equal(
+    canAccessPersonalAttendance(
+      account("SUPERADMIN", true, [Permissions.EMPLOYEES_READ]),
+    ),
+    false,
+  )
+  assert.equal(canAccessPersonalAttendance(account("STAFF", false)), false)
+  assert.equal(canAccessPersonalAttendance(account("ADMIN", false)), false)
+})
+
+test("[PG-003-F001-A003-T002] attendance entry route enforces active role and read grant", () => {
+  const account = (role, isActive = true, permissions = []) => ({
+    role,
+    isActive,
+    permissions,
+  })
+
+  assert.equal(canAccessRoute(account("STAFF"), "/attendance"), true)
+  assert.equal(canAccessRoute(account("ADMIN"), "/attendance"), true)
+  assert.equal(
+    canAccessRoute(
+      account("SUPERADMIN", true, [Permissions.EMPLOYEES_READ]),
+      "/attendance",
+    ),
+    true,
+  )
+  assert.equal(canAccessRoute(account("SUPERADMIN"), "/attendance"), false)
+  assert.equal(canAccessRoute(account("USER"), "/attendance"), false)
+  assert.equal(canAccessRoute(account("STAFF", false), "/attendance"), false)
+  assert.equal(canAccessRoute(account("ADMIN", false), "/attendance"), false)
 })

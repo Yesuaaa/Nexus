@@ -1,4 +1,6 @@
 import { Router } from "express"
+import { writeServiceLog } from "../service-operation-logs/log-writer.js"
+import { auditCode } from "../service-operation-logs/audit-context.js"
 import { getPrisma } from "../../lib/db.js"
 import { Role } from "../../generated/prisma/client.js"
 import { requireAuth, requireRole } from "../auth/auth.middleware.js"
@@ -15,21 +17,56 @@ clientServicesRouter.use(requireRole(Role.USER))
 clientServicesRouter.post(
   "/service-requests/:id/cancel",
   async (request, response) => {
-    const result = await getPrisma()!.serviceRequest.updateMany({
-      where: {
-        id: String(request.params.id),
-        clientId: request.auth!.user.id,
-        acceptedDepartmentId: null,
-        status: {
-          in: [
-            "SUBMITTED",
-            "UNDER_REVIEW",
-            "AWAITING_CLIENT_INFO",
-            "READY_FOR_QUOTATION",
-          ],
+    const result = await getPrisma()!.$transaction(async (tx) => {
+      const current = await tx.serviceRequest.findFirst({
+        where: {
+          id: String(request.params.id),
+          clientId: request.auth!.user.id,
         },
-      },
-      data: { status: "CANCELLED" },
+        select: {
+          status: true,
+          referenceNumber: true,
+          service: { select: { name: true } },
+        },
+      })
+      const result = await tx.serviceRequest.updateMany({
+        where: {
+          id: String(request.params.id),
+          clientId: request.auth!.user.id,
+          acceptedDepartmentId: null,
+          status: {
+            in: [
+              "SUBMITTED",
+              "UNDER_REVIEW",
+              "AWAITING_CLIENT_INFO",
+              "READY_FOR_QUOTATION",
+            ],
+          },
+        },
+        data: { status: "CANCELLED" },
+      })
+      if (result.count)
+        await writeServiceLog(
+          tx,
+          "REQUEST_CANCELLED",
+          String(request.params.id),
+          String(request.params.id),
+          request.auth!.user.id,
+          undefined,
+          {
+            targetLabel: current
+              ? `${current.service.name} (${current.referenceNumber ?? String(request.params.id)})`
+              : undefined,
+            changes: [
+              {
+                field: "Status",
+                before: auditCode(current?.status),
+                after: "Cancelled",
+              },
+            ],
+          },
+        )
+      return result
     })
     if (!result.count)
       return response.status(409).json({

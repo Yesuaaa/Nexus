@@ -11,7 +11,17 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import { getProjectWorkspace } from "@/features/project-workspace/api/project-workspace-api"
+import { useSearchParams } from "next/navigation"
+import { usePortalAccount } from "@/features/auth/providers/account-context"
+import { getWorkspaceModules } from "@/features/dashboard/model/workspace-modules"
+import {
+  parseWorkspaceDirectoryState,
+  serializeWorkspaceDirectoryState,
+} from "@/features/project-workspace/model/workspace-directory-state"
+import {
+  getModuleLogsLabel,
+  moduleRegistry,
+} from "@/features/workspaces/model/module-registry"
 import { ChevronRightIcon, HomeIcon } from "./icons"
 import { focusRing } from "./styles"
 
@@ -58,6 +68,7 @@ export function useBreadcrumbLabel(key: string, label: string | undefined) {
 
 const routeLabels: Record<string, string> = {
   attendance: "Attendance",
+  "my-payroll": "My Payroll",
   my: "Check-Ins",
   adjustments: "Requests & Approvals",
   records: "Records",
@@ -68,10 +79,11 @@ const routeLabels: Record<string, string> = {
   messages: "Messages",
   projects: "Projects",
   "project-workspace": "Project Workspace",
+  "project-management": "Project Workspace",
   accounts: "Account Management",
   departments: "Department Management",
   employees: "Employee Management",
-  services: "Services",
+  services: "Service",
   "booked-services": "Booked Services",
   "staff-workload": "Staff Workload",
   "request-inbox": "Request Inbox",
@@ -81,6 +93,17 @@ const routeLabels: Record<string, string> = {
 }
 
 const contextualRouteLabels: Record<string, Record<string, string>> = {
+  module: {
+    "project-management": moduleRegistry["project-management"].title,
+    "people-hr": moduleRegistry["people-hr"].title,
+    "attendance-monitoring": moduleRegistry["attendance-monitoring"].title,
+  },
+  "project-management": { logs: getModuleLogsLabel("project-management") },
+  "service-operations": { logs: getModuleLogsLabel("service-operations") },
+  "people-hr": { logs: getModuleLogsLabel("people-hr") },
+  "attendance-monitoring": {
+    logs: getModuleLogsLabel("attendance-monitoring"),
+  },
   attendance: {
     my: "Check-Ins",
     "check-ins": "Check-Ins",
@@ -108,54 +131,96 @@ function labelFor(segment: string, parentSegment?: string) {
 
 export function Breadcrumbs() {
   const pathname = usePathname()
+  const account = usePortalAccount()
+  const searchParams = useSearchParams()
   const { labels } = useContext(BreadcrumbLabelContext)
   const segments = pathname.split("/").filter(Boolean)
-  const projectId =
-    segments[0] === "project-workspace" && segments[1] !== "new"
-      ? segments[1]
+  const decodedSegments = segments.map(decodeURIComponent)
+  const isServiceManagementPage =
+    decodedSegments.length === 1 &&
+    decodedSegments[0] === "services" &&
+    account.role !== "USER"
+  const isServiceRequestOverviewPage =
+    decodedSegments.length === 2 &&
+    decodedSegments[0] === "module" &&
+    decodedSegments[1] === "service-operations"
+  const payrollWorkspace =
+    decodedSegments[0] === "module" && decodedSegments[1] === "payroll"
+      ? getWorkspaceModules(account).find(
+          (module) => module.id === moduleRegistry.payroll.workspaceParent,
+        )
       : undefined
-  const [projectLabel, setProjectLabel] = useState<{
-    id: string
-    name: string
-  } | null>(null)
-
-  useEffect(() => {
-    if (!projectId) return
-    const controller = new AbortController()
-    getProjectWorkspace(projectId, controller.signal)
-      .then((project) => {
-        if (!controller.signal.aborted)
-          setProjectLabel({ id: projectId, name: project.name })
-      })
-      .catch(() => {
-        // Keep the breadcrumb readable when the page reports a load error.
-      })
-    return () => controller.abort()
-  }, [projectId])
+  const isProjectManagementDepartmentProjects =
+    decodedSegments.length === 4 &&
+    decodedSegments[0] === "project-management" &&
+    decodedSegments[1] === "departments" &&
+    decodedSegments[3] === "projects"
+  const isWorkspaceDetail =
+    decodedSegments.length === 2 &&
+    decodedSegments[0] === "project-workspace" &&
+    decodedSegments[1] !== "new" &&
+    decodedSegments[1] !== "overview"
+  const directoryQuery = isWorkspaceDetail
+    ? serializeWorkspaceDirectoryState(
+        parseWorkspaceDirectoryState(
+          new URLSearchParams(searchParams.toString()),
+        ),
+      )
+    : ""
 
   return (
-    <nav className="min-w-0 overflow-hidden" aria-label="Breadcrumb">
+    <nav
+      className="min-w-0 overflow-hidden text-[13px]"
+      aria-label="Breadcrumb"
+    >
       <ol className="flex min-w-0 list-none gap-[7px] p-0 whitespace-nowrap">
         <li className="flex min-w-0 items-center gap-[7px] text-[#8a9ab3]">
           <Link
             href="/"
             className={`flex items-center gap-[5px] text-[#647a9c] no-underline hover:text-[#203a78] ${focusRing}`}
           >
-            <HomeIcon width="15" height="15" />
+            <HomeIcon className="size-[18px]" strokeWidth={1.75} />
             <span className="max-[560px]:sr-only">Home</span>
           </Link>
         </li>
         {segments.map((segment, index) => {
+          const decodedSegment = decodedSegments[index]
+          const projectManagementLabel =
+            isProjectManagementDepartmentProjects && index === 1
+              ? "Management"
+              : isProjectManagementDepartmentProjects && index === 3
+                ? "Project Workspaces"
+                : undefined
           const label =
+            (index === 0 ? payrollWorkspace?.title : undefined) ??
+            (isServiceRequestOverviewPage
+              ? index === 0
+                ? "Service"
+                : "Request"
+              : undefined) ??
+            projectManagementLabel ??
             labels[segment] ??
-            (index === 1 && projectId
-              ? projectLabel?.id === projectId
-                ? projectLabel.name
-                : "Project"
-              : index === 1 && segments[0] === "projects"
-                ? "Project"
-                : labelFor(segment, segments[index - 1]))
-          const isCurrent = index === segments.length - 1
+            labels[decodedSegment] ??
+            (index === 1 && (isWorkspaceDetail || segments[0] === "projects")
+              ? "Project"
+              : labelFor(segment, segments[index - 1]))
+          const isCurrent =
+            index === segments.length - 1 && !isServiceManagementPage
+          const isDepartmentContext =
+            isProjectManagementDepartmentProjects && index === 2
+          const baseHref = `/${segments.slice(0, index + 1).join("/")}`
+          const href =
+            isServiceRequestOverviewPage && index === 0
+              ? "/services"
+              : index === 0 && payrollWorkspace?.href
+                ? payrollWorkspace.href
+                : isProjectManagementDepartmentProjects
+                  ? index === 0
+                    ? "/project-management/overview"
+                    : "/project-management"
+                  : index === 0 && directoryQuery
+                    ? `${baseHref}?${directoryQuery}`
+                    : baseHref
           return (
             <li
               key={`${index}-${segment}`}
@@ -163,7 +228,10 @@ export function Breadcrumbs() {
               // otherwise squeeze into each other.
               className={`flex min-w-0 items-center gap-[7px] text-[#8a9ab3] ${isCurrent ? "" : "max-[560px]:hidden"}`}
             >
-              <ChevronRightIcon width="14" height="14" className="flex-none" />
+              <ChevronRightIcon
+                className="size-[18px] flex-none"
+                strokeWidth={1.75}
+              />
               {isCurrent ? (
                 <span
                   aria-current="page"
@@ -171,9 +239,13 @@ export function Breadcrumbs() {
                 >
                   {label}
                 </span>
+              ) : isDepartmentContext ? (
+                <span className="block min-w-0 truncate text-[#647a9c]">
+                  {label}
+                </span>
               ) : (
                 <Link
-                  href={`/${segments.slice(0, index + 1).join("/")}`}
+                  href={href}
                   className={`block min-w-0 truncate text-[#647a9c] no-underline hover:text-[#203a78] ${focusRing}`}
                 >
                   {label}
@@ -182,6 +254,20 @@ export function Breadcrumbs() {
             </li>
           )
         })}
+        {isServiceManagementPage && (
+          <li className="flex min-w-0 items-center gap-[7px] text-[#8a9ab3]">
+            <ChevronRightIcon
+              className="size-[18px] flex-none"
+              strokeWidth={1.75}
+            />
+            <span
+              aria-current="page"
+              className="min-w-0 truncate font-semibold text-[#253f8c]"
+            >
+              Management
+            </span>
+          </li>
+        )}
       </ol>
     </nav>
   )

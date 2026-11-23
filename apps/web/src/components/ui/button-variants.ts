@@ -1,4 +1,5 @@
 import { cva } from "class-variance-authority"
+import { rowActionButton } from "./row-action-styles"
 
 /**
  * Colour sets for the portal's buttons. Exported for class constants that
@@ -28,9 +29,11 @@ export const buttonVariants = cva(
         default: "bg-primary text-primary-foreground hover:bg-primary/90",
         outline:
           "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+        ghost: "bg-transparent hover:bg-accent hover:text-accent-foreground",
         brand: buttonTones.brand,
         brandOutline: buttonTones.brandOutline,
         danger: buttonTones.danger,
+        rowAction: rowActionButton,
       },
       size: {
         default: "h-9 px-4 text-sm",
@@ -38,6 +41,8 @@ export const buttonVariants = cva(
         sm: "h-8 px-3 text-xs",
         /** Side-panel and toolbar buttons. */
         panel: "h-[34px] rounded-lg px-3 text-xs font-semibold",
+        /** Selectable project rows inside a side panel. */
+        panelItem: "min-h-16 rounded-lg px-4 py-3 text-sm font-semibold",
         /** Page-header actions (e.g. "Create Employee"). */
         header:
           "min-h-[34px] gap-[7px] rounded-lg px-[13px] text-xs leading-[1.2] font-semibold",

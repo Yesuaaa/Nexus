@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { pageRange } from "@/components/ui/table-pagination-footer"
 import type { SortDirection } from "@/components/ui/table-sort-button"
 import type { PaginatedFooter } from "@/components/ui/use-paginated-list"
@@ -48,8 +48,8 @@ export function useTableSort<K extends string>(
 /**
  * Client-side pagination over already filtered and sorted rows: clamps the
  * page, slices the visible rows, and keeps the pagination footer in step
- * with the row animation. The page returns to 1 whenever `view` changes, so
- * filter and sort handlers don't need to reset it.
+ * with the row animation. Local pagination returns to 1 whenever `view`
+ * changes. For URL-backed pagination, the caller owns the requested page.
  *
  *   const sort = useTableSort<SortKey>("name", "asc")
  *   const filtered = useMemo(() => …, [items, query, sort.sortKey, sort.direction])
@@ -65,19 +65,46 @@ export function useLocalTable<T>(
   {
     view = [],
     loading = false,
+    search,
     pageSize = 10,
+    controlledPage,
+    onPageChange,
   }: {
     /** JSON-serializable inputs that define the current view (search, filters, sort). */
     view?: readonly unknown[]
     loading?: boolean
+    /** Search draft that should settle before filtered rows replace the table. */
+    search?: string
     pageSize?: number
+    /** Optional URL-backed page state for navigation that should restore filters. */
+    controlledPage?: number
+    onPageChange?: (page: number) => void
   } = {},
 ) {
+  const trimmedSearch = search?.trim() ?? ""
+  const [settledSearch, setSettledSearch] = useState(trimmedSearch)
+  const searchPending = search !== undefined && trimmedSearch !== settledSearch
+  useEffect(() => {
+    if (!searchPending) return
+    const timer = window.setTimeout(() => setSettledSearch(trimmedSearch), 200)
+    return () => window.clearTimeout(timer)
+  }, [searchPending, trimmedSearch])
+
   const viewKey = JSON.stringify(view)
   const [paging, setPaging] = useState({ viewKey, page: 1 })
-  const requestedPage = paging.viewKey === viewKey ? paging.page : 1
+  const viewChanged = paging.viewKey !== viewKey
+  const requestedPage = controlledPage ?? (viewChanged ? 1 : paging.page)
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize))
-  const page = Math.min(requestedPage, totalPages)
+  const page = Number.isInteger(requestedPage)
+    ? Math.max(1, Math.min(requestedPage, totalPages))
+    : 1
+  const pending = loading || searchPending
+  if (
+    controlledPage === undefined &&
+    (viewChanged || (!pending && page !== paging.page))
+  ) {
+    setPaging({ viewKey, page })
+  }
   const total = rows.length
 
   const visible = useMemo(
@@ -90,11 +117,17 @@ export function useLocalTable<T>(
   )
   const { footer: settled, onRowsSettled } = useTableFooter(
     tableResult,
-    loading,
+    pending,
   )
   const setPage = useCallback(
-    (next: number) => setPaging({ viewKey, page: next }),
-    [viewKey],
+    (next: number) => {
+      if (controlledPage !== undefined) {
+        onPageChange?.(next)
+      } else {
+        setPaging({ viewKey, page: next })
+      }
+    },
+    [controlledPage, onPageChange, viewKey],
   )
 
   const footer: PaginatedFooter = {
@@ -102,7 +135,7 @@ export function useLocalTable<T>(
     total: settled.total,
     page: settled.page,
     totalPages: Math.max(1, Math.ceil(settled.total / pageSize)),
-    disabled: loading || settled !== tableResult,
+    disabled: pending || settled !== tableResult,
   }
 
   return {
@@ -112,6 +145,8 @@ export function useLocalTable<T>(
     setPage,
     totalPages,
     total,
+    loading: pending,
+    searchPending,
     /** Props for `<TablePaginationFooter>` (add `label` and `onPageChange`). */
     footer,
     onRowsSettled,

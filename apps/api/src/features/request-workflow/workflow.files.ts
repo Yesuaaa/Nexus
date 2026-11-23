@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import { writeServiceLog } from "../service-operation-logs/log-writer.js"
 import { getPrisma } from "../../lib/db.js"
 import { readTransaction } from "../../lib/database-read.js"
 import { appendEvent, lockRequest, workflowAccess } from "./workflow.access.js"
@@ -122,7 +123,7 @@ export async function uploadWorkflowFile(
         ["PENDING_REVIEW", "CANCELLED", "DECLINED", "ON_HOLD"].includes(
           request.workflow.state,
         ) ||
-        ["CLOSED", "CANCELLED"].includes(request.status)
+        ["CLOSED", "CANCELLED", "CONCLUDED"].includes(request.status)
       )
         fail("File submissions are unavailable at this stage", 409)
       const existing = await tx.workflowFile.findUnique({
@@ -196,6 +197,24 @@ export async function uploadWorkflowFile(
         where: { id: requestId },
         data: { updatedAt: new Date() },
       })
+      await writeServiceLog(
+        tx,
+        "FILE_UPLOADED",
+        requestId,
+        requestId,
+        userId,
+        undefined,
+        {
+          targetLabel: `${request.service.name} (${request.referenceNumber ?? requestId})`,
+          changes: [
+            {
+              field: "File upload",
+              before: "Not completed",
+              after: "Completed",
+            },
+          ],
+        },
+      )
       return file
     },
     { timeout: 20_000 },

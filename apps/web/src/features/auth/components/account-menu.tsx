@@ -22,9 +22,9 @@ export function AccountMenu({ onSignOut }: { onSignOut: () => void }) {
         <button
           type="button"
           className={`${iconButtonClass} data-[state=open]:outline-none data-[state=open]:focus-visible:outline-none`}
-          aria-label="Open account menu"
+          aria-label="Account menu"
         >
-          <UserRound size={22} strokeWidth={1.7} aria-hidden="true" />
+          <UserRound size={18} strokeWidth={1.75} aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent

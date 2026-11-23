@@ -96,7 +96,7 @@ const policies = {
     fields: ["fullName", "email", "contactNumber", "isActive"],
     checks: { isActive: active, sessionsRevoked: historyBoolean },
     required: [],
-    origins: [Origin.CLIENT_MANAGEMENT],
+    origins: [Origin.CLIENT_MANAGEMENT, Origin.ACCOUNT_MANAGEMENT],
   },
   ROLE_CHANGED: {
     fields: ["role"],

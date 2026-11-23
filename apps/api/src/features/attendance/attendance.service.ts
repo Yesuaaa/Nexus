@@ -2,7 +2,6 @@ import type { Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { lockRows, lockRowsReturning } from "../../shared/db/locks.js"
 import { fail } from "../../shared/http-error.js"
-import { paginate } from "../../shared/query/pagination.js"
 import { hasPermission, Permission } from "../auth/auth.permissions.js"
 import {
   attendanceRepository as repository,
@@ -14,8 +13,14 @@ import type {
   AttendanceHistoryQuery,
 } from "./attendance.schema.js"
 import { summarizeAttendance } from "./attendance.summary.js"
+import { attendanceReportPage } from "./attendance.reporting.js"
 import { attendanceWorkDate } from "./attendance.validation.js"
 import { submitRecordedOvertime } from "./attendance.overtime.js"
+import { setAttendanceAuditContext } from "../workforce-compliance-logs/write-context.js"
+import {
+  approvedLeaveForDate,
+  approvedLeaveOverlappingInterval,
+} from "../leave/leave.repository.js"
 
 type Clock = () => Date
 
@@ -45,10 +50,29 @@ export async function selfEmployee(
     fail(403, "Employee attendance access is required")
   const employee = await tx.employee.findUnique({
     where: { userId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, departmentId: true },
   })
   if (!employee)
     fail(409, "Complete your employee profile before using attendance")
+  return employee
+}
+
+export async function selfEmployeeWithDepartmentLock(
+  tx: Prisma.TransactionClient,
+  userId: string,
+) {
+  const placement = await tx.employee.findUnique({
+    where: { userId },
+    select: { id: true, departmentId: true },
+  })
+  // Take the Department lock first so Head changes cannot race notice routing.
+  await lockRows(tx, "Department", placement?.departmentId, "share")
+  const employee = await selfEmployee(tx, userId, true)
+  if (
+    placement?.id !== employee.id ||
+    placement.departmentId !== employee.departmentId
+  )
+    fail(409, "Employee placement changed; refresh and try again")
   return employee
 }
 
@@ -56,21 +80,27 @@ export async function policyAt(
   tx: Prisma.TransactionClient,
   employeeId: string,
   now: Date,
+  lockPolicy = false,
 ) {
-  const assignments = await repository.assignments(tx, employeeId)
-  const matches = assignments.flatMap((assignment) => {
-    const workDate = attendanceWorkDate(now, assignment.policy.timeZone)
-    if (
-      workDate < assignment.effectiveFrom.toISOString().slice(0, 10) ||
-      (assignment.effectiveUntil &&
-        workDate >= assignment.effectiveUntil.toISOString().slice(0, 10))
-    )
-      return []
-    return [{ assignment, workDate }]
+  if (lockPolicy) {
+    // Stabilize schedule attribution through validation and session insertion.
+    await tx.$queryRaw`
+      SELECT policy.id
+      FROM attendance_policy_at(${employeeId}, ${now.toISOString()}::timestamptz) selected
+      JOIN "AttendancePolicyAssignment" assignment ON assignment.id = selected."assignmentId"
+      JOIN "AttendancePolicy" policy ON policy.id = assignment."policyId"
+      FOR SHARE OF policy
+    `
+  }
+  const [selected] = await tx.$queryRaw<
+    { assignmentId: string; workDate: Date }[]
+  >`SELECT * FROM attendance_policy_at(${employeeId}, ${now.toISOString()}::timestamptz)`
+  if (!selected) return null
+  const assignment = await tx.attendancePolicyAssignment.findUniqueOrThrow({
+    where: { id: selected.assignmentId },
+    include: { policy: { include: { days: true } } },
   })
-  if (matches.length > 1)
-    fail(409, "Attendance policy timezone transition is ambiguous; contact HR")
-  return matches[0] ?? null
+  return { assignment, workDate: selected.workDate.toISOString().slice(0, 10) }
 }
 
 function serverTime(clock: Clock): Date {
@@ -78,6 +108,78 @@ function serverTime(clock: Clock): Date {
   if (!Number.isFinite(now.getTime()))
     fail(503, "Attendance clock is unavailable")
   return now
+}
+
+type LatestSession = Awaited<ReturnType<typeof repository.latestSession>>
+async function overnightContinuation(
+  tx: Prisma.TransactionClient,
+  latest: LatestSession,
+  now: Date,
+) {
+  if (!latest?.endedAt) return null
+  const day = latest.workday
+  const today = attendanceWorkDate(now, day.timeZone)
+  const yesterday = new Date(today)
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1)
+  if (
+    day.workDate.getTime() !== yesterday.getTime() ||
+    attendanceWorkDate(latest.endedAt, day.timeZone) !== today
+  )
+    return null
+  const workDate = day.workDate.toISOString().slice(0, 10)
+  // A handoff can attribute punches made wholly after midnight to yesterday.
+  // Preserve continuation after later split sessions if an earlier one crossed midnight.
+  const sessions = await tx.attendanceWorkSession.findMany({
+    where: { workdayId: day.id },
+    select: { startedAt: true, endedAt: true },
+  })
+  const crossedMidnight = sessions.some(
+    ({ startedAt, endedAt }) =>
+      endedAt &&
+      attendanceWorkDate(startedAt, day.timeZone) === workDate &&
+      attendanceWorkDate(endedAt, day.timeZone) === today,
+  )
+  return crossedMidnight ? { id: day.id, workDate } : null
+}
+
+async function clockInBlock(
+  tx: Prisma.TransactionClient,
+  employee: { id: string; status: string },
+  latest: LatestSession,
+  now: Date,
+  workDate: string | undefined,
+) {
+  if (employee.status !== "ACTIVE")
+    return { status: 403, reason: "Only active employees can clock in" }
+  if (latest && !latest.endedAt)
+    return {
+      status: 409,
+      reason: "You already have an active attendance session",
+    }
+  if (!workDate)
+    return {
+      status: 409,
+      reason: "No attendance policy is assigned for this workday",
+    }
+  if (latest?.endedAt && latest.endedAt > now)
+    return { status: 409, reason: "Clock-in must follow your previous session" }
+  if (await approvedLeaveForDate(tx, employee.id, workDate))
+    return { status: 409, reason: "Approved leave covers this workday" }
+  if (
+    (
+      await approvedLeaveOverlappingInterval(
+        tx,
+        employee.id,
+        now,
+        new Date(now.getTime() + 1),
+      )
+    ).length
+  )
+    return {
+      status: 409,
+      reason: "Approved leave covers the current local date",
+    }
+  return null
 }
 
 async function workdayResponse(
@@ -88,16 +190,142 @@ async function workdayResponse(
 ) {
   const day = await repository.workday(tx, employeeId, workdayId)
   if (!day) fail(404, "Attendance workday not found")
+  const approvedLeave = await approvedLeaveForDate(
+    tx,
+    employeeId,
+    day.workDate.toISOString().slice(0, 10),
+  )
+  const leaveConflicts = (
+    await Promise.all(
+      day.sessions.map((session) =>
+        approvedLeaveOverlappingInterval(
+          tx,
+          employeeId,
+          session.startedAt,
+          session.endedAt ?? now,
+        ),
+      ),
+    )
+  ).flat()
   return {
     asOf: now,
     employeeId,
     needsPolicy: false,
-    workday: summarizeAttendance(day, now),
+    leaveConflict: leaveConflicts.length > 0,
+    workday: summarizeAttendance(
+      { ...day, approvedLeaveMinutes: approvedLeave?.leaveMinutes ?? 0 },
+      now,
+    ),
   }
+}
+
+async function closeRecordedSession(
+  tx: Prisma.TransactionClient,
+  employeeId: string,
+  requesterId: string | null,
+  session: NonNullable<Awaited<ReturnType<typeof repository.session>>>,
+  now: Date,
+) {
+  const activeBreak = session.breaks.find((pause) => pause.endedAt === null)
+  const conflicts = await approvedLeaveOverlappingInterval(
+    tx,
+    employeeId,
+    session.startedAt,
+    now,
+  )
+  if (conflicts.length) {
+    await tx.$executeRaw`SELECT set_config('app.attendance_reason', concat_ws(' ? ',nullif(current_setting('app.attendance_reason',true),''),'Clock-out recovery crossed approved leave; HR reconciliation required'), true)`
+    const reviewers = await tx.user.findMany({
+      where: {
+        isActive: true,
+        accountDeletedAt: null,
+        role: { in: ["ADMIN", "SUPERADMIN"] },
+      },
+      select: { id: true },
+    })
+    await tx.workflowNotification.createMany({
+      data: [...new Set(conflicts.map((day) => day.requestId))].flatMap(
+        (leaveRequestId) =>
+          reviewers.map(({ id }) => ({
+            userId: id,
+            leaveRequestId,
+            type: "LEAVE_ATTENDANCE_CONFLICT",
+            summary:
+              "Recorded attendance crosses approved leave. HR reconciliation is required.",
+          })),
+      ),
+      skipDuplicates: true,
+    })
+  }
+  if (
+    now <= session.startedAt ||
+    (activeBreak && now <= activeBreak.startedAt) ||
+    session.breaks.some((pause) => pause.endedAt && pause.endedAt > now)
+  )
+    fail(409, "Clock-out must follow the session and its breaks")
+  if (activeBreak) {
+    await tx.attendanceBreak.update({
+      where: { id: activeBreak.id },
+      data: { endedAt: now },
+    })
+  }
+  await tx.attendanceWorkSession.update({
+    where: { id: session.id },
+    data: { endedAt: now },
+  })
+  if (requesterId)
+    await submitRecordedOvertime(tx, requesterId, employeeId, session.id, now)
 }
 
 export function createAttendanceService(clock: Clock = () => new Date()) {
   return {
+    async reconcile(
+      userId: string,
+      employeeId: string,
+      sessionId: string,
+      endedAt: Date,
+      note: string,
+    ) {
+      return getPrisma()!.$transaction(
+        async (tx) => {
+          const placement = await tx.employee.findUnique({
+            where: { id: employeeId },
+            select: { departmentId: true },
+          })
+          await lockRows(tx, "Department", placement?.departmentId, "share")
+          await lockRows(tx, "Employee", employeeId)
+          await lockRows(tx, "User", userId, "share")
+          const reviewer = await actor(tx, userId)
+          if (!hasPermission(reviewer.role, Permission.EMPLOYEES_MANAGE))
+            fail(403, "Attendance management access is required")
+          const employee = await tx.employee.findUnique({
+            where: { id: employeeId },
+            select: { userId: true, departmentId: true },
+          })
+          if (!employee) fail(404, "Employee not found")
+          if (placement?.departmentId !== employee.departmentId)
+            fail(409, "Employee placement changed; refresh and try again")
+          if (employee.userId === userId)
+            fail(403, "You cannot reconcile your own shift")
+          const session = await repository.session(tx, employeeId, sessionId)
+          if (!session) fail(404, "Session not found")
+          if (session.endedAt || !session.suspendedAt)
+            fail(409, "Only an open suspended shift can be reconciled")
+          if (endedAt > serverTime(clock))
+            fail(400, "Clock-out cannot be in the future")
+          await setAttendanceAuditContext(tx, userId, note)
+          await closeRecordedSession(
+            tx,
+            employeeId,
+            employee.userId,
+            session,
+            endedAt,
+          )
+          return { closed: true }
+        },
+        { isolationLevel: "ReadCommitted" },
+      )
+    },
     async act(
       userId: string,
       action: AttendanceAction,
@@ -105,17 +333,17 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
     ) {
       return getPrisma()!.$transaction(
         async (tx) => {
-          const employee = await selfEmployee(tx, userId, true)
+          const employee =
+            action === "clock-out"
+              ? await selfEmployeeWithDepartmentLock(tx, userId)
+              : await selfEmployee(tx, userId, true)
           // Capture once, after serialization. Callers cannot supply/backdate punches.
           const now = serverTime(clock)
-          await tx.$executeRaw`SELECT set_config('app.attendance_actor_id', ${userId}, true)`
-          await tx.$executeRaw`SELECT set_config('app.attendance_reason', ${`Employee ${action}`}, true)`
+          await setAttendanceAuditContext(tx, userId, `Employee ${action}`)
           if (action === "clock-in") {
-            if (employee.status !== "ACTIVE")
-              fail(403, "Only active employees can clock in")
-            if (await repository.activeSession(tx, employee.id))
-              fail(409, "You already have an active attendance session")
             const latest = await repository.latestSession(tx, employee.id)
+            const policy = await policyAt(tx, employee.id, now, true)
+            let selectedWorkDate = policy?.workDate
             if (input.workdayId) {
               const selected = await repository.workday(
                 tx,
@@ -123,25 +351,28 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
                 input.workdayId,
               )
               if (!selected) fail(404, "Attendance workday not found")
-              const today = attendanceWorkDate(now, selected.timeZone)
-              const previous = new Date(`${today}T00:00:00Z`)
-              previous.setUTCDate(previous.getUTCDate() - 1)
-              const selectedDate = selected.workDate.toISOString().slice(0, 10)
-              const overnightContinuation =
-                selectedDate === previous.toISOString().slice(0, 10) &&
-                latest?.workdayId === selected.id &&
-                latest.endedAt &&
-                attendanceWorkDate(latest.endedAt, selected.timeZone) === today
-              if (selectedDate !== today && !overnightContinuation)
+              selectedWorkDate = selected.workDate.toISOString().slice(0, 10)
+              const isEffectiveWorkday =
+                selectedWorkDate === policy?.workDate &&
+                selected.assignmentId === policy?.assignment.id
+              if (
+                !isEffectiveWorkday &&
+                (await overnightContinuation(tx, latest, now))?.id !==
+                  selected.id
+              )
                 fail(
                   409,
                   "Choose today's workday or your latest overnight continuation",
                 )
-            } else if (!(await policyAt(tx, employee.id, now))) {
-              fail(409, "No attendance policy is assigned for this workday")
             }
-            if (latest?.endedAt && latest.endedAt > now)
-              fail(409, "Clock-in must follow your previous session")
+            const blocked = await clockInBlock(
+              tx,
+              employee,
+              latest,
+              now,
+              selectedWorkDate,
+            )
+            if (blocked) fail(blocked.status, blocked.reason)
             const session = await tx.attendanceWorkSession.create({
               data: {
                 employeeId: employee.id,
@@ -158,35 +389,13 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
           if (!session) fail(404, "Attendance session not found")
           if (session.endedAt)
             fail(409, "This attendance session has already ended")
+          if (session.suspendedAt)
+            fail(409, "HR must reconcile this suspended shift in Time Logs")
           const activeBreak = session.breaks.find(
             (pause) => pause.endedAt === null,
           )
           if (action === "clock-out") {
-            if (
-              now <= session.startedAt ||
-              (activeBreak && now <= activeBreak.startedAt) ||
-              session.breaks.some(
-                (pause) => pause.endedAt && pause.endedAt > now,
-              )
-            )
-              fail(409, "Clock-out must follow the session and its breaks")
-            if (activeBreak) {
-              await tx.attendanceBreak.update({
-                where: { id: activeBreak.id },
-                data: { endedAt: now },
-              })
-            }
-            await tx.attendanceWorkSession.update({
-              where: { id: session.id },
-              data: { endedAt: now },
-            })
-            await submitRecordedOvertime(
-              tx,
-              userId,
-              employee.id,
-              session.id,
-              now,
-            )
+            await closeRecordedSession(tx, employee.id, userId, session, now)
           } else if (action === "break-start") {
             const workday = await tx.attendanceWorkday.findUniqueOrThrow({
               where: { id: session.workdayId },
@@ -234,12 +443,41 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
         async (tx) => {
           const employee = await selfEmployee(tx, userId)
           const now = serverTime(clock)
-          const active = await repository.activeSession(tx, employee.id)
-          if (active)
-            return workdayResponse(tx, employee.id, active.workdayId, now)
+          const latest = await repository.latestSession(tx, employee.id)
+          if (latest && !latest.endedAt)
+            return {
+              ...(await workdayResponse(
+                tx,
+                employee.id,
+                latest.workdayId,
+                now,
+              )),
+              clockInBlockedReason:
+                "You already have an active attendance session",
+              continuation: null,
+            }
           const policy = await policyAt(tx, employee.id, now)
+          const blocked = await clockInBlock(
+            tx,
+            employee,
+            latest,
+            now,
+            policy?.workDate,
+          )
+          const previous = await overnightContinuation(tx, latest, now)
+          const continuation =
+            previous &&
+            previous.workDate !== policy?.workDate &&
+            !(await clockInBlock(tx, employee, latest, now, previous.workDate))
+              ? previous
+              : null
+          const eligibility = {
+            clockInBlockedReason: blocked?.reason ?? null,
+            continuation,
+          }
           if (!policy)
             return {
+              ...eligibility,
               asOf: now,
               employeeId: employee.id,
               needsPolicy: true,
@@ -255,13 +493,32 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
             include: attendanceWorkdayInclude,
           })
           if (existing)
-            return workdayResponse(tx, employee.id, existing.id, now)
+            return {
+              ...(await workdayResponse(tx, employee.id, existing.id, now)),
+              ...eligibility,
+            }
           const workDate = new Date(`${policy.workDate}T00:00:00Z`)
           const rule = policy.assignment.policy.days.find(
             (day) => day.weekday === workDate.getUTCDay(),
           )
           if (!rule) fail(409, "Attendance policy weekdays are incomplete")
+          const [schedule] =
+            policy.assignment.policy.scheduleMode === "FIXED" &&
+            rule.isWorkingDay
+              ? await tx.$queryRaw<
+                  { scheduledStartAt: Date; scheduledEndAt: Date }[]
+                >`SELECT * FROM attendance_schedule_at(
+                ${policy.workDate}::date, ${policy.assignment.policy.timeZone},
+                ${rule.scheduledStartMinute}::integer, ${rule.scheduledEndMinute}::integer
+              )`
+              : []
+          const approvedLeave = await approvedLeaveForDate(
+            tx,
+            employee.id,
+            policy.workDate,
+          )
           return {
+            ...eligibility,
             asOf: now,
             employeeId: employee.id,
             needsPolicy: false,
@@ -274,6 +531,11 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
                 timeZone: policy.assignment.policy.timeZone,
                 isWorkingDay: rule.isWorkingDay,
                 requiredMinutes: rule.requiredMinutes,
+                scheduledStartAt: schedule?.scheduledStartAt ?? null,
+                scheduledEndAt: schedule?.scheduledEndAt ?? null,
+                scheduledUnpaidBreakMinutes: schedule
+                  ? rule.scheduledUnpaidBreakMinutes
+                  : null,
                 policyName: policy.assignment.policy.name,
                 unpaidBreaksEnabled:
                   policy.assignment.policy.unpaidBreaksEnabled,
@@ -281,6 +543,7 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
                   policy.assignment.policy.overnightRequiresReview,
                 assignment: { policy: policy.assignment.policy },
                 sessions: [],
+                approvedLeaveMinutes: approvedLeave?.leaveMinutes ?? 0,
               },
               now,
             ),
@@ -326,29 +589,17 @@ export function createAttendanceService(clock: Clock = () => new Date()) {
             employeeId = (await selfEmployee(tx, userId)).id
           }
           const now = serverTime(clock)
-          const where = {
-            employeeId,
-            workDate: { gte: query.from, lte: query.to },
-          }
-          const { rows, ...page } = await paginate(
-            query.page,
-            {
-              rows: (db, window) =>
-                db.attendanceWorkday.findMany({
-                  where,
-                  include: attendanceWorkdayInclude,
-                  orderBy: [{ workDate: "desc" }, { id: "desc" }],
-                  ...window,
-                }),
-              count: (db) => db.attendanceWorkday.count({ where }),
-            },
-            { tx },
+          const { rows, ...page } = await attendanceReportPage(
+            tx,
+            query,
+            { employeeId },
+            now,
           )
           return {
             asOf: now,
             employeeId,
             ...page,
-            workdays: rows.map((day) => summarizeAttendance(day, now)),
+            workdays: rows.map(({ day }) => day),
           }
         },
         { isolationLevel: "RepeatableRead" },

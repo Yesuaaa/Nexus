@@ -1,0 +1,51 @@
+# PG-001 Existing Test Baseline
+
+**Review status:** Test source and assertions inspected; no test suite was executed. Nothing is marked passed.  
+**Page:** `PG-001` (`/`)  
+**Phase 1 baseline:** [coverage inventory](../../PHASE_1_EXISTING_TEST_COVERAGE.md) recorded `PG-001-F001` as partial because direct token-redirect assertions had not yet been confirmed.
+
+## Direct page coverage
+
+### Anonymous root and protected deep-link redirect
+
+- **File/declaration:** [`apps/web/e2e/auth/regression.spec.ts:390-408`](../../../../../apps/web/e2e/auth/regression.spec.ts)
+- **Scenario:** `test("anonymous home and protected deep links redirect to login", ...)` loops through `/`, `/dashboard`, `/accounts`, `/departments`, `/employees`, `/services`, and `/clients`.
+- **Setup and API dependencies:** No token or API mock is configured in this case. It visits each route with `page.goto(path)`.
+- **Assertions:** Each path ends at a URL matching `/login$`; the “Welcome Back” heading is visible.
+- **Classification:** Direct assertion for the anonymous `/` branch, bundled with six other route checks. It does not assert root’s network silence, storage-error behavior, or history behavior.
+- **Skipped condition:** The containing `Authentication and session regression` describe has `test.skip(live, ...)` at lines 16-17. When `NEXUS_E2E_LIVE=1`, the whole suite is skipped to avoid the supplied-account live mode.
+- **Result status:** Source assertion found; execution status unknown.
+
+## Related but not direct root coverage
+
+| Test evidence                                                                                                                                                               | Existing assertions                                                                                                                                                                                             | Relationship to PG-001                                                                                            |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| [`apps/web/e2e/auth/regression.spec.ts:338-353`](../../../../../apps/web/e2e/auth/regression.spec.ts) — “persistent storage cannot restore an authenticated session”        | Writes token and refresh token to `localStorage`, visits `/accounts`, expects `/login`, and expects the captured `/api/` request list to be empty.                                                              | Indirect session-storage-only invariant; it does not visit `/`.                                                   |
+| [`apps/web/e2e/auth/regression.spec.ts:410-438`](../../../../../apps/web/e2e/auth/regression.spec.ts) — role sign-in loop                                                   | STAFF, ADMIN, and SUPERADMIN sign in at `/internal/login`; expects workspace selector and exactly `['/module']` as the recorded destination.                                                                    | Indirect role landing behavior after sign-in; it does not begin at `/`.                                           |
+| [`apps/web/e2e/auth/regression.spec.ts:699-716`](../../../../../apps/web/e2e/auth/regression.spec.ts) — “expired sessions clear the token and return to login”              | Seeds access token `expired`, mocks `/api/auth/me` with 401, visits `/dashboard`, expects `/login` and null access token.                                                                                       | Downstream protected-route rejection; it does not begin at `/`.                                                   |
+| [`apps/web/e2e/auth/regression.spec.ts:57-110`](../../../../../apps/web/e2e/auth/regression.spec.ts) — expired access refresh by role                                       | Visits `/dashboard`, expects one refresh, renewed access/refresh tokens, no token in localStorage/cookies, then verifies sign-out.                                                                              | Indirect session refresh and role coverage; no root visit.                                                        |
+| [`apps/web/e2e/auth/regression.spec.ts:653-697`](../../../../../apps/web/e2e/auth/regression.spec.ts)                                                                       | Login route checks an expired token and a `/api/auth/me` 503/retry, including token clearing or retention and login destination.                                                                                | Login-page session checks, not PG-001 or portal-layout recovery.                                                  |
+| [`apps/web/e2e/auth/jwt-session.spec.ts:16-83`](../../../../../apps/web/e2e/auth/jwt-session.spec.ts)                                                                       | Starts at `/login`, refreshes an expired access token, expects `/dashboard`, one refresh, rotated refresh token, then logout clears both tokens.                                                                | Adjacent login/auth handoff and API-client refresh; no root visit.                                                |
+| [`apps/web/test/auth-api.test.mjs:208-279`](../../../../../apps/web/test/auth-api.test.mjs) — “sign-in stores its session and authenticated requests send one bearer token” | Uses a fake `sessionStorage`; asserts `getToken()` returns the stored session, `/api/auth/me` request has `Bearer session-token`, and sign-out clears access and refresh tokens.                                | Directly covers helper/session request behavior, but not `HomeRedirect`; no throwing-storage assertion was found. |
+| [`apps/web/test/auth-portal.test.mjs:8-22`](../../../../../apps/web/test/auth-portal.test.mjs)                                                                              | Asserts client/workforce role eligibility and role-specific login paths.                                                                                                                                        | Related role utilities; does not cover root redirect.                                                             |
+| [`apps/api/tests/jwt-session.test.ts:8-63,65-139,153-221`](../../../../../apps/api/tests/jwt-session.test.ts)                                                               | PGlite-backed HTTP assertions cover `/me` accepted/rejected sessions, refresh rotation/replay, logout revocation, expired JWT response code, role reload, account deactivation/deletion, and expiry boundaries. | Backend session contract supporting downstream portal behavior; no PG-001 browser route.                          |
+
+## Harness and fixture baseline
+
+- `apps/web/e2e/regression-support.ts:18-19` defines live mode from `NEXUS_E2E_LIVE=1`.
+- `apps/web/e2e/regression-support.ts:44-65` configures reduced motion and captures page errors for regression tests.
+- `apps/web/e2e/regression-support.ts:136-142,265-270,332-335` provides `mockApi`, checks same-origin API use, and returns a fixture account from `/api/auth/me`.
+- `apps/web/playwright.config.ts:9-18,32-44` uses Chromium and defaults to building/starting the web app at `127.0.0.1:5273` when no base URL is supplied. The root Playwright configuration does not start an Express API server; page tests should mock API routes when they need downstream account responses.
+
+## Coverage classification by atomic behavior
+
+| Atomic behavior                                                                              | Classification after assertion review | Evidence and remaining gap                                                                                                                                 |
+| -------------------------------------------------------------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `A001` absent token routes to login                                                          | **Direct, partial in isolation**      | The root path is explicitly in the anonymous route loop and destination/heading are asserted. The root case is bundled, and no API-call assertion is made. |
+| `A001` empty token or storage read throws                                                    | **Uncovered**                         | No assertion for empty stored string or `getToken()` storage exception was found.                                                                          |
+| `A001` localStorage-only token at `/`                                                        | **Indirect**                          | The same policy is checked at `/accounts`, not at root.                                                                                                    |
+| `A002` truthy session token at `/` hands off to `/dashboard`                                 | **Uncovered at root**                 | Existing token/session and `/dashboard` tests do not begin at `/`.                                                                                         |
+| `A002` current account, role handoff, invalid session, or account API error after root entry | **Indirect/partial**                  | These states are tested from login or portal routes; root-started handoff is absent.                                                                       |
+| `A003` history replacement                                                                   | **Uncovered**                         | No assertion checks browser Back after the root redirect.                                                                                                  |
+
+The inspected source establishes that these tests exist and contain the stated assertions. It does not establish that any test currently passes.

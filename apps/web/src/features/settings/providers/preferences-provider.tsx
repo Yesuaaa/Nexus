@@ -36,17 +36,21 @@ const PreferencesContext = createContext<{
   preferences: Preferences
   update: (value: Preferences) => void
   formatters: ReturnType<typeof createDateFormatters>
+  initialized: boolean
 }>({
   preferences: defaultPreferences,
   update: () => {},
   formatters: createDateFormatters(defaultPreferences),
+  initialized: true,
 })
 export function PreferencesProvider({ children }: { children: ReactNode }) {
   const [preferences, setPreferences] = useState(defaultPreferences)
+  const [initialized, setInitialized] = useState(false)
   const version = useRef(0)
   const update = useCallback((value: Preferences) => {
     version.current += 1
     setPreferences(value)
+    setInitialized(true)
   }, [])
   const formatters = useMemo(
     () => createDateFormatters(preferences),
@@ -65,17 +69,22 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
           setPreferences(data.preferences)
       })
       .catch(() => {})
+      .finally(() => {
+        if (!controller.signal.aborted) setInitialized(true)
+      })
     return () => controller.abort()
   }, [])
   return (
-    <PreferencesContext value={{ preferences, update, formatters }}>
+    <PreferencesContext
+      value={{ preferences, update, formatters, initialized }}
+    >
       {children}
     </PreferencesContext>
   )
 }
 export const usePreferences = () => useContext(PreferencesContext)
 export function useDatePreferences() {
-  const { preferences, formatters } = usePreferences()
+  const { preferences, formatters, initialized } = usePreferences()
   const date = (value: Date | string) => {
     const parts = formatters.date.formatToParts(new Date(value))
     const part = (type: string) =>
@@ -89,9 +98,28 @@ export function useDatePreferences() {
         ? d + "/" + m + "/" + y
         : m + "/" + d + "/" + y
   }
+  const dateOnly = (value: string) => {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+    if (!match) return value
+    const [, year, month, day] = match
+    const parsed = new Date(`${value}T00:00:00.000Z`)
+    if (
+      !Number.isFinite(parsed.getTime()) ||
+      parsed.toISOString().slice(0, 10) !== value
+    )
+      return value
+    return preferences.dateFormat === "YYYY-MM-DD"
+      ? value
+      : preferences.dateFormat === "DD/MM/YYYY"
+        ? `${day}/${month}/${year}`
+        : `${month}/${day}/${year}`
+  }
   const time = (value: Date | string) => formatters.time.format(new Date(value))
   return {
+    preferencesLoaded: initialized,
+    timeZone: preferences.timeZone,
     formatDate: date,
+    formatDateOnly: dateOnly,
     formatTime: time,
     formatDateTime: (value: Date | string) => date(value) + ", " + time(value),
   }

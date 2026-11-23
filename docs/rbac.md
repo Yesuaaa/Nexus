@@ -1,5 +1,7 @@
 # Role-based access control
 
+Service Operations [Logs](features/service-operation-logs.md) require an active `SUPERADMIN` plus module-access and organization-read capabilities. The viewer grants no workflow mutation, private-message or file access. Logs expire after 30 days.
+
 Superadmin has [Phase 3D.1 business-conversation metadata oversight](features/superadmin-messaging-oversight.md) through the existing organization-read and business-inspection capabilities. Service/project metadata reads grant no message content, files, private DM visibility, participant identity, sending or read-marker authority. Existing personal internal chat participation remains independent.
 
 Superadmin uses existing organization-wide employee, department and team management for [Phase 3C.2 People & HR administration](features/superadmin-people-hr-administration.md), without an Employee or Head identity. Existing feature permissions and target eligibility remain authoritative. Employee mutation controls mirror those permissions; Staff login lifecycle controls exclude Admin credentials and self-targeted actions.

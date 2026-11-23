@@ -1,0 +1,149 @@
+import { createServer, type Server } from "node:http"
+import { purgeServiceLogs } from "./features/service-operation-logs/log-retention.js"
+import { purgeProjectLogs } from "./features/project-management-logs/retention.js"
+import { createApp } from "./app.js"
+import { jwtKey } from "./features/auth/auth.jwt.js"
+import { conversationRealtime } from "./features/request-conversations/request-conversations.realtime.js"
+import { purgeExpiredConversationMessages } from "./features/request-conversations/request-conversations.service.js"
+import { getPrisma } from "./lib/db.js"
+import { createGracefulShutdown } from "./graceful-shutdown.js"
+import { checkSchemaReadiness } from "./features/health/schema-readiness.js"
+
+type DatabaseEnvironment = {
+  NODE_ENV?: string
+  DATABASE_URL?: string
+  DIRECT_URL?: string
+}
+
+export function validateProductionDatabaseConfig(
+  environment: DatabaseEnvironment = process.env,
+) {
+  if (environment.NODE_ENV !== "production") return
+
+  const configuredUrl = environment.DATABASE_URL || environment.DIRECT_URL
+  const databaseUrl = configuredUrl?.trim()
+  if (!databaseUrl) {
+    throw new Error(
+      "DATABASE_URL or DIRECT_URL must be configured in production",
+    )
+  }
+
+  let parsed: URL
+  try {
+    parsed = new URL(databaseUrl)
+  } catch {
+    throw new Error("DATABASE_URL must be a valid PostgreSQL connection URL")
+  }
+
+  const validProtocol =
+    parsed.protocol === "postgres:" || parsed.protocol === "postgresql:"
+  const configuredHost =
+    parsed.hostname.length > 0 ||
+    parsed.searchParams.getAll("host").some((host) => host.trim().length > 0)
+  if (!validProtocol || !configuredHost) {
+    throw new Error("DATABASE_URL must be a valid PostgreSQL connection URL")
+  }
+}
+
+export function startApi(): {
+  server: Server
+  shutdown: (signal: NodeJS.Signals) => Promise<void>
+} {
+  validateProductionDatabaseConfig()
+  jwtKey()
+
+  const port = Number(process.env.PORT || 3001)
+  const production = process.env.NODE_ENV === "production"
+  let isShuttingDown = false
+  const server = createServer(
+    createApp({
+      isShuttingDown: () => isShuttingDown,
+      requireReadyDatabase: production,
+    }),
+  )
+  server.listen(port, () =>
+    console.log(`API listening on http://localhost:${port}`),
+  )
+
+  async function canRunMaintenance() {
+    return (
+      !isShuttingDown &&
+      (!production || (await checkSchemaReadiness())) &&
+      !isShuttingDown
+    )
+  }
+
+  async function purgeExpiredMessages() {
+    if (!(await canRunMaintenance())) return
+    await purgeExpiredConversationMessages().catch(() => {
+      console.error("Unable to purge expired conversation messages")
+    })
+  }
+
+  purgeExpiredMessages()
+  let logsPurging = false
+  const purgeLogs = () => {
+    if (logsPurging) return
+    logsPurging = true
+    void canRunMaintenance()
+      .then(async (ready) => {
+        if (!ready) return
+        await Promise.all([
+          purgeServiceLogs().catch(() =>
+            console.error("Unable to purge expired Service Operations logs"),
+          ),
+          purgeProjectLogs().catch(() =>
+            console.error("Unable to purge expired Project Management logs"),
+          ),
+        ])
+      })
+      .finally(() => {
+        logsPurging = false
+      })
+  }
+  purgeLogs()
+  const logPurgeTimer = setInterval(purgeLogs, 60 * 60 * 1000)
+  logPurgeTimer.unref()
+  const messagePurgeTimer = setInterval(purgeExpiredMessages, 60 * 60 * 1000)
+  messagePurgeTimer.unref()
+
+  const onSigterm = () => {
+    void shutdown("SIGTERM")
+  }
+  const onSigint = () => {
+    void shutdown("SIGINT")
+  }
+
+  const shutdown = createGracefulShutdown({
+    server,
+    onStart: () => {
+      isShuttingDown = true
+      clearInterval(messagePurgeTimer)
+      clearInterval(logPurgeTimer)
+    },
+    cleanupResources: async () => {
+      const results = await Promise.allSettled([
+        Promise.resolve().then(() => conversationRealtime.shutdown?.()),
+        Promise.resolve().then(async () => {
+          await getPrisma()?.$disconnect()
+        }),
+      ])
+      if (results.some((result) => result.status === "rejected")) {
+        throw new Error("API resource cleanup failed")
+      }
+    },
+    setExitCode: (code) => {
+      process.exitCode = code
+    },
+    forceExit: (code) => process.exit(code),
+    onComplete: () => {
+      process.off("SIGTERM", onSigterm)
+      process.off("SIGINT", onSigint)
+    },
+  })
+
+  process.on("SIGTERM", onSigterm)
+  process.on("SIGINT", onSigint)
+
+  return { server, shutdown }
+}

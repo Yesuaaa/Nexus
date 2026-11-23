@@ -5,7 +5,7 @@ A pnpm workspace with an independent web frontend, API, and mobile app:
 | App           | Stack                                                      | Default address       |
 | ------------- | ---------------------------------------------------------- | --------------------- |
 | `apps/web`    | Next.js App Router, TypeScript, Tailwind CSS v4, shadcn/ui | http://localhost:5173 |
-| `apps/api`    | Express, TypeScript, Prisma, Supabase PostgreSQL           | http://localhost:3001 |
+| `apps/api`    | Express, TypeScript, Prisma, PostgreSQL                    | http://localhost:3001 |
 | `apps/mobile` | Kotlin Multiplatform (KMP), Compose Multiplatform (CMP)    | Android & iOS         |
 
 The browser calls the API over HTTP. Prisma and database credentials exist only in `apps/api`.
@@ -16,29 +16,32 @@ Feature development records and their dates live in [docs/features](docs/feature
 
 - Node.js 22.12+ or 24+
 - pnpm
-- A Supabase project for the database check and migrations
+- Docker Compose for the local PostgreSQL service
 
 ## Run locally
 
 ```sh
 pnpm install
+copy docker.env.example .env
 copy apps/api/.env.example apps/api/.env
+```
+
+On macOS or Linux, use `cp` instead of `copy`. Generate a local `JWT_SECRET` using the command in `apps/api/.env.example` and set it in both files. Set `DEV_SEED_PASSWORD` in `apps/api/.env` to a strong local password if you want the four starter accounts.
+
+```sh
+docker compose up -d --wait db
+pnpm --filter @nexus/api exec prisma migrate deploy
+pnpm --filter @nexus/api db:seed:dev
 pnpm dev
 ```
 
-On macOS or Linux, use `cp` instead of `copy`. Open http://localhost:5173. Next.js forwards `/api` to the existing API on port 3001 in development and production. Port 5173 is retained to preserve the backend's existing default origin. The API health check works before database setup. Optional frontend settings are documented in `apps/web/.env.example`; use `apps/web/.env.local` for local overrides.
+The optional seed creates `superadmin@nexus.test`, `admin@nexus.test`, `staff@nexus.test`, and `client@nexus.test` with the shared local password. It can fill missing starter accounts and preserves existing credentials. It accepts only the local `nexus_dev` database in development mode and refuses a database with other accounts.
 
-In Supabase, open **Connect** and copy the **Transaction pooler** URL into `DATABASE_URL` and the **Direct connection** URL into `DIRECT_URL` in `apps/api/.env`. Add `pgbouncer=true` to the transaction pooler URL if it is absent. For migrations from an IPv4-only network, use the **Session pooler** URL for `DIRECT_URL`. Keep these URLs out of web environment variables.
+Open http://localhost:5173. Next.js forwards `/api` to the API on port 3001. `/api/health` checks process liveness, `/api/db-check` checks PostgreSQL connectivity, and `/api/ready` also verifies the required schema and migration history. Optional frontend settings are documented in `apps/web/.env.example`.
 
-Service catalog images use Supabase Storage. Set `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `SUPABASE_SERVICE_IMAGES_BUCKET` in the API environment. On the first image upload, the API creates or reconciles the bucket as public with a 2 MB limit and JPG, PNG, and WebP MIME restrictions. The secret key is used only by the authenticated Express API and must never be exposed through a `NEXT_PUBLIC_` variable. The database stores only each image's object path; public URLs are derived when service responses are returned.
+Service and profile images use Supabase Storage. For local image uploads, set `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `SUPABASE_SERVICE_IMAGES_BUCKET` in the API environment. Use a development bucket and keep the key server-side. Request chat refreshes periodically with local PostgreSQL because the database does not publish Supabase Realtime broadcasts.
 
 For verified TLS, download the database CA certificate from Supabase **Database Settings → SSL Configuration**. Set `sslmode=verify-full` and `sslrootcert=<URL-encoded absolute path to the certificate>` on both URLs. For example, a certificate saved as `C:\certs\supabase-ca.crt` uses `sslrootcert=C%3A%2Fcerts%2Fsupabase-ca.crt`. The `pg` driver currently treats `sslmode=require` as `verify-full` and emits a warning; changing only the mode does not fix an untrusted certificate. If your organization installs its CA in the Windows certificate store, Node 24 can also use it when launched with `NODE_USE_SYSTEM_CA=1`.
-
-After reviewing the target Supabase project and schema, apply the committed migrations:
-
-```sh
-pnpm --filter @nexus/api exec prisma migrate deploy
-```
 
 The `ExampleItem` model in `apps/api/prisma/schema.prisma` is a placeholder for your own data model.
 
@@ -54,7 +57,7 @@ Browser regression checks use isolated API mocks or real Express/PGlite fixtures
 
 API tests and the real Attendance browser fixture compile through the existing TypeScript configuration and run with native Node, avoiding `tsx` startup restrictions. `pnpm test:api` runs all offline backend tests; `pnpm --filter @nexus/api test tests/request-workflow.test.ts` selects a suite. See [test regression recovery](docs/features/testing-regression-recovery.md) for the runner, fixture routing and resolved historical failures.
 
-The API follows the same feature layout under `apps/api/src/features`: auth owns credentials, sessions, and login limits; users owns account administration and role rules; health owns service checks. `app.ts` mounts the routes and handles HTTP errors, `index.ts` starts the server, and `lib/db.ts` provides Prisma access. `apps/api/prisma/seed.ts` is the Prisma seed entry point. Run `pnpm --filter @nexus/api test` for backend checks.
+The API follows the same feature layout under `apps/api/src/features`: auth owns credentials, sessions, and login limits; users owns account administration and role rules; health owns service checks. `app.ts` mounts the routes and handles HTTP errors, `index.ts` starts the server, and `lib/db.ts` provides Prisma access. `apps/api/prisma/seed/seed.ts` is the Prisma seed entry point. Run `pnpm --filter @nexus/api test` for backend checks.
 
 ## Backend authentication
 
@@ -81,23 +84,59 @@ Admins can change Staff and User accounts between those two roles. Superadmins c
 
 ## Docker
 
-The default Docker Compose setup runs Next.js and the API in development mode. It watches the mounted source files, so frontend edits appear without rebuilding. Next.js forwards `/api` requests to the API container. PostgreSQL stays on Supabase.
+The default Docker Compose setup runs Next.js, the API, and a local PostgreSQL 16 service. The API waits for PostgreSQL to accept connections and applies pending migrations before starting. The database persists in a named volume and is published to `127.0.0.1:5433` for host-run Prisma commands. The same local setup applies on every Git branch.
 
 ```sh
-copy docker.env.example .env
 docker compose up --build -d
 ```
 
-On macOS or Linux, use `cp` instead of `copy`. Open http://localhost:5173. The API is also available at http://localhost:3001. Fill in `DATABASE_URL` in the root `.env` for Supabase access and use `sslmode=verify-full`. The API image trusts the bundled Supabase 2021 root CA in `certs/supabase-root-2021.crt`. Download an updated CA from Supabase Database Settings if Supabase rotates it. The API health check works without `DATABASE_URL`; the database check reports unavailable until it is set. Do not commit `.env`.
+Use the root `.env` and `apps/api/.env` setup above. The API container uses `db:5432` on the Compose network. Seed the local accounts from the host with `pnpm --filter @nexus/api db:seed:dev`. Open http://localhost:5173. The API is also available at http://localhost:3001.
 
 ```sh
 docker compose ps
 docker compose down
 ```
 
-Change `WEB_PORT` or `API_PORT` in `.env` to use other host ports. If you change the browser origin, update `WEB_ORIGIN`. Source edits reload automatically; dependency changes require `docker compose up --build -d`. The web image includes the shared module registry from `apps/api/src/features/modules/module-registry.json`; development mounts that file read-only so registration edits also reload. After Dockerfile or mount changes, recreate the web service with `docker compose up --build -d --no-deps web`. Run Prisma migrations using `pnpm db:migrate --name <name>` from the host with `apps/api/.env` configured.
+Change `WEB_PORT`, `API_PORT`, or `POSTGRES_PORT` in `.env` to use other host ports. If you change `POSTGRES_PORT`, update both database URLs in `apps/api/.env`. If you change the browser origin, update `WEB_ORIGIN`. Source edits reload automatically. Rebuild after dependency changes with `docker compose up --build -d`. Create new migrations from the host with `pnpm db:migrate --name <name>`.
 
-The production Next.js standalone server is available with `docker compose -f compose.prod.yaml up --build -d` at http://localhost:8080. Stop the development containers first with `docker compose down`. The web image includes the standalone server, public assets, and generated static assets. The production runtime API image does not include Prisma CLI tooling.
+### Production release with Docker Compose
+
+When releasing from `main`, use `compose.prod.yaml` on the deployment host and supply production credentials from its secret store. A push to `main` runs CI. Set `JWT_SECRET`, `PROD_WEB_ORIGIN` to the public site origin, and `DATABASE_URL` to the writable runtime database in the `public` schema. For Supabase, use the transaction pooler with `pgbouncer=true` for `DATABASE_URL` and a direct or session-pooled connection with migration privileges for `DIRECT_URL`. You may omit `DIRECT_URL` when the runtime URL itself is a direct connection with migration privileges. Apply verified TLS settings on both connections. The API image includes the Supabase 2021 root CA. See the [Prisma guide](docs/prismaGuide.md) for connection settings.
+
+The runtime role needs its application grants and `SELECT` on `public._prisma_migrations`. If this is the first release with separate roles, arrange those grants before startup. If the migration job creates the ledger and its postflight reports missing access, verify the completed migration state, grant `SELECT` on the ledger to the runtime role, and rerun the job while ingress is paused.
+
+1. Confirm the intended PostgreSQL project, database and backup before releasing. Connect with each URL in a restricted operator shell and check `current_database()`, `current_schema()` and `current_user`. The migration job compares both connections against the same writable PostgreSQL instance and database. Run only one release job per target database at a time.
+2. Build all three images from the same release revision while the current stack is still serving. Stop any development stack sharing the ports. Put external ingress in maintenance mode and stop and drain the existing production web and API, including replicas outside this Compose project. Keep traffic paused across schema changes.
+
+   ```sh
+   docker compose -f compose.prod.yaml build
+   docker compose -f compose.prod.yaml stop web api
+   ```
+
+3. Remove the previous stopped migration job and start the release. Compose runs one `migrate` service with `prisma migrate deploy` and Prisma's PostgreSQL advisory lock. The API starts after the job exits successfully, and web starts after API health passes. `--wait` makes the command fail if startup fails or the deadline expires. If the job is still running at the deadline, check its state before retrying and keep ingress paused.
+
+   ```sh
+   docker compose -f compose.prod.yaml rm -f migrate
+   docker compose -f compose.prod.yaml up -d --no-build --wait --wait-timeout 120
+   docker compose -f compose.prod.yaml ps -a
+   ```
+
+4. Check that `migrate` exited `0` and every API replica is healthy. Check `/api/ready` through the web origin and run the release smoke checks before resuming ingress. The web listener defaults to port `8080`. The production API returns `503` on application routes when its schema or migration ledger is incompatible, including after a restart. The API drains requests for up to 12 seconds on SIGTERM or SIGINT, with a 20-second container stop allowance.
+
+### Migration failure and recovery
+
+Keep ingress paused and web/API stopped if the migration job exits nonzero. Use `docker compose -f compose.prod.yaml logs migrate` to identify the failed stage and any reported Prisma error code. In a restricted operator session, use the same release checkout and verified `DIRECT_URL` with `pnpm --filter @nexus/api exec prisma migrate status`. If the ledger exists, inspect the unresolved entries for the affected database:
+
+```sql
+SELECT migration_name, started_at, applied_steps_count
+FROM public._prisma_migrations
+WHERE finished_at IS NULL AND rolled_back_at IS NULL
+ORDER BY started_at;
+```
+
+Confirm the job is no longer running and inspect the failed migration's actual database effects, including any partial DDL or data changes. Review row and schema evidence, the migration source and any ledger diagnostics in the restricted session. After the verified effects have been safely undone, an authorized operator can record the attempt with `prisma migrate resolve --rolled-back <migration_name>`. Use `prisma migrate resolve --applied <migration_name>` only after independently verifying that all intended effects are already present. Keep migration files and history intact. Run pending migrations and API/web verification using the release steps above. An already completed job can be rerun safely against the same compatible release.
+
+To stop a failed rollout, keep ingress paused and stop the new web/API. Reopen traffic on a previous release only after confirming its schema and migration history match the database it will use. If committed DDL or data changes make that database incompatible, use a reviewed forward fix or recover a matching database from a verified backup under the recovery plan. Rehearse restore and verify data and readiness before routing traffic to the recovered stack.
 
 ## Separate deployment
 
@@ -112,7 +151,7 @@ Deploy `apps/web` to a Next.js-compatible Node.js host or Vercel with the reposi
 
 Set the server-only `API_PROXY_TARGET` before building to the Express API origin, such as `https://api.example.com`. Rewrites are resolved at build time, so rebuild when this target changes. Docker builds default to `http://api:3001` through a build argument of the same name. Leave `NEXT_PUBLIC_API_URL` empty to use same-origin `/api` calls, or set it at build time to a public API origin for direct browser requests. Direct requests require `WEB_ORIGIN` on the API to match the frontend's origin. Existing local `VITE_API_URL` settings must be renamed to `NEXT_PUBLIC_API_URL`.
 
-Deploy `apps/api` to a Node.js host with its production dependencies, built `dist`, and `DATABASE_URL`. Set `WEB_ORIGIN` to the web app's public origin, then run `pnpm --filter @nexus/api start`. Set `DIRECT_URL` in the environment used to run Prisma migrations. Database credentials belong only in the API environment; never put them in a `NEXT_PUBLIC_` variable.
+Deploy `apps/api` to a Node.js host with its production dependencies, built `dist`, the matching `prisma/migrations` directory, and `DATABASE_URL`. Set `NODE_ENV=production` and `WEB_ORIGIN` to the web app's public origin. Use the same gated release order as above. Drain old traffic, then run `pnpm --filter @nexus/api exec node scripts/deploy-migrations.mjs` once from the built release checkout with Prisma CLI installed and both database URLs set as described above. After the job succeeds, start the API with `pnpm --filter @nexus/api start` and wait for `/api/ready` before enabling traffic. Keep database credentials out of `NEXT_PUBLIC_` variables.
 
 ## Commands
 

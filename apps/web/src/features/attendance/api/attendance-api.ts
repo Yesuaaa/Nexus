@@ -7,12 +7,14 @@ export type AttendanceBreak = {
   isPaid: boolean
 }
 export type AttendanceSession = {
+  suspendedAt?: string | null
   id: string
   startedAt: string
   endedAt: string | null
   breaks: AttendanceBreak[]
 }
 export type AttendanceWorkday = {
+  canReconcile?: boolean
   employee?: AttendanceEmployee & { department?: { name: string } | null }
   pendingCorrections: number
   id: string | null
@@ -21,6 +23,8 @@ export type AttendanceWorkday = {
   timeZone: string
   isWorkingDay: boolean
   requiredMinutes: number
+  baseRequiredMinutes?: number
+  approvedLeaveMinutes?: number
   workedMilliseconds: number
   workedHours: number
   remainingMinutes: number
@@ -45,8 +49,18 @@ export type AttendanceWorkday = {
     overnightRequiresReview: boolean
   }
   overnightRequiresReview: boolean
+  schedule?: {
+    startsAt: string
+    endsAt: string
+    unpaidBreakMinutes: number
+    lateArrivalMinutes: number
+    earlyDepartureMinutes: number
+  } | null
 }
 export type AttendanceState = {
+  clockInBlockedReason?: string | null
+  continuation?: { id: string; workDate: string } | null
+  leaveConflict?: boolean
   asOf: string
   employeeId: string
   needsPolicy: boolean
@@ -87,12 +101,17 @@ export type PolicyDay = {
   weekday: number
   isWorkingDay: boolean
   requiredMinutes: number
+  scheduledStartMinute: number | null
+  scheduledEndMinute: number | null
+  scheduledUnpaidBreakMinutes: number | null
 }
+export type AttendanceScheduleMode = "FLEXIBLE" | "FIXED"
 export type AttendancePolicy = {
   id: string
   archivedAt?: string | null
   name: string
   timeZone: string
+  scheduleMode: AttendanceScheduleMode
   unpaidBreaksEnabled: boolean
   overnightRequiresReview: boolean
   days: PolicyDay[]
@@ -105,6 +124,7 @@ export type AttendanceOverview = {
     closed: number
     working: number
     onBreak: number
+    suspended: number
     recentActivity: {
       id: string
       action: "CLOCK_IN" | "CLOCK_OUT" | "BREAK_START" | "BREAK_END"
@@ -116,6 +136,8 @@ export type AttendanceOverview = {
   scope: "PERSONAL" | "DEPARTMENT" | "ORGANIZATION"
   recordedDays: number
   employees: number
+  approvedLeaveDays?: number
+  approvedLeaveHours?: number
   workedHours: number
   requiredHours: number
   completeDays: number
@@ -130,6 +152,16 @@ export type AttendanceMutation =
   | { action: "clock-out" | "break-start"; sessionId: string }
   | { action: "break-end"; sessionId: string; breakId: string }
 const root = "/api/attendance"
+export const reconcileAttendance = (
+  employeeId: string,
+  sessionId: string,
+  endedAt: string,
+  note: string,
+) =>
+  apiRequest(
+    `${root}/employees/${encodeURIComponent(employeeId)}/sessions/${encodeURIComponent(sessionId)}/reconcile`,
+    { method: "POST", body: JSON.stringify({ endedAt, note }) },
+  )
 export const currentAttendance = (signal?: AbortSignal) =>
   apiRequest<AttendanceState>(`${root}/me/current`, { signal })
 export function mutateAttendance(input: AttendanceMutation) {
@@ -220,16 +252,23 @@ export function attendanceAudit(
   departmentId: string,
   signal?: AbortSignal,
   recordsOnly = false,
+  search = "",
 ) {
+  const query = new URLSearchParams({
+    from,
+    to,
+    page: String(page),
+    employeeId,
+    departmentId,
+    ...(recordsOnly ? { recordsOnly: "true" } : {}),
+    ...(search.trim() ? { search: search.trim() } : {}),
+  })
   return apiRequest<
     Paging & {
       events: AttendanceAuditEvent[]
       actionCounts: { action: string; count: number }[]
     }
-  >(
-    `${root}/audit?${new URLSearchParams({ from, to, page: String(page), employeeId, departmentId, ...(recordsOnly ? { recordsOnly: "true" } : {}) })}`,
-    { signal },
-  )
+  >(`${root}/audit?${query}`, { signal })
 }
 export const attendanceOverview = (
   from: string,
@@ -241,25 +280,74 @@ export const attendanceOverview = (
     `${root}/overview?${new URLSearchParams({ from, to, departmentId })}`,
     { signal },
   )
-export const attendancePolicies = (signal?: AbortSignal) =>
-  apiRequest<{
-    policies: AttendancePolicy[]
-    summary: {
-      totalPolicies: number
-      activePolicies: number
-      archivedPolicies: number
-      assignmentPeriods: number
+export function attendancePolicyPage(
+  page: number,
+  signal?: AbortSignal,
+  status?: "active" | "archived",
+  search = "",
+  size = 200,
+) {
+  const query = new URLSearchParams({
+    page: String(page),
+    size: String(size),
+    ...(status ? { status } : {}),
+    ...(search ? { search } : {}),
+  })
+  return apiRequest<
+    Paging & {
+      policies: AttendancePolicy[]
+      summary: {
+        totalPolicies: number
+        activePolicies: number
+        archivedPolicies: number
+        assignmentPeriods: number
+      }
     }
-  }>(`${root}/policies`, { signal })
+  >(`${root}/policies?${query}`, { signal })
+}
+
+export async function attendancePolicies(
+  signal?: AbortSignal,
+  status?: "active",
+) {
+  const first = await attendancePolicyPage(1, signal, status)
+  const policies = [...first.policies]
+  const pages = Math.ceil(first.total / first.pageSize)
+  for (let page = 2; page <= pages; page++) {
+    policies.push(
+      ...(await attendancePolicyPage(page, signal, status)).policies,
+    )
+  }
+  return { ...first, policies }
+}
 export const createAttendancePolicy = (input: AttendancePolicyInput) =>
   apiRequest(`${root}/policies`, {
     method: "POST",
     body: JSON.stringify(input),
   })
-export type AttendancePolicyInput = Omit<
+type PolicyDayInput = Pick<PolicyDay, "weekday" | "isWorkingDay">
+export type AttendancePolicyInput = Pick<
   AttendancePolicy,
-  "id" | "_count" | "archivedAt"
->
+  "name" | "timeZone" | "unpaidBreaksEnabled" | "overnightRequiresReview"
+> &
+  (
+    | {
+        scheduleMode: "FLEXIBLE"
+        days: (PolicyDayInput & { requiredMinutes: number })[]
+      }
+    | {
+        scheduleMode: "FIXED"
+        days: (PolicyDayInput &
+          Partial<
+            Pick<
+              PolicyDay,
+              | "scheduledStartMinute"
+              | "scheduledEndMinute"
+              | "scheduledUnpaidBreakMinutes"
+            >
+          >)[]
+      }
+  )
 export const updateAttendancePolicy = (
   id: string,
   input: AttendancePolicyInput,
@@ -280,7 +368,7 @@ export type AttendancePolicyAssignment = {
   employee: AttendanceEmployee & { department: { name: string } | null }
   effectiveFrom: string
   effectiveUntil: string | null
-  status: "CURRENT" | "SCHEDULED" | "ENDED"
+  status: "CURRENT" | "SCHEDULED" | "ENDED" | "CANCELLED"
 }
 export const attendancePolicyAssignments = (
   id: string,
@@ -295,11 +383,26 @@ export const assignAttendancePolicy = (input: {
   employeeId: string
   policyId: string
   effectiveFrom: string
+  replacesAssignmentId?: string
 }) =>
   apiRequest(`${root}/assignments`, {
     method: "POST",
     body: JSON.stringify(input),
   })
+export const unassignAttendancePolicy = (
+  id: string,
+  expectedStatus: "CURRENT" | "SCHEDULED",
+) =>
+  apiRequest(`${root}/assignments/${encodeURIComponent(id)}/unassign`, {
+    method: "POST",
+    body: JSON.stringify({ expectedStatus }),
+  })
+export const attendanceAdjustmentDetail = (id: string, signal?: AbortSignal) =>
+  apiRequest<{ adjustment: AttendanceAdjustment }>(
+    `${root}/adjustments/${encodeURIComponent(id)}`,
+    { signal },
+  )
+
 export const attendanceAdjustments = (
   scope: "mine" | "team",
   page: number,
@@ -348,6 +451,7 @@ export const reviewAttendanceAdjustment = (
 export type AttendanceRequestSummary = {
   groups: {
     type: AttendanceAdjustment["type"]
+    awaitingHrPending?: number
     status: AttendanceAdjustment["status"]
     count: number
     overtimeMinutes: number

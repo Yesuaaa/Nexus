@@ -12,31 +12,35 @@ export function Topbar({
   onOpenMenu,
   onSignOut,
   showMessages,
+  showNavigationMenu = true,
   minimal = false,
 }: {
   drawerOpen?: boolean
   onOpenMenu?: () => void
   onSignOut: () => void
   showMessages?: boolean
+  showNavigationMenu?: boolean
   minimal?: boolean
 }) {
   return (
     <header
       data-portal-topbar
-      className="flex h-[70px] min-w-0 items-center rounded-[13px] border border-[#dedede] bg-background px-4 max-[767px]:h-[62px] max-[767px]:gap-[9px] max-[767px]:px-[10px]"
+      className="flex h-[60px] min-w-0 items-center rounded-[13px] border border-[#dedede] bg-background px-4 text-[13px] max-[767px]:h-[58px] max-[767px]:gap-[9px] max-[767px]:px-[10px]"
     >
       {!minimal && (
         <>
-          <button
-            type="button"
-            className={`${iconButtonClass} hidden max-[767px]:grid`}
-            aria-label="Open navigation menu"
-            aria-controls="app-sidebar"
-            aria-expanded={drawerOpen}
-            onClick={onOpenMenu}
-          >
-            <MenuIcon />
-          </button>
+          {showNavigationMenu && (
+            <button
+              type="button"
+              className={`${iconButtonClass} hidden max-[767px]:grid`}
+              aria-label="Open navigation menu"
+              aria-controls="app-sidebar"
+              aria-expanded={drawerOpen}
+              onClick={onOpenMenu}
+            >
+              <MenuIcon className="size-[18px]" strokeWidth={1.75} />
+            </button>
+          )}
           <Breadcrumbs />
         </>
       )}

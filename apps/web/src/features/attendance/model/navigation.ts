@@ -37,12 +37,6 @@ export const attendanceNavigation = [
         label: "Records",
         access: "manage",
       },
-      {
-        id: "attendance-audit",
-        href: "/attendance/time-logs/audit",
-        label: "Audit Trail",
-        access: "manage",
-      },
     ],
   },
   {
@@ -69,6 +63,12 @@ export const attendanceNavigation = [
         label: "Corrections",
         access: "self",
       },
+      {
+        id: "attendance-leave",
+        href: "/attendance/requests/leave",
+        label: "Leave",
+        access: "self",
+      },
     ],
   },
   {
@@ -88,26 +88,6 @@ export const attendanceNavigation = [
         href: "/attendance/policies/management",
         label: "Management",
         access: "configure",
-      },
-      {
-        id: "attendance-assignments",
-        href: "/attendance/policies/assignments",
-        label: "Assignments",
-        access: "configure",
-      },
-    ],
-  },
-  {
-    id: "attendance-dashboard",
-    label: "Dashboard",
-    access: "manage",
-    links: [
-      {
-        id: "attendance-dashboard-overview",
-        href: "/attendance/dashboard",
-        label: "Dashboard",
-        ariaLabel: "Attendance & Monitoring Dashboard",
-        access: "manage",
       },
     ],
   },

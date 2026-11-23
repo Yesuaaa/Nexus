@@ -2,20 +2,23 @@ import { useCallback, useState } from "react"
 import { useRouter } from "next/navigation"
 import { sileo } from "@/lib/toast"
 import { getAuthCopy, getStoredAuthLanguage } from "../content/auth-copy"
+import { landingPathForRole } from "../model/auth-portal"
+import type { Role } from "../model/roles"
 import type { AuthMode } from "../model/types"
 
 export function useLoginTransition() {
   const router = useRouter()
-  const [showLoader, setShowLoader] = useState(false)
+  const [transition, setTransition] = useState<{
+    mode: AuthMode
+    destination: ReturnType<typeof landingPathForRole>
+  } | null>(null)
   const [destinationReady, setDestinationReady] = useState(false)
   const [loginSucceeded, setLoginSucceeded] = useState(false)
-  const [transitionMode, setTransitionMode] = useState<AuthMode>("login")
 
-  const beginLoginTransition = useCallback((mode: AuthMode) => {
-    setTransitionMode(mode)
+  const beginLoginTransition = useCallback((mode: AuthMode, role: Role) => {
     setDestinationReady(false)
     setLoginSucceeded(false)
-    setShowLoader(true)
+    setTransition({ mode, destination: landingPathForRole(role) })
   }, [])
 
   const markDestinationReady = useCallback((succeeded: boolean) => {
@@ -23,21 +26,21 @@ export function useLoginTransition() {
     setDestinationReady(true)
   }, [])
 
-  const navigateToDashboard = useCallback(() => {
-    router.replace("/dashboard")
-  }, [router])
+  const navigateToDestination = useCallback(() => {
+    if (transition) router.replace(transition.destination)
+  }, [router, transition])
 
   function finishLoginTransition() {
-    setShowLoader(false)
-    if (loginSucceeded) {
+    setTransition(null)
+    if (transition && loginSucceeded) {
       const copy = getAuthCopy(getStoredAuthLanguage())
       sileo.success({
         title:
-          transitionMode === "register"
+          transition.mode === "register"
             ? copy.accountCreated
             : copy.welcomeBackToast,
         description:
-          transitionMode === "register"
+          transition.mode === "register"
             ? copy.welcomeToExp
             : copy.signedInToast,
         position: "top-center",
@@ -46,11 +49,11 @@ export function useLoginTransition() {
   }
 
   return {
-    showLoader,
+    showLoader: transition !== null,
     destinationReady,
     beginLoginTransition,
     markDestinationReady,
-    navigateToDashboard,
+    navigateToDestination,
     finishLoginTransition,
   }
 }

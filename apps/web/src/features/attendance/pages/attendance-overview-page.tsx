@@ -1,26 +1,22 @@
 "use client"
+
 import Link from "next/link"
 import { useState } from "react"
-import { Clock3, LogIn, LogOut, UsersRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
-  BreakdownList,
-  ItemList,
-  MiniStats,
-  OverviewPanel,
-  type ItemRow,
+  cellClass,
+  FiguresRow,
+  headCellClass,
+  InlineBar,
+  RowsSkeleton,
+  Section,
+  tableClass,
 } from "@/components/ui/overview-panel"
-import {
-  ProgressMeter,
-  SegmentMeter,
-  StatStrip,
-  type StatStripItem,
-} from "@/components/ui/stat-strip"
 import { formatDateTime } from "@/lib/format"
 import { useAsyncResource } from "@/lib/use-async-resource"
+import { personalAttendanceOverview } from "../api/attendance-api"
 import { AttendanceShell } from "../components/attendance-shell"
 import { RangeFields, ResourceStatus } from "../components/attendance-shared"
-import { personalAttendanceOverview } from "../api/attendance-api"
 import { defaultRange } from "../model/attendance"
 
 const activityLabels = {
@@ -42,106 +38,26 @@ export function AttendanceOverviewPage() {
   )
   const data = result.loading || result.error ? undefined : result.data
   const summary = data?.checkIns
-  const scopeLabel = "Personal"
-  const metrics: StatStripItem[] = [
+  const totalSessions = summary?.total ?? 0
+  const openSessions = (summary?.working ?? 0) + (summary?.onBreak ?? 0)
+  const checkOutRate = totalSessions
+    ? Math.round(((summary?.closed ?? 0) / totalSessions) * 100)
+    : 0
+  const sessionsPerDay =
+    data && data.recordedDays > 0
+      ? (data.checkIns.total / data.recordedDays).toFixed(1)
+      : "—"
+  const figuresUnavailable = Boolean(result.error)
+  const statuses = [
+    { id: "working", label: "Clocked in", value: summary?.working ?? 0 },
     {
-      label: "Attendance days",
-      value: data?.recordedDays.toLocaleString("en-US") ?? "0",
-      caption: "Your recorded attendance workdays",
-      icon: UsersRound,
-      tone: "bg-[#e8eef8] text-[#284f9e]",
+      id: "break",
+      label: "On unpaid break",
+      value: summary?.onBreak ?? 0,
     },
-    {
-      label: "Check-ins",
-      value: summary?.total.toLocaleString("en-US") ?? "0",
-      caption: "Sessions started in selected workdays",
-      icon: LogIn,
-      tone: "bg-[#e6f4ee] text-[#25745b]",
-      meter: (
-        <SegmentMeter
-          label="Check-in session status"
-          segments={[
-            {
-              label: "Clocked in",
-              value: summary?.working ?? 0,
-              colorClass: "bg-[#284f9e]",
-            },
-            {
-              label: "On unpaid break",
-              value: summary?.onBreak ?? 0,
-              colorClass: "bg-[#d69a24]",
-            },
-            {
-              label: "Clocked out",
-              value: summary?.closed ?? 0,
-              colorClass: "bg-[#29906b]",
-            },
-          ]}
-        />
-      ),
-    },
-    {
-      label: "Check-outs",
-      value: summary?.closed.toLocaleString("en-US") ?? "0",
-      caption: "Sessions with a recorded clock-out",
-      captionTone: summary?.closed ? "text-[#25745b]" : undefined,
-      icon: LogOut,
-      tone: "bg-[#e6f4ee] text-[#25745b]",
-      meter: (
-        <ProgressMeter
-          value={summary?.closed ?? 0}
-          max={summary?.total ?? 0}
-          label="Sessions with a recorded clock-out"
-          colorClass="bg-[#29906b]"
-        />
-      ),
-    },
-    {
-      label: "Still clocked in",
-      value: summary
-        ? (summary.working + summary.onBreak).toLocaleString("en-US")
-        : "0",
-      caption: "Open sessions, including unpaid breaks",
-      captionTone:
-        summary && summary.working + summary.onBreak > 0
-          ? "text-[#9a5b00]"
-          : undefined,
-      icon: Clock3,
-      tone: "bg-[#fbf0e2] text-[#a45b12]",
-      meter: (
-        <ProgressMeter
-          value={(summary?.working ?? 0) + (summary?.onBreak ?? 0)}
-          max={summary?.total ?? 0}
-          label="Sessions still clocked in"
-          colorClass="bg-[#d69a24]"
-        />
-      ),
-    },
+    { id: "closed", label: "Clocked out", value: summary?.closed ?? 0 },
   ]
-  const statuses = summary?.total
-    ? [
-        { id: "working", label: "Clocked in", value: summary.working },
-        { id: "break", label: "On unpaid break", value: summary.onBreak },
-        { id: "closed", label: "Clocked out", value: summary.closed },
-      ]
-    : []
-  const context: ItemRow[] = [
-    { id: "scope", label: "Reporting scope", note: scopeLabel },
-    {
-      id: "range",
-      label: "Attendance workdays",
-      note: range.from + " - " + range.to,
-    },
-    ...(data
-      ? [
-          {
-            id: "asOf",
-            label: "Last refreshed (UTC)",
-            note: formatDateTime(data.asOf, "UTC"),
-          },
-        ]
-      : []),
-  ]
+
   return (
     <AttendanceShell
       tab="overview"
@@ -172,91 +88,172 @@ export function AttendanceOverviewPage() {
         error={result.error}
         retry={result.retry}
       />
-      <div className="grid gap-4">
-        <StatStrip
-          items={metrics}
-          label="Attendance overview"
-          pending={result.loading}
-          unavailable={Boolean(result.error)}
-        />
-        <MiniStats
-          label="Personal check-in figures"
-          loading={result.loading}
-          items={[
-            {
-              label: "Working now",
-              value: summary?.working.toLocaleString("en-US") ?? "\u2014",
-              hint: "Open sessions outside unpaid breaks",
-            },
-            {
-              label: "On unpaid break",
-              value: summary?.onBreak.toLocaleString("en-US") ?? "\u2014",
-              hint: "Open sessions on a break",
-            },
-            {
-              label: "Sessions per day",
-              value:
-                data && data.recordedDays > 0
-                  ? (data.checkIns.total / data.recordedDays).toFixed(1)
-                  : "\u2014",
-              hint: "Across recorded attendance workdays",
-            },
-            {
-              label: "Check-out rate",
-              value: summary?.total
-                ? `${Math.round((summary.closed / summary.total) * 100)}%`
-                : "\u2014",
-              hint: "Sessions with a recorded clock-out",
-            },
-          ]}
-        />
-        <div className="grid gap-4 lg:grid-cols-2">
-          <OverviewPanel
-            title="Check-in status"
-            description="Session status as of the last refresh, within the selected attendance workdays."
-          >
-            <BreakdownList
-              rows={statuses}
-              loading={result.loading}
-              total={summary?.total}
-              unit="sessions"
-              empty={
-                result.error
-                  ? "Check-in summaries unavailable."
-                  : "No check-ins in this period."
-              }
-              colorClass="bg-[#29906b]"
-            />
-          </OverviewPanel>
-          <OverviewPanel
-            title={scopeLabel + " attendance"}
-            description="Filters use the attendance workday. Overnight sessions retain their starting workday."
-          >
-            <ItemList
-              rows={context}
-              loading={result.loading}
-              empty="No attendance context."
-            />
-          </OverviewPanel>
-        </div>
-        <OverviewPanel
-          title="Recent check-in activity"
-          description="Latest clock-in, clock-out, and break actions from the selected attendance workdays. Timestamps are shown in UTC."
-        >
-          <ItemList
-            loading={result.loading}
-            rows={(summary?.recentActivity ?? []).map((event) => ({
-              id: event.id,
-              label: activityLabels[event.action] + " - " + event.employeeName,
-              note: formatDateTime(event.at, "UTC"),
-            }))}
-            empty={
-              result.error
-                ? "Recent activity unavailable."
-                : "No check-in activity in this period."
-            }
-          />
-        </OverviewPanel>
+
+      <FiguresRow
+        label="Attendance figures"
+        loading={result.loading}
+        items={[
+          {
+            label: "Attendance days",
+            value: figuresUnavailable ? "—" : String(data?.recordedDays ?? 0),
+          },
+          {
+            label: "Check-ins",
+            value: figuresUnavailable ? "—" : String(totalSessions),
+          },
+          {
+            label: "Check-outs",
+            value: figuresUnavailable ? "—" : String(summary?.closed ?? 0),
+            note: totalSessions ? `${checkOutRate}% completed` : undefined,
+          },
+          {
+            label: "Still clocked in",
+            value: figuresUnavailable ? "—" : String(openSessions),
+            note: openSessions ? "Needs review" : undefined,
+            tone: openSessions ? "warning" : undefined,
+          },
+        ]}
+      />
+
+      <Section title="Check-in status" className="mt-7">
+        {result.loading ? (
+          <RowsSkeleton rows={3} />
+        ) : result.error ? (
+          <p className="m-0 text-xs leading-5 text-[#65718a]">
+            Check-in summaries unavailable.
+          </p>
+        ) : totalSessions === 0 ? (
+          <p className="m-0 text-xs text-[#8a94a6]">
+            No check-ins in this period.
+          </p>
+        ) : (
+          <table className={tableClass}>
+            <thead>
+              <tr>
+                <th className={headCellClass}>Status</th>
+                <th className="border-b border-[#e3e7ed] pb-2 text-right text-[11px] font-medium text-[#738096]">
+                  Sessions
+                </th>
+                <th className="w-[45%] border-b border-[#e3e7ed] pb-2 pl-5 text-left text-[11px] font-medium text-[#738096]">
+                  Share
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {statuses.map((status) => (
+                <tr key={status.id}>
+                  <td className={`${cellClass} font-medium text-[#182235]`}>
+                    {status.label}
+                  </td>
+                  <td className={`${cellClass} text-right tabular-nums`}>
+                    {status.value}
+                  </td>
+                  <td className={`${cellClass} pl-5`}>
+                    <span className="flex items-center gap-3">
+                      <InlineBar
+                        value={status.value}
+                        max={totalSessions}
+                        label={`${status.label}: ${status.value} sessions`}
+                        className="min-w-12 flex-1"
+                      />
+                      <span className="w-8 text-right text-[#8a94a6] tabular-nums">
+                        {Math.round((status.value / totalSessions) * 100)}%
+                      </span>
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Section>
+
+      <div className="mt-9 grid gap-x-12 gap-y-9 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <Section title="Personal attendance">
+          {result.loading ? (
+            <RowsSkeleton rows={4} />
+          ) : (
+            <dl className="m-0 grid gap-2 text-xs">
+              <div className="flex gap-4 max-[560px]:flex-col max-[560px]:gap-0.5">
+                <dt className="w-32 shrink-0 text-[#738096]">
+                  Reporting scope
+                </dt>
+                <dd className="m-0 text-[#182235]">Personal</dd>
+              </div>
+              <div className="flex gap-4 max-[560px]:flex-col max-[560px]:gap-0.5">
+                <dt className="w-32 shrink-0 text-[#738096]">
+                  Attendance workdays
+                </dt>
+                <dd className="m-0 text-[#182235]">
+                  {range.from} – {range.to}
+                </dd>
+              </div>
+              <div className="flex gap-4 max-[560px]:flex-col max-[560px]:gap-0.5">
+                <dt className="w-32 shrink-0 text-[#738096]">
+                  Sessions per day
+                </dt>
+                <dd className="m-0 text-[#182235]">{sessionsPerDay}</dd>
+              </div>
+              <div className="flex gap-4 max-[560px]:flex-col max-[560px]:gap-0.5">
+                <dt className="w-32 shrink-0 text-[#738096]">
+                  Approved leave days
+                </dt>
+                <dd className="m-0 text-[#182235]">
+                  {figuresUnavailable ? "—" : (data?.approvedLeaveDays ?? 0)}
+                </dd>
+              </div>
+              {data && (
+                <div className="flex gap-4 max-[560px]:flex-col max-[560px]:gap-0.5">
+                  <dt className="w-32 shrink-0 text-[#738096]">
+                    Last refreshed (UTC)
+                  </dt>
+                  <dd className="m-0 text-[#182235]">
+                    {formatDateTime(data.asOf, "UTC")}
+                  </dd>
+                </div>
+              )}
+            </dl>
+          )}
+        </Section>
+
+        <Section title="Recent check-in activity">
+          {result.loading ? (
+            <RowsSkeleton rows={4} />
+          ) : result.error ? (
+            <p className="m-0 text-xs leading-5 text-[#65718a]">
+              Recent activity unavailable.
+            </p>
+          ) : (summary?.recentActivity.length ?? 0) === 0 ? (
+            <p className="m-0 text-xs text-[#8a94a6]">
+              No check-in activity in this period.
+            </p>
+          ) : (
+            <table className={tableClass}>
+              <thead>
+                <tr>
+                  <th className={headCellClass}>Action</th>
+                  <th className="border-b border-[#e3e7ed] pb-2 text-right text-[11px] font-medium text-[#738096]">
+                    Timestamp (UTC)
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {(summary?.recentActivity ?? []).map((event) => (
+                  <tr key={event.id}>
+                    <td className={`${cellClass} pr-3 text-[#182235]`}>
+                      {activityLabels[event.action]} – {event.employeeName}
+                    </td>
+                    <td
+                      className={`${cellClass} text-right whitespace-nowrap text-[#8a94a6]`}
+                    >
+                      {formatDateTime(event.at, "UTC")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Section>
       </div>
     </AttendanceShell>
   )

@@ -226,7 +226,7 @@ test(
     )
     assert.deepEqual(
       global.adjustments.find((row) => row.id === overtime.id)!.capabilities,
-      { approve: false, verify: false, reject: true },
+      { approve: true, verify: false, reject: true },
     )
     assert.deepEqual(
       global.adjustments.find((row) => row.id === verified.id)!.capabilities,
@@ -234,10 +234,7 @@ test(
     )
     const adminRows = await adjustments(admin)
     assert.equal(adminRows.capabilities.requestCorrection, true)
-    assert.deepEqual(
-      adminRows.adjustments.find((row) => row.id === own.id)!.capabilities,
-      { approve: false, verify: false, reject: false },
-    )
+    assert.ok(!adminRows.adjustments.some((row) => row.id === own.id))
     const headRows = await adjustments(head)
     assert.equal(headRows.capabilities.requestCorrection, true)
     assert.ok(!headRows.adjustments.some((row) => row.id === verified.id))
@@ -297,12 +294,12 @@ test(
       )
     assert.equal(
       (
-        await request(`/adjustments/${overtime.id}/review`, sa, {
+        await request(`/adjustments/${overtime.id}/review`, admin, {
           decision: "APPROVED",
           note: "Cannot bypass verification",
         })
       ).status,
-      409,
+      403,
     )
     assert.equal(
       (

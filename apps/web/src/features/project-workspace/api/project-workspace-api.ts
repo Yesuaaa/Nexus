@@ -4,6 +4,10 @@ import type {
   ProjectStatus,
   ProjectTaskStatus,
 } from "@/features/project-management/model/project-contracts"
+import {
+  serializeWorkspaceDirectoryState,
+  type WorkspaceDirectoryState,
+} from "../model/workspace-directory-state"
 
 export type {
   ProjectDeliverableStatus,
@@ -12,15 +16,40 @@ export type {
 } from "@/features/project-management/model/project-contracts"
 
 const projectWorkspaceListChangedEvent = "project-workspace-list-changed"
+const projectWorkspaceListChangedStorageKey =
+  "nexus.project-workspace-list-changed"
 
 export function notifyProjectWorkspaceListChanged() {
   window.dispatchEvent(new Event(projectWorkspaceListChangedEvent))
+  try {
+    window.localStorage.setItem(
+      projectWorkspaceListChangedStorageKey,
+      `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    )
+  } catch {
+    // Keep same-tab refresh working when browser storage is unavailable.
+  }
 }
 
-export function onProjectWorkspaceListChanged(callback: () => void) {
-  window.addEventListener(projectWorkspaceListChangedEvent, callback)
-  return () =>
-    window.removeEventListener(projectWorkspaceListChangedEvent, callback)
+export function onProjectWorkspaceListChanged(
+  callback: () => void,
+  { crossTabOnly = false }: { crossTabOnly?: boolean } = {},
+) {
+  if (!crossTabOnly)
+    window.addEventListener(projectWorkspaceListChangedEvent, callback)
+  const handleStorage = (event: StorageEvent) => {
+    if (
+      event.key === projectWorkspaceListChangedStorageKey &&
+      event.newValue !== null
+    )
+      callback()
+  }
+  window.addEventListener("storage", handleStorage)
+  return () => {
+    if (!crossTabOnly)
+      window.removeEventListener(projectWorkspaceListChangedEvent, callback)
+    window.removeEventListener("storage", handleStorage)
+  }
 }
 
 export type ProjectTask = {
@@ -90,6 +119,8 @@ export type ProjectWorkspaceWorkstream = {
 
 export type ProjectWorkspaceSummary = {
   id: string
+  rowId: string
+  kind: "group" | "ungrouped-project"
   name: string
   structure: "SEPARATE" | "MULTI_WORKSTREAM"
   status: ProjectStatus
@@ -98,6 +129,7 @@ export type ProjectWorkspaceSummary = {
   activityCount: number
   canCreate: boolean
   canManage: boolean
+  canRename: boolean
   workstreams: Omit<
     ProjectWorkspaceWorkstream,
     "plan" | "milestones" | "staff"
@@ -130,6 +162,11 @@ export const listProjectWorkspaces = (
   return apiRequest<{
     workspaces: ProjectWorkspaceSummary[]
     canCreate: boolean
+    projectCounts: {
+      total: number
+      byStatus: Record<ProjectStatus, number>
+    }
+    resultsTruncated: boolean
   }>(`/api/project-workspace${suffix}`, { signal })
 }
 
@@ -138,6 +175,161 @@ export const getProjectWorkspace = (id: string, signal?: AbortSignal) =>
     `/api/project-workspace/${encodeURIComponent(id)}`,
     { signal },
   )
+
+export type WorkspaceDirectoryRow = {
+  rowId: string
+  id: string
+  kind: "group" | "ungrouped-project"
+  name: string
+  clientName: string | null
+  statuses: ProjectStatus[]
+  projectCount: number
+  departmentNames: string[]
+  updatedAt: string
+  progress: { completed: number; total: number } | null
+  canManage: boolean
+  canRename: boolean
+}
+
+export type AdminProjectWorkspaceMember = {
+  id: string
+  fullName: string
+  position: string | null
+}
+
+export type AdminProjectWorkspaceProject = {
+  id: string
+  name: string
+  description: string | null
+  status: ProjectStatus
+  client: { id: string; fullName: string | null }
+  department: { id: string; name: string }
+  workspace: { id: string; name: string } | null
+  leads: AdminProjectWorkspaceMember[]
+  team: (AdminProjectWorkspaceMember & { isTeamLead: boolean })[]
+  startDate: string | null
+  taskDueDates: string[]
+  tasks: { total: number; completed: number; incomplete: number }
+  progress: { completed: number; total: number } | null
+}
+
+export type AdminProjectManagementWorkspaceDetails = {
+  identity: string
+  kind: "group" | "ungrouped-project"
+  id: string
+  name: string
+  structure: "SEPARATE" | "MULTI_WORKSTREAM" | null
+  department: {
+    id: string
+    name: string
+    head: {
+      id: string
+      fullName: string | null
+      email: string
+      position: string | null
+    } | null
+    memberCount: number
+  }
+  clients: { id: string; fullName: string | null }[]
+  statuses: ProjectStatus[]
+  projectCount: number
+  unplannedProjectCount: number
+  progress: { completed: number; total: number } | null
+  teamMembers: AdminProjectWorkspaceMember[]
+  projects: AdminProjectWorkspaceProject[]
+  activity: {
+    id: string
+    projectId: string
+    projectName: string
+    type: string
+    summary: string
+    createdAt: string
+    actor: { fullName: string | null } | null
+  }[]
+}
+
+export type ProjectWorkspaceOverviewTask = {
+  id: string
+  title: string
+  projectId: string
+  projectName: string
+  dueDate: string
+  status: ProjectTaskStatus
+}
+
+export type ProjectWorkspaceOverview = {
+  totals: {
+    totalProjects: number
+    inProgress: number
+    completed: number
+    onHold: number
+    planned: number
+    cancelled: number
+    workspaceGroups: number
+    projectsWithTasks: number
+    projectsWithoutTasks: number
+    totalTasks: number
+    completedTasks: number
+    outstandingTasks: number
+    upcomingTasks: number
+    overdueTasks: number
+  }
+  statusDistribution: { status: ProjectStatus; count: number }[]
+  clientDistribution: { id: string; name: string; projectCount: number }[]
+  workspaceProgress: {
+    identity: string
+    kind: "group" | "ungrouped-project"
+    name: string
+    projectCount: number
+    completedTasks: number
+    totalTasks: number
+  }[]
+  upcomingDeadlines: ProjectWorkspaceOverviewTask[]
+  overdueTaskList: ProjectWorkspaceOverviewTask[]
+}
+
+export function projectWorkspaceHref(
+  identity: string,
+  returnState?: WorkspaceDirectoryState,
+) {
+  const query = returnState ? serializeWorkspaceDirectoryState(returnState) : ""
+  return `/project-workspace/${encodeURIComponent(identity)}${query ? `?${query}` : ""}`
+}
+
+export type WorkspaceDirectoryQuery = Omit<WorkspaceDirectoryState, "sort"> & {
+  sort: "recent" | "name" | "client" | "projects"
+}
+
+export function listWorkspaceDirectory(
+  query: WorkspaceDirectoryQuery,
+  signal: AbortSignal,
+) {
+  const params = new URLSearchParams({ ...query, page: String(query.page) })
+  return apiRequest<{
+    rows: WorkspaceDirectoryRow[]
+    page: number
+    pageSize: number
+    total: number
+    totalPages: number
+    hasWorkspaces: boolean
+  }>(`/api/project-workspace/directory?${params}`, { signal })
+}
+
+export function getAdminProjectManagementWorkspaceDetails(
+  departmentId: string,
+  identity: string,
+  signal?: AbortSignal,
+) {
+  return apiRequest<AdminProjectManagementWorkspaceDetails>(
+    `/api/project-workspace/admin/departments/${encodeURIComponent(departmentId)}/workspaces/${encodeURIComponent(identity)}`,
+    { signal },
+  )
+}
+
+export const getProjectWorkspaceOverview = (signal?: AbortSignal) =>
+  apiRequest<ProjectWorkspaceOverview>("/api/project-workspace/overview", {
+    signal,
+  })
 
 export const listProjectWorkspaceTemplates = (signal?: AbortSignal) =>
   apiRequest<ProjectWorkspaceTemplate[]>("/api/project-workspace/templates", {

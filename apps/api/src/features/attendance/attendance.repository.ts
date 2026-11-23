@@ -2,7 +2,7 @@ import type { Prisma } from "../../generated/prisma/client.js"
 
 export const attendanceSessionInclude = {
   adjustments: {
-    where: { status: "PENDING", type: "CORRECTION" },
+    where: { status: { in: ["PENDING", "VERIFIED"] }, type: "CORRECTION" },
     select: { id: true },
   },
   breaks: { orderBy: [{ startedAt: "asc" }, { id: "asc" }] },
@@ -57,12 +57,9 @@ export const attendanceRepository = {
     return tx.attendanceWorkSession.findFirst({
       where: { employeeId },
       orderBy: [{ startedAt: "desc" }, { id: "desc" }],
-    })
-  },
-  assignments(tx: Prisma.TransactionClient, employeeId: string) {
-    return tx.attendancePolicyAssignment.findMany({
-      where: { employeeId },
-      include: { policy: { include: { days: true } } },
+      include: {
+        workday: { select: { id: true, workDate: true, timeZone: true } },
+      },
     })
   },
 }

@@ -2,16 +2,18 @@
 
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { contentClass, focusRing } from "@/components/layout/styles"
 import { PageHeader } from "@/components/layout/page-header"
 import { Button } from "@/components/ui/button"
 import { SearchField } from "@/components/ui/search-field"
 import { FilterSelect } from "@/components/ui/filter-select"
+import { TableSkeletonBody } from "@/components/ui/data-table-skeleton"
 import {
   Table,
   TableBody,
   TableCell,
+  TableErrorRow,
   TableHead,
   TableHeader,
   TableRow,
@@ -68,18 +70,32 @@ export function AdministrativeConversationsPage() {
 function ConversationList() {
   const [kind, setKind] = useState<BusinessConversationKind>("service")
   const [search, setSearch] = useState("")
+  const [settledSearch, setSettledSearch] = useState(search)
+  const searchPending = search !== settledSearch
+  useEffect(() => {
+    if (!searchPending) return
+    const timer = window.setTimeout(() => setSettledSearch(search), 200)
+    return () => window.clearTimeout(timer)
+  }, [search, searchPending])
   const [departmentId, setDepartmentId] = useState("")
   const [page, setPage] = useState(1)
   const { formatDate } = useDatePreferences()
   const result = useAsyncResource(
-    (signal) =>
-      listAdministrativeConversations(
-        { kind, search, departmentId, page },
+    async (signal) => ({
+      search: settledSearch,
+      data: await listAdministrativeConversations(
+        { kind, search: settledSearch, departmentId, page },
         signal,
       ),
-    [kind, search, departmentId, page],
+    }),
+    [kind, settledSearch, departmentId, page],
+    { enabled: !searchPending },
   )
-  const data = !result.loading && !result.error ? result.data : undefined
+  const data = result.error && !searchPending ? undefined : result.data?.data
+  const searchLoading =
+    searchPending || (result.loading && result.data?.search !== settledSearch)
+  const showTable =
+    Boolean(data) || result.loading || searchLoading || Boolean(result.error)
   return (
     <section aria-label="Business conversation metadata">
       <p className="mb-4 text-xs text-muted-foreground">{metadataNote}</p>
@@ -121,15 +137,12 @@ function ConversationList() {
           ]}
         />
       </div>
-      {result.loading && <p role="status">Loading conversation metadata…</p>}
-      {result.error && (
-        <p role="alert">
-          {result.error} <Button onClick={result.retry}>Retry</Button>
-        </p>
-      )}
-      {data && (
+      {showTable && (
         <>
-          <Table aria-label="Business conversations">
+          <Table
+            aria-label="Business conversations"
+            aria-busy={result.loading || searchLoading}
+          >
             <TableHeader>
               <TableRow>
                 {[
@@ -144,49 +157,69 @@ function ConversationList() {
                 ))}
               </TableRow>
             </TableHeader>
-            <TableBody>
-              {data.conversations
-                .filter((item) => item.capabilities.inspectMetadata)
-                .map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell>{item.name}</TableCell>
-                    <TableCell>{item.client.fullName || "Client"}</TableCell>
-                    <TableCell>
-                      {item.department?.name ?? "No linked department"}
-                    </TableCell>
-                    <TableCell>
-                      {item.status === "ARCHIVED" ? "Archived" : "Active"}
-                    </TableCell>
-                    <TableCell>{formatDate(item.updatedAt)}</TableCell>
-                    <TableCell>
-                      <Link
-                        aria-label={`Inspect metadata for ${item.name}`}
-                        className={`text-[#294a9b] ${focusRing}`}
-                        href={`${root}?kind=${item.kind}&conversation=${encodeURIComponent(item.id)}`}
-                      >
-                        Inspect metadata
-                      </Link>
+            {searchLoading || (result.loading && !data) ? (
+              <TableSkeletonBody
+                label="business conversations"
+                columns={6}
+                rows={5}
+              />
+            ) : data ? (
+              <TableBody>
+                {data.conversations
+                  .filter((item) => item.capabilities.inspectMetadata)
+                  .map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell>{item.name}</TableCell>
+                      <TableCell>{item.client.fullName || "Client"}</TableCell>
+                      <TableCell>
+                        {item.department?.name ?? "No linked department"}
+                      </TableCell>
+                      <TableCell>
+                        {item.status === "ARCHIVED" ? "Archived" : "Active"}
+                      </TableCell>
+                      <TableCell>{formatDate(item.updatedAt)}</TableCell>
+                      <TableCell>
+                        <Link
+                          aria-label={`Inspect metadata for ${item.name}`}
+                          className={`text-[#294a9b] ${focusRing}`}
+                          href={`${root}?kind=${item.kind}&conversation=${encodeURIComponent(item.id)}`}
+                        >
+                          Inspect metadata
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                {!data.conversations.length && (
+                  <TableRow>
+                    <TableCell colSpan={6}>
+                      No business conversations found.
                     </TableCell>
                   </TableRow>
-                ))}
-              {!data.conversations.length && (
-                <TableRow>
-                  <TableCell colSpan={6}>
-                    No business conversations found.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
+                )}
+              </TableBody>
+            ) : result.error ? (
+              <TableBody>
+                <TableErrorRow
+                  message={result.error}
+                  onRetry={result.retry}
+                  colSpan={6}
+                  className="min-h-[170px]"
+                />
+              </TableBody>
+            ) : null}
           </Table>
-          <TablePaginationFooter
-            {...pageRange(data.page, data.pageSize, data.total)}
-            total={data.total}
-            page={data.page}
-            totalPages={Math.ceil(data.total / data.pageSize)}
-            label="Business conversation pages"
-            itemLabel="conversations"
-            onPageChange={setPage}
-          />
+          {data && (
+            <TablePaginationFooter
+              {...pageRange(data.page, data.pageSize, data.total)}
+              total={data.total}
+              page={data.page}
+              totalPages={Math.ceil(data.total / data.pageSize)}
+              disabled={result.loading || searchLoading}
+              label="Business conversation pages"
+              itemLabel="conversations"
+              onPageChange={setPage}
+            />
+          )}
         </>
       )}
     </section>
@@ -206,14 +239,17 @@ function ConversationDetails({
     (signal) => getAdministrativeConversation(kind, id, page, signal),
     [kind, id, page],
   )
-  const data = !result.loading && !result.error ? result.data : undefined
+  const data = result.error ? undefined : result.data
   const row = data?.conversation
+  const showRecords =
+    (Boolean(data?.conversation.capabilities.inspectMetadata) &&
+      Boolean(data)) ||
+    (result.loading && !result.error && !data)
   return (
     <section aria-label="Conversation metadata details" className="space-y-5">
       <Link href={root} className={`text-xs text-[#294a9b] ${focusRing}`}>
         Back to business conversations
       </Link>
-      {result.loading && <p role="status">Loading conversation metadata…</p>}
       {result.error && (
         <p role="alert">
           {result.error} <Button onClick={result.retry}>Retry</Button>
@@ -261,7 +297,14 @@ function ConversationDetails({
             note={metadataNote}
             messagesRequestId={null}
           />
-          <Table aria-label="Linked business records">
+        </>
+      )}
+      {showRecords && (
+        <>
+          <Table
+            aria-label="Linked business records"
+            aria-busy={result.loading}
+          >
             <TableHeader>
               <TableRow>
                 {["Request", "Service", "Request status", "Project"].map(
@@ -271,38 +314,53 @@ function ConversationDetails({
                 )}
               </TableRow>
             </TableHeader>
-            <TableBody>
-              {data.linkedRecords.map((record) => (
-                <TableRow key={record.id}>
-                  <TableCell>
-                    {record.referenceNumber || record.id}
-                    <p className="mt-1 text-muted-foreground">{record.title}</p>
-                  </TableCell>
-                  <TableCell>{record.serviceName}</TableCell>
-                  <TableCell>{record.status.replaceAll("_", " ")}</TableCell>
-                  <TableCell>
-                    {record.project
-                      ? `${record.project.name} · ${record.project.status.replaceAll("_", " ")}`
-                      : "Not created"}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {!data.linkedRecords.length && (
-                <TableRow>
-                  <TableCell colSpan={4}>No linked business records.</TableCell>
-                </TableRow>
-              )}
-            </TableBody>
+            {data ? (
+              <TableBody>
+                {data.linkedRecords.map((record) => (
+                  <TableRow key={record.id}>
+                    <TableCell>
+                      {record.referenceNumber || record.id}
+                      <p className="mt-1 text-muted-foreground">
+                        {record.title}
+                      </p>
+                    </TableCell>
+                    <TableCell>{record.serviceName}</TableCell>
+                    <TableCell>{record.status.replaceAll("_", " ")}</TableCell>
+                    <TableCell>
+                      {record.project
+                        ? `${record.project.name} · ${record.project.status.replaceAll("_", " ")}`
+                        : "Not created"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {!data.linkedRecords.length && (
+                  <TableRow>
+                    <TableCell colSpan={4}>
+                      No linked business records.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            ) : (
+              <TableSkeletonBody
+                label="linked business records"
+                columns={4}
+                rows={5}
+              />
+            )}
           </Table>
-          <TablePaginationFooter
-            {...pageRange(data.page, data.pageSize, data.total)}
-            total={data.total}
-            page={data.page}
-            totalPages={Math.ceil(data.total / data.pageSize)}
-            label="Linked business record pages"
-            itemLabel="requests"
-            onPageChange={setPage}
-          />
+          {data && (
+            <TablePaginationFooter
+              {...pageRange(data.page, data.pageSize, data.total)}
+              total={data.total}
+              page={data.page}
+              totalPages={Math.ceil(data.total / data.pageSize)}
+              disabled={result.loading}
+              label="Linked business record pages"
+              itemLabel="requests"
+              onPageChange={setPage}
+            />
+          )}
         </>
       )}
     </section>

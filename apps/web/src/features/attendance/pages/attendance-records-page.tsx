@@ -3,6 +3,8 @@ import { useState } from "react"
 import { Download } from "lucide-react"
 import { PageHeaderButton } from "@/components/layout/page-header"
 import { FilterSelect } from "@/components/ui/filter-select"
+import { TableSearchStatus } from "@/components/ui/table-search-status"
+import { usePaginatedList } from "@/components/ui/use-paginated-list"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import { AttendanceShell } from "../components/attendance-shell"
 import {
@@ -11,16 +13,34 @@ import {
   AttendancePagination,
 } from "../components/attendance-shared"
 import { AttendanceHistoryTable } from "../components/attendance-history"
+import { AttendanceReconciliationDialog } from "../components/attendance-reconciliation-dialog"
 import {
   attendanceMonitoring,
   attendanceDepartments,
   attendanceEmployees,
+  type AttendanceEmployee,
+  type AttendanceSession,
+  type AttendanceWorkday,
 } from "../api/attendance-api"
 import { EmployeeTable } from "@/features/employees/components/employee-table"
 import { SearchField } from "@/components/ui/search-field"
 import { Button } from "@/components/ui/button"
-import { OverviewPanel } from "@/components/ui/overview-panel"
-import { defaultRange } from "../model/attendance"
+import { defaultRange, isSuspendedSession } from "../model/attendance"
+
+function matchesAttendanceEmployee(item: AttendanceEmployee, query: string) {
+  const needle = query.trim().toLocaleLowerCase()
+  return [item.fullName, item.employeeId].some((value) =>
+    value.toLocaleLowerCase().includes(needle),
+  )
+}
+
+function exportSessionStatus(session: AttendanceSession) {
+  if (session.endedAt) return "Closed"
+  if (isSuspendedSession(session)) return "Suspended"
+  return session.breaks.some((pause) => !pause.endedAt && !pause.isPaid)
+    ? "On unpaid break"
+    : "Open"
+}
 
 export function AttendanceRecordsPage() {
   const [view, setView] = useState<"employees" | "logs">("employees")
@@ -30,18 +50,29 @@ export function AttendanceRecordsPage() {
   } | null>(null)
   const employeeId = selected?.id ?? ""
   const [search, setSearch] = useState("")
-  const [employeePage, setEmployeePage] = useState(1)
   const [range, setRange] = useState(defaultRange)
   const [page, setPage] = useState(1)
   const [departmentId, setDepartmentId] = useState("")
+  const [reconciliation, setReconciliation] = useState<{
+    session: AttendanceSession
+    day: AttendanceWorkday
+  } | null>(null)
   const departments = useAsyncResource(attendanceDepartments, [], {
     fallbackError: "Couldn't load departments.",
   })
-  const employees = useAsyncResource(
-    (signal) => attendanceEmployees(search, employeePage, signal, departmentId),
-    [search, employeePage, departmentId],
-    { fallbackError: "Couldn't load employees." },
+  const selectedDepartment = departments.data?.departments.find(
+    (department) => department.id === departmentId,
   )
+  const employees = usePaginatedList({
+    params: { search, departmentId },
+    load: ({ page, signal }) =>
+      attendanceEmployees(search, page, signal, departmentId),
+    rows: (result) => result.employees,
+    matches: matchesAttendanceEmployee,
+    initial: null,
+    fallbackError: "Couldn't load employees.",
+  })
+  const { setPage: setEmployeePage } = employees
   const history = useAsyncResource(
     (signal) =>
       attendanceMonitoring(
@@ -76,6 +107,9 @@ export function AttendanceRecordsPage() {
         "Worked hours",
         "Required hours",
         "Review excess",
+        "Approved leave hours",
+        "Suspension timestamps",
+        "Session statuses",
       ],
       ...matching.workdays.map((day) => [
         day.workDate,
@@ -83,10 +117,13 @@ export function AttendanceRecordsPage() {
         day.employee?.department?.name ?? "",
         day.timeZone,
         day.sessions.map((session) => session.startedAt).join("; "),
-        day.sessions.map((session) => session.endedAt ?? "Open").join("; "),
+        day.sessions.map((session) => session.endedAt ?? "").join("; "),
         String(day.workedHours),
         String(day.requiredMinutes / 60),
         String(day.excessRequiresReview),
+        String((day.approvedLeaveMinutes ?? 0) / 60),
+        day.sessions.map((session) => session.suspendedAt ?? "").join("; "),
+        day.sessions.map(exportSessionStatus).join("; "),
       ]),
     ]
     const blob = new Blob(
@@ -135,6 +172,11 @@ export function AttendanceRecordsPage() {
   return (
     <AttendanceShell
       tab="records"
+      title={
+        view === "logs" && selected
+          ? `Time Logs for ${selected.fullName}`
+          : undefined
+      }
       actions={
         view === "employees" ? (
           <PageHeaderButton
@@ -174,20 +216,22 @@ export function AttendanceRecordsPage() {
           </div>
           <EmployeeTable
             mode="attendance"
-            employees={
-              employees.loading || employees.error
-                ? []
-                : (employees.data?.employees ?? []).map((employee) => ({
-                    ...employee,
-                    departmentName: employee.departmentId
-                      ? (departments.data?.departments.find(
-                          (department) =>
-                            department.id === employee.departmentId,
-                        )?.name ?? "Department unavailable")
-                      : "Unassigned",
-                  }))
+            employees={employees.rows.map((employee) => ({
+              ...employee,
+              departmentName: employee.departmentId
+                ? (departments.data?.departments.find(
+                    (department) => department.id === employee.departmentId,
+                  )?.name ?? "Department unavailable")
+                : "Unassigned",
+            }))}
+            initialLoading={
+              employees.searchSkeleton ||
+              (employees.loading &&
+                !employees.hasCurrentData &&
+                !employees.previewing)
             }
             loading={employees.loading}
+            previewing={employees.previewing}
             error={employees.error}
             onRetry={employees.retry}
             emptyMessage="No employees match your search."
@@ -197,37 +241,38 @@ export function AttendanceRecordsPage() {
               setView("logs")
             }}
           />
-          {employees.data && !employees.error && (
-            <AttendancePagination
-              data={employees.data}
-              disabled={employees.loading}
-              onChange={setEmployeePage}
-            />
-          )}
+          <TableSearchStatus
+            active={
+              employees.loading &&
+              employees.previewing &&
+              Boolean(employees.preview?.length)
+            }
+            label="attendance employees"
+          />
+          {employees.data &&
+            employees.hasCurrentData &&
+            !employees.previewing &&
+            !employees.error && (
+              <AttendancePagination
+                data={employees.data}
+                disabled={employees.loading}
+                onChange={setEmployeePage}
+              />
+            )}
         </>
       ) : (
-        <OverviewPanel
-          className="border-[#dce3ed] bg-background shadow-[0_14px_36px_rgb(20_45_97_/_10%)]"
-          titleClassName="text-lg"
-          title={
-            selected
-              ? `Logs for ${selected.fullName}`
-              : "All permitted employees"
-          }
-          action={
-            <Button
-              variant="outline"
-              size="panel"
-              disabled={!matching?.workdays.length || history.loading}
-              onClick={exportPage}
-            >
-              <Download size={15} aria-hidden="true" />
-              Export
-            </Button>
-          }
-        >
+        <>
           <div className="mb-4 flex flex-wrap items-center gap-[10px]">
-            {!selected && departmentFilter}
+            {selected
+              ? departmentId && (
+                  <div className="flex min-h-[34px] min-w-0 items-center gap-2 rounded-md border border-[#e1e4ea] px-3 text-xs">
+                    <span className="text-[#65718a]">Department</span>
+                    <span className="min-w-0 font-medium break-words">
+                      {selectedDepartment?.name ?? "Department unavailable"}
+                    </span>
+                  </div>
+                )
+              : departmentFilter}
             <RangeFields
               {...range}
               onChange={(from, to) => {
@@ -247,6 +292,16 @@ export function AttendanceRecordsPage() {
                 All logs
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="panel"
+              className="ml-auto"
+              disabled={!matching?.workdays.length || history.loading}
+              onClick={exportPage}
+            >
+              <Download size={15} aria-hidden="true" />
+              Export
+            </Button>
           </div>
           <AttendanceHistoryTable
             days={matching?.workdays ?? []}
@@ -254,6 +309,7 @@ export function AttendanceRecordsPage() {
             loading={history.loading}
             error={history.error}
             onRetry={history.retry}
+            onReconcile={(session, day) => setReconciliation({ session, day })}
           />
           {matching && (
             <AttendancePagination
@@ -262,7 +318,14 @@ export function AttendanceRecordsPage() {
               onChange={setPage}
             />
           )}
-        </OverviewPanel>
+        </>
+      )}
+      {reconciliation && (
+        <AttendanceReconciliationDialog
+          {...reconciliation}
+          onClose={() => setReconciliation(null)}
+          onSaved={history.retry}
+        />
       )}
     </AttendanceShell>
   )

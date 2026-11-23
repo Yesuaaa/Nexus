@@ -34,6 +34,8 @@ const permissionsByRole = {
     Permissions.SERVICES_READ,
     Permissions.SERVICES_MANAGE,
     Permissions.CLIENTS_READ,
+    Permissions.PAYROLL_READ,
+    Permissions.PAYROLL_MANAGE,
   ],
   SUPERADMIN: [
     Permissions.MODULES_ACCESS_ALL,
@@ -49,6 +51,7 @@ const permissionsByRole = {
     Permissions.DEPARTMENTS_READ,
     Permissions.DEPARTMENTS_MANAGE,
     Permissions.DEPARTMENTS_DELETE,
+    Permissions.PAYROLL_READ,
     Permissions.ACCOUNTS_READ,
     Permissions.ACCOUNTS_RESET_PASSWORD,
     Permissions.ACCOUNTS_CREATE_BASIC,
@@ -111,6 +114,7 @@ const routeMatrix = {
     "/projects",
     "/project-workspace",
     "/request-inbox",
+    "/request-inbox/overview",
     "/staff-workload",
     "/calendar",
     "/profile",
@@ -123,6 +127,7 @@ const routeMatrix = {
     "/clients",
     "/departments",
     "/employees",
+    "/module/payroll/runs",
     "/calendar",
     "/profile",
     "/settings",
@@ -133,9 +138,13 @@ const routeMatrix = {
     "/clients",
     "/departments",
     "/employees",
+    "/module/payroll/runs",
     "/messages",
     "/accounts",
     "/module/project-management",
+    "/project-management",
+    "/project-management/overview",
+    "/project-management/departments/department-1/projects",
     "/module/service-operations/workload",
     "/calendar",
     "/profile",
@@ -148,6 +157,9 @@ const protectedRoutes = [
   "/accounts",
   "/projects",
   "/project-workspace",
+  "/project-management",
+  "/project-management/overview",
+  "/project-management/departments/department-1/projects",
   "/departments",
   "/employees",
   "/services",
@@ -158,6 +170,8 @@ const protectedRoutes = [
   "/booked-services",
   "/staff-workload",
   "/request-inbox",
+  "/module/payroll/runs",
+  "/request-inbox/overview",
 ]
 
 for (const [actor, allowedRoutes] of Object.entries(routeMatrix)) {
@@ -197,8 +211,105 @@ test("dynamic project routes are explicit and unknown descendants are denied", (
     "project-workspace-new",
   )
   assert.equal(
+    findRoutePolicy("/project-workspace/overview")?.id,
+    "project-workspace-overview",
+  )
+  assert.equal(
     findRoutePolicy("/project-workspace/project-1")?.id,
     "project-workspace-detail",
+  )
+  assert.equal(
+    findRoutePolicy("/project-management")?.id,
+    "admin-project-management",
+  )
+  assert.equal(
+    findRoutePolicy("/project-management/overview")?.id,
+    "admin-project-management-overview",
+  )
+  assert.equal(
+    findRoutePolicy("/project-management/departments/department-1/projects")
+      ?.id,
+    "admin-project-management-department",
+  )
+  assert.equal(
+    findRoutePolicy(
+      "/project-management/departments/department-1/projects/extra",
+    ),
+    undefined,
+  )
+})
+
+test("Payroll Runs is an explicit reader route for Admin and Superadmin", () => {
+  assert.equal(findRoutePolicy("/module/payroll/runs")?.id, "payroll-runs")
+  for (const role of ["ADMIN", "SUPERADMIN"])
+    assert.equal(canAccessRoute(account(role), "/module/payroll/runs"), true)
+  for (const role of ["STAFF", "USER"])
+    assert.equal(canAccessRoute(account(role), "/module/payroll/runs"), false)
+})
+
+test("department-first Project Management routes require the current global read grants", () => {
+  const superadmin = account("SUPERADMIN")
+  const departmentRoutes = [
+    "/project-management",
+    "/project-management/departments/department-1/projects",
+  ]
+  const allRoutes = [...departmentRoutes, "/project-management/overview"]
+
+  for (const pathname of allRoutes) {
+    assert.equal(canAccessRoute(superadmin, pathname), true, pathname)
+    assert.equal(
+      getActiveWorkspaceModuleId(superadmin, pathname),
+      "project-management",
+    )
+  }
+
+  for (const role of ["ADMIN", "STAFF", "USER"]) {
+    for (const pathname of allRoutes)
+      assert.equal(
+        canAccessRoute(account(role), pathname),
+        false,
+        `${role}: ${pathname}`,
+      )
+  }
+
+  for (const permission of [
+    Permissions.MODULES_ACCESS_ALL,
+    Permissions.ORGANIZATION_READ_ALL,
+  ]) {
+    const withoutPermission = {
+      ...superadmin,
+      permissions: superadmin.permissions.filter((item) => item !== permission),
+    }
+    for (const pathname of allRoutes)
+      assert.equal(canAccessRoute(withoutPermission, pathname), false, pathname)
+  }
+
+  const withoutDepartmentRead = {
+    ...superadmin,
+    permissions: superadmin.permissions.filter(
+      (item) => item !== Permissions.DEPARTMENTS_READ,
+    ),
+  }
+  assert.equal(
+    canAccessRoute(withoutDepartmentRead, "/project-management/overview"),
+    true,
+  )
+  for (const pathname of departmentRoutes)
+    assert.equal(
+      canAccessRoute(withoutDepartmentRead, pathname),
+      false,
+      pathname,
+    )
+
+  const managementNavigation = getNavigationPolicies(superadmin, "main").find(
+    (policy) => policy.id === "admin-project-management",
+  )
+  assert.ok(managementNavigation)
+  assert.equal(
+    getNavigationPolicies(account("ADMIN"), "main").some(
+      (policy) => policy.id === "admin-project-management",
+    ),
+    false,
   )
 })
 
@@ -249,6 +360,10 @@ test("route policies record the approved module ownership without claiming share
     "/clients": "service-operations",
     "/projects/project-1": "project-management",
     "/project-workspace/project-1": "project-management",
+    "/project-management": "project-management",
+    "/project-management/overview": "project-management",
+    "/project-management/departments/department-1/projects":
+      "project-management",
     "/staff-workload": "project-management",
     "/employees": "people-hr",
     "/departments": "people-hr",
@@ -329,15 +444,17 @@ test("navigation is generated from the same policies without changing role visib
       "Module",
       "Attendance",
       "Requests & Approvals",
+      "My Payroll",
       "Calendar",
       "Project Workspace",
     ],
     STAFF_HEAD: [
       "Module",
-      "Dashboard",
       "Attendance",
       "Time Logs",
       "Requests & Approvals",
+      "Audit Trail",
+      "My Payroll",
       "Calendar",
       "Staff Workload",
       "Request Inbox",
@@ -347,30 +464,32 @@ test("navigation is generated from the same policies without changing role visib
       "Module",
       "Department Management",
       "Employee Management",
-      "Dashboard",
       "Attendance",
       "Time Logs",
       "Requests & Approvals",
       "Policies",
+      "Audit Trail",
+      "Payroll",
       "Service Management",
       "Calendar",
       "Client Management",
     ],
     SUPERADMIN: [
       "Module",
-      "Service Requests",
-      "Overview",
+      "Request Overview",
       "Account Management",
       "Department Management",
       "Employee Management",
-      "Dashboard",
       "Time Logs",
       "Requests & Approvals",
       "Policies",
+      "Audit Trail",
+      "Payroll",
       "Service Management",
       "Calendar",
       "Staff Workload",
       "Client Management",
+      "Project Workspace Management",
     ],
   }
 
@@ -385,6 +504,14 @@ test("navigation is generated from the same policies without changing role visib
         getNavigationLabel(policy, currentAccount),
       ),
       labels,
+    )
+    assert.deepEqual(
+      getNavigationPolicies(currentAccount, "system-tool").map((policy) =>
+        getNavigationLabel(policy, currentAccount),
+      ),
+      actor === "SUPERADMIN"
+        ? ["Project Logs", "Service Logs", "People & HR Logs", "Workforce Logs"]
+        : [],
     )
     assert.deepEqual(
       getNavigationPolicies(currentAccount, "footer").map((policy) =>
@@ -414,6 +541,39 @@ test("project navigation remains active on current dynamic project routes", () =
   )
 })
 
+for (const moduleId of [
+  "service-operations",
+  "project-management",
+  "people-hr",
+  "attendance-monitoring",
+])
+  test(`${moduleId} logs require a current Superadmin and both administrative grants`, () => {
+    const path = `/module/${moduleId}/logs`
+    const sa = account("SUPERADMIN")
+    assert.equal(canAccessRoute(sa, path), true)
+    assert.equal(getActiveWorkspaceModuleId(sa, path), moduleId)
+    for (const role of ["ADMIN", "STAFF", "USER"])
+      assert.equal(
+        canAccessRoute(account(role, { permissions: sa.permissions }), path),
+        false,
+      )
+    assert.equal(canAccessRoute({ ...sa, isActive: false }, path), false)
+    for (const permission of [
+      Permissions.MODULES_ACCESS_ALL,
+      Permissions.ORGANIZATION_READ_ALL,
+    ])
+      assert.equal(
+        canAccessRoute(
+          {
+            ...sa,
+            permissions: sa.permissions.filter((value) => value !== permission),
+          },
+          path,
+        ),
+        false,
+      )
+  })
+
 test("department-head handoff immediately removes head-only routes and navigation", () => {
   const currentHead = account("STAFF", {
     headOf: { id: "department-1", name: "Design" },
@@ -428,6 +588,7 @@ test("department-head handoff immediately removes head-only routes and navigatio
       "dashboard",
       "attendance",
       "attendance-requests",
+      "staff-my-payroll",
       "calendar",
       "project-workspace",
     ],

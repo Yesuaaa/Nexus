@@ -1,16 +1,16 @@
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import { Eye } from "lucide-react"
 import type { ReactNode } from "react"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
+import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import { rowActionButton } from "@/components/ui/row-action-styles"
 import {
   DataTableErrorRow,
   ResponsiveDataTable,
   ResponsiveDataTableBody,
-  ResponsiveDataTableCell,
   ResponsiveDataTableColumnHeader,
   ResponsiveDataTableHeader,
-  ResponsiveDataTableRow,
 } from "@/components/ui/responsive-data-table"
 import { cn } from "@/lib/utils"
 import type { BookedService } from "../api/bookings-api"
@@ -78,14 +78,29 @@ export function BookedServicesTable({
       </ResponsiveDataTableHeader>
       {initialLoading ? (
         <ResponsiveDataTableBody>
-          <ResponsiveDataTableRow>
-            <ResponsiveDataTableCell
-              aria-colspan={6}
-              className="grid min-h-[150px] place-content-center gap-3 p-6 text-center text-xs text-[#7183a2]"
-            >
-              <span role="status">Loading booked services…</span>
-            </ResponsiveDataTableCell>
-          </ResponsiveDataTableRow>
+          <DataTableSkeletonRows
+            label="booked services"
+            rowClassName={cn(
+              bookingGrid,
+              "h-[68px] px-4 py-2 @max-[950px]:h-[200px] @max-[950px]:gap-x-3 @max-[950px]:gap-y-2 @max-[950px]:py-3",
+            )}
+            cellClassNames={[
+              "@max-[950px]:col-start-1 @max-[950px]:row-start-1",
+              "@max-[950px]:col-span-2 @max-[950px]:row-start-3",
+              "@max-[950px]:col-span-2 @max-[950px]:row-start-2",
+              "@max-[950px]:col-span-2 @max-[950px]:row-start-4",
+              "@max-[950px]:col-span-2 @max-[950px]:row-start-5",
+              "@max-[950px]:col-start-2 @max-[950px]:row-start-1",
+            ]}
+            cellSkeletonClassNames={[
+              "h-3 w-4/5",
+              "h-3 w-3/4",
+              "h-5 w-20 rounded",
+              "h-3 w-20",
+              "h-3 w-4/5",
+              "size-8 rounded-[7px]",
+            ]}
+          />
         </ResponsiveDataTableBody>
       ) : error ? (
         <ResponsiveDataTableBody>
@@ -169,6 +184,7 @@ export function BookedServicesTable({
                   onClick={() => onView(booking)}
                 >
                   <Eye size={16} aria-hidden="true" />
+                  <HoverTooltip>View booking</HoverTooltip>
                 </button>
               </div>
             </>

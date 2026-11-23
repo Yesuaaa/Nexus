@@ -1,5 +1,7 @@
 "use client"
 
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
+
 import { FormInput } from "@/components/ui/form-input"
 
 import Link from "next/link"
@@ -25,9 +27,11 @@ import { cn } from "@/lib/utils"
 import {
   cancelProjectWorkspace,
   notifyProjectWorkspaceListChanged,
+  projectWorkspaceHref,
   renameProjectWorkspace,
   type ProjectWorkspaceSummary,
 } from "../api/project-workspace-api"
+import type { WorkspaceDirectoryState } from "../model/workspace-directory-state"
 import { errorMessage } from "@/lib/error-message"
 
 type WorkspaceAction = "view" | "edit" | "cancel"
@@ -37,19 +41,26 @@ const dangerItem =
 
 export function WorkspaceListRowActions({
   workspace,
+  identity,
+  returnState,
   onChanged,
+  onViewDetails,
+  isArchived = false,
 }: {
-  workspace: ProjectWorkspaceSummary
+  workspace: Pick<ProjectWorkspaceSummary, "name" | "canManage" | "canRename">
+  identity: string
+  returnState?: WorkspaceDirectoryState
   onChanged: () => void
+  onViewDetails?: () => void
+  isArchived?: boolean
 }) {
   const router = useRouter()
   const [dialog, setDialog] = useState<"edit" | "cancel" | null>(null)
   const [name, setName] = useState(workspace.name)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
-  const isArchived = ["COMPLETED", "CANCELLED"].includes(workspace.status)
-  const href = `/project-workspace/${encodeURIComponent(workspace.id)}`
-  const triggerId = `workspace-actions-${workspace.id}`
+  const href = projectWorkspaceHref(identity, returnState)
+  const triggerId = `workspace-actions-${identity}`
 
   async function saveName(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -57,7 +68,7 @@ export function WorkspaceListRowActions({
     setBusy(true)
     setError("")
     try {
-      await renameProjectWorkspace(workspace.id, name.trim())
+      await renameProjectWorkspace(identity, name.trim())
       setDialog(null)
       notifyProjectWorkspaceListChanged()
       onChanged()
@@ -73,7 +84,7 @@ export function WorkspaceListRowActions({
     setBusy(true)
     setError("")
     try {
-      await cancelProjectWorkspace(workspace.id)
+      await cancelProjectWorkspace(identity)
       setDialog(null)
       notifyProjectWorkspaceListChanged()
       onChanged()
@@ -90,6 +101,23 @@ export function WorkspaceListRowActions({
     setDialog(mode)
   }
 
+  if (onViewDetails)
+    return (
+      <RowActionsMenu<"view-details">
+        triggerId={triggerId}
+        triggerLabel={`More actions for ${workspace.name}`}
+        menuLabel={`Actions for ${workspace.name}`}
+        triggerClassName="max-[560px]:size-11"
+        items={[
+          {
+            action: "view-details",
+            label: <RowActionLabel icon={Eye}>View details</RowActionLabel>,
+          },
+        ]}
+        onAction={onViewDetails}
+      />
+    )
+
   // Read-only rows keep a single view link; manageable rows use the menu.
   if (!workspace.canManage || isArchived)
     return (
@@ -99,6 +127,7 @@ export function WorkspaceListRowActions({
         aria-label={`View ${workspace.name}`}
       >
         <Eye size={16} strokeWidth={1.7} aria-hidden="true" />
+        <HoverTooltip>View project details</HoverTooltip>
       </Link>
     )
 
@@ -108,16 +137,18 @@ export function WorkspaceListRowActions({
       label: <RowActionLabel icon={Eye}>View project</RowActionLabel>,
     },
     {
-      action: "edit",
-      label: <RowActionLabel icon={Pencil}>Edit project</RowActionLabel>,
-    },
-    {
       action: "cancel",
       label: <RowActionLabel icon={Ban}>Cancel project</RowActionLabel>,
       className: dangerItem,
       separatorBefore: true,
     },
   ]
+  if (workspace.canRename) {
+    items.splice(1, 0, {
+      action: "edit",
+      label: <RowActionLabel icon={Pencil}>Edit project</RowActionLabel>,
+    })
+  }
 
   return (
     <>
@@ -151,12 +182,12 @@ export function WorkspaceListRowActions({
           <ModalBody className="gap-1.5">
             <label
               className="block text-xs font-medium"
-              htmlFor={`workspace-name-${workspace.id}`}
+              htmlFor={`workspace-name-${identity}`}
             >
               Project name
             </label>
             <FormInput
-              id={`workspace-name-${workspace.id}`}
+              id={`workspace-name-${identity}`}
               autoFocus
               required
               minLength={2}

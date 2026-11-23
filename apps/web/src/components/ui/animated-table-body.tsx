@@ -14,6 +14,7 @@ import {
   swapAnimatedRows,
   type AnimatedRowSlot,
 } from "./animated-data-row"
+import { TableErrorRow } from "./table"
 
 type RowLayout = {
   top: number
@@ -28,18 +29,24 @@ export function AnimatedTableBody<T extends { id: string }>({
   items,
   viewKey,
   quickKey = "",
+  animateRows = true,
   renderRow,
   rowClassName,
   emptyContent,
+  error,
+  onRetry,
   columns,
   onRowsSettled,
 }: {
   items: T[]
   viewKey: string
   quickKey?: string
+  animateRows?: boolean
   renderRow: (item: T) => ReactNode
   rowClassName?: string | ((item: T) => string)
   emptyContent: ReactNode
+  error?: ReactNode
+  onRetry?: () => void
   columns: number
   onRowsSettled?: () => void
 }) {
@@ -65,6 +72,7 @@ export function AnimatedTableBody<T extends { id: string }>({
   }, [onRowsSettled])
 
   useLayoutEffect(() => {
+    if (!animateRows) return
     const body = bodyRef.current
     if (!body) return
     const measure = () => {
@@ -89,10 +97,23 @@ export function AnimatedTableBody<T extends { id: string }>({
     const observer = new ResizeObserver(measure)
     observer.observe(body)
     return () => observer.disconnect()
-  }, [slots])
+  }, [animateRows, slots])
+
+  useLayoutEffect(() => {
+    if (!animateRows) onRowsSettled?.()
+  }, [animateRows, items, onRowsSettled, quickKey, viewKey])
 
   useEffect(() => {
     latestItems.current = items
+    if (!animateRows) {
+      previous.current = { view: viewKey, quick: quickKey }
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+      return
+    }
+
     const changed = previous.current.view !== viewKey
     const quick = previous.current.quick !== quickKey
     previous.current = { view: viewKey, quick: quickKey }
@@ -135,7 +156,40 @@ export function AnimatedTableBody<T extends { id: string }>({
     setSlots(next)
     setAnimating(true)
     timerRef.current = window.setTimeout(settle, animationDuration)
-  }, [items, viewKey, quickKey, reduced])
+  }, [animateRows, items, viewKey, quickKey, reduced])
+
+  if (!animateRows) {
+    return (
+      <tbody className="relative" aria-live="polite" aria-busy={false}>
+        {error && onRetry ? (
+          <TableErrorRow message={error} onRetry={onRetry} colSpan={columns} />
+        ) : items.length === 0 ? (
+          <tr>
+            <td
+              colSpan={columns}
+              className="p-8 text-center text-xs text-[#7183a2]"
+            >
+              {emptyContent}
+            </td>
+          </tr>
+        ) : (
+          items.map((item) => (
+            <tr
+              key={item.id}
+              data-slot-table-row
+              className={
+                typeof rowClassName === "function"
+                  ? rowClassName(item)
+                  : rowClassName
+              }
+            >
+              {renderRow(item)}
+            </tr>
+          ))
+        )}
+      </tbody>
+    )
+  }
 
   return (
     <motion.tbody
@@ -148,16 +202,19 @@ export function AnimatedTableBody<T extends { id: string }>({
         layout: { duration: reduced ? 0 : 0.14, ease: [0, 0, 0.2, 1] },
       }}
     >
-      {slots.length === 0 && (
-        <tr>
-          <td
-            colSpan={columns}
-            className="p-8 text-center text-xs text-[#7183a2]"
-          >
-            {emptyContent}
-          </td>
-        </tr>
-      )}
+      {slots.length === 0 &&
+        (error && onRetry ? (
+          <TableErrorRow message={error} onRetry={onRetry} colSpan={columns} />
+        ) : (
+          <tr>
+            <td
+              colSpan={columns}
+              className="p-8 text-center text-xs text-[#7183a2]"
+            >
+              {emptyContent}
+            </td>
+          </tr>
+        ))}
       {slots.flatMap((slot) =>
         [slot.exiting, slot.entering]
           .filter((row) => row !== null)
