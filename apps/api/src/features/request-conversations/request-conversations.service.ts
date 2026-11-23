@@ -308,6 +308,19 @@ export async function listConversations(
       },
       bookings: row.bookings.map(serializeBooking),
       lastMessage: messages[0] ? serializeMessage(messages[0]) : null,
+      lastTeamMessage: await (async () => {
+        if (row.clientId !== userId) return null
+        const message = await db.serviceRequestMessage.findFirst({
+          where: {
+            conversationId: row.id,
+            senderId: { not: row.clientId },
+            deletedAt: null,
+          },
+          select: messageSelect,
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        })
+        return message ? serializeMessage(message) : null
+      })(),
       unreadCount: await unreadCount(
         row.id,
         userId,

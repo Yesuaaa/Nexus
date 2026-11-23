@@ -204,14 +204,28 @@ export async function listProjectConversations(
     })
     const counts = await unreadCounts(tx, userId)
     return {
-      conversations: projects.slice(0, 30).map((project) => ({
-        ...summary(project),
-        updatedAt: project.updatedAt,
-        lastMessage: project.messages[0]
-          ? messageDto(project.messages[0])
-          : null,
-        unreadCount: counts.get(project.id) ?? 0,
-      })),
+      conversations: await Promise.all(
+        projects.slice(0, 30).map(async (project) => ({
+          ...summary(project),
+          updatedAt: project.updatedAt,
+          lastMessage: project.messages[0]
+            ? messageDto(project.messages[0])
+            : null,
+          unreadCount: counts.get(project.id) ?? 0,
+          lastTeamMessage: await (async () => {
+            const message = await tx.projectMessage.findFirst({
+              where: {
+                projectId: project.id,
+                senderId: { not: userId },
+                AND: [visibleMessages(userId)],
+              },
+              select: messageSelect,
+              orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            })
+            return message ? messageDto(message) : null
+          })(),
+        })),
+      ),
       nextCursor: projects.length > 30 ? projects[29].id : null,
       unreadCount: [...counts.values()].reduce(
         (total, count) => total + count,

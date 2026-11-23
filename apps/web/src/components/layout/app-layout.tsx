@@ -1,5 +1,6 @@
 "use client"
 import { WorkflowNotificationProvider } from "@/features/workflow-notifications/components/workflow-notification-provider"
+import { DashboardConversationsProvider } from "@/features/request-conversations/hooks/use-dashboard-conversations"
 
 import { useEffect, useState, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
@@ -102,13 +103,20 @@ export function AppLayout({
         )}
       >
         <WorkflowNotificationProvider key={account.id}>
-          <Topbar
-            drawerOpen={drawerOpen}
-            onOpenMenu={() => setDrawerOpen(true)}
-            onSignOut={onSignOut}
-            showMessages={canAccessMessages(account)}
-          />
-          {children}
+          <DashboardConversationsProvider
+            accountId={account.id}
+            canUseClientChat={
+              account.role === "USER" && canAccessMessages(account)
+            }
+          >
+            <Topbar
+              drawerOpen={drawerOpen}
+              onOpenMenu={() => setDrawerOpen(true)}
+              onSignOut={onSignOut}
+              showMessages={canAccessMessages(account)}
+            />
+            {children}
+          </DashboardConversationsProvider>
         </WorkflowNotificationProvider>
       </div>
     </div>

@@ -86,7 +86,7 @@ function ServiceCardSkeleton() {
   )
 }
 
-export function ClientServicesPage() {
+export function ClientServicesPage({ serviceId }: { serviceId?: string } = {}) {
   const focusConfirmation = useCallback(
     (element: HTMLHeadingElement | null) => {
       element?.focus()
@@ -160,7 +160,16 @@ export function ClientServicesPage() {
         setError("")
         if (!hydrated.current) {
           hydrated.current = true
-          const draft = readServiceDraft(sessionStorage, account.id)
+          const requestedService = availableServices.find(
+            (item) => item.id === serviceId,
+          )
+          if (requestedService) {
+            setPackageService(requestedService)
+            setCurrentStep(2)
+          }
+          const draft = requestedService
+            ? null
+            : readServiceDraft(sessionStorage, account.id)
           if (draft) {
             const service = availableServices.find(
               (item) => item.id === draft.serviceId,
@@ -227,7 +236,7 @@ export function ClientServicesPage() {
     return () => {
       active = false
     }
-  }, [revision, account.id])
+  }, [revision, account.id, serviceId])
 
   useEffect(() => {
     if (!draftReady || !packageService || submittedRequest) return

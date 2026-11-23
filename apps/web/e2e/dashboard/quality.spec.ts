@@ -1,6 +1,10 @@
 import { expect, test, type Page } from "@playwright/test"
 import { join } from "node:path"
-import { configureRegressionTest, restoreSession } from "../regression-support"
+import {
+  accountFor,
+  configureRegressionTest,
+  restoreSession,
+} from "../regression-support"
 
 configureRegressionTest()
 
@@ -15,7 +19,12 @@ const actions = [
   "Complete your payment",
   "Review your deliverable",
 ].map((title, index) => ({
-  id: "action-" + index,
+  id:
+    index === 1
+      ? "quotation:quote-1"
+      : index === 3
+        ? "payment:payment-1"
+        : "action-" + index,
   requestId: "req-1",
   service: long,
   reference: "REQ-" + "128".repeat(12),
@@ -62,6 +71,13 @@ const resources = [
         status: "ON_HOLD",
         completedTasks: 0,
         taskCount: 0,
+      },
+      {
+        id: "project-3",
+        name: "Additional project",
+        status: "IN_PROGRESS",
+        completedTasks: 1,
+        taskCount: 3,
       },
     ],
   },
@@ -159,13 +175,18 @@ test("long dashboard records fit approved widths and the action list stays keybo
   await page.goto("/dashboard")
   const dashboard = page.getByRole("main", { name: "Client dashboard" })
   const panel = dashboard.getByRole("region", { name: "Needs Your Input" })
-  const preferences = dashboard.getByRole("region", {
-    name: "Your Most Requested",
-  })
+  const booked = dashboard.getByRole("region", { name: "Booked Requests" })
   await expect(
     dashboard.getByRole("link", { name: "New Request", exact: true }),
   ).toHaveAttribute("href", "/services")
   await expect(panel.getByText("5 actions", { exact: true })).toBeVisible()
+  await expect(
+    panel.getByText("Review your quotation", { exact: true }),
+  ).toBeVisible()
+  await expect(
+    dashboard.getByText("0 of 0 tasks", { exact: true }),
+  ).toHaveCount(0)
+  await expect(booked.getByText(/REQ-349/)).toHaveCount(0)
   const viewports = [
     [1536, 850, "desktop"],
     [1366, 850, "laptop"],
@@ -184,28 +205,57 @@ test("long dashboard records fit approved widths and the action list stays keybo
         ),
     ).toBe(true)
     const projects = dashboard.getByRole("region", { name: "Active Projects" })
+    const previews = projects.locator(":scope > ul > li")
     const projectBox = await projects.boundingBox()
     const actionBox = await panel.boundingBox()
     expect(projectBox).not.toBeNull()
     expect(actionBox).not.toBeNull()
-    const shortcutBox = (await preferences.boundingBox())!
+    const bookedBox = (await booked.boundingBox())!
     const nextUpBox = (await dashboard
       .getByRole("region", { name: "Next Up" })
       .boundingBox())!
     if (name === "desktop") {
-      expect(nextUpBox.x).toBeGreaterThan(actionBox!.x)
-      expect(projectBox!.y).toBeGreaterThan(actionBox!.y)
-      expect(shortcutBox.x).toBeGreaterThan(projectBox!.x)
+      await expect(previews).toHaveCount(2)
+      await expect(
+        projects.getByText("3 projects · 1 on hold", { exact: true }),
+      ).toBeVisible()
+      await expect(
+        projects.getByRole("link", { name: "View all projects" }),
+      ).toHaveAttribute("href", "/projects")
+      const first = (await previews.nth(0).boundingBox())!
+      const second = (await previews.nth(1).boundingBox())!
+      expect(second.x).toBe(first.x)
+      expect(second.y).toBeGreaterThan(first.y)
+      expect(actionBox!.x).toBeGreaterThan(nextUpBox.x)
+      expect(projectBox!.y).toBeGreaterThanOrEqual(
+        nextUpBox.y + nextUpBox.height,
+      )
+      expect(bookedBox.x).toBeGreaterThan(projectBox!.x)
+      expect(bookedBox.y).toBeGreaterThanOrEqual(
+        actionBox!.y + actionBox!.height,
+      )
     } else if (name === "mobile") {
-      expect(actionBox!.y).toBeLessThan(projectBox!.y)
-      expect(projectBox!.y).toBeLessThan(shortcutBox.y)
+      const first = (await previews.nth(0).boundingBox())!
+      const second = (await previews.nth(1).boundingBox())!
+      expect(second.x).toBe(first.x)
+      expect(second.y).toBeGreaterThan(first.y)
+      expect(actionBox!.y).toBeLessThan(nextUpBox.y)
+      expect(nextUpBox.y).toBeLessThan(projectBox!.y)
+      expect(projectBox!.y).toBeLessThan(bookedBox.y)
     }
   }
   await page.setViewportSize({ width: 1536, height: 1350 })
   const services = dashboard.getByRole("link", { name: "Explore Services" })
   await services.focus()
-  await page.keyboard.press("Tab")
   const review = dashboard.getByRole("button", { name: "Review Now" })
+  for (
+    let i = 0;
+    i < 8 &&
+    !(await review.evaluate((node) => node === document.activeElement));
+    i += 1
+  ) {
+    await page.keyboard.press("Tab")
+  }
   await expect(review).toBeFocused()
   await page.keyboard.press("Enter")
   await expect(dashboard.locator("#dashboard-client-action-list")).toBeFocused()
@@ -278,23 +328,311 @@ test("long dashboard records fit approved widths and the action list stays keybo
   await expect(
     panel.getByRole("link", { name: "View request" }).first(),
   ).toHaveAttribute("href", "/service-requests")
+  await expect(
+    panel.getByRole("link", { name: "View quote request" }),
+  ).toHaveAttribute("href", "/service-requests")
+  await expect(
+    panel.getByRole("link", { name: "View payment request" }),
+  ).toHaveAttribute("href", "/service-requests")
+  await expect(panel.getByText(/REQ-128/)).toHaveCount(0)
   if (process.env.NEXUS_DASHBOARD_SCREENSHOTS) {
     stress = false
+    await page.route("**/api/project-conversations?*", (route) =>
+      route.fulfill({
+        json: {
+          unreadCount: 1,
+          nextCursor: null,
+          conversations: [
+            {
+              id: "project-chat",
+              name: "Website project",
+              updatedAt: date,
+              unreadCount: 1,
+              lastMessage: {
+                id: "msg",
+                body: "The project plan is ready for you.",
+                createdAt: date,
+                sender: { id: "staff", fullName: "Maria Santos" },
+              },
+            },
+          ],
+        },
+      }),
+    )
     await page.reload()
+    await expect(
+      dashboard
+        .getByRole("region", { name: "From Your Team" })
+        .getByText("The project plan is ready for you.", { exact: true }),
+    ).toBeVisible()
     await expect(panel.getByText("5 actions", { exact: true })).toBeVisible()
     await expect(
       dashboard
-        .getByRole("region", { name: "Your Most Requested" })
-        .getByText("Maria Santos", { exact: true }),
+        .getByRole("region", { name: "Booked Requests" })
+        .getByText("Activated", { exact: true }),
     ).toBeVisible()
     for (const [width, height, name] of viewports) {
-      await page.setViewportSize({ width, height })
+      await page.setViewportSize({
+        width,
+        height: name === "desktop" ? 1050 : height,
+      })
       await capture(page, name)
     }
     await page.setViewportSize({ width: 1536, height: 1120 })
+    await panel.getByRole("button", { name: "Review Now" }).click()
     await panel.getByRole("button", { name: "Show all actions" }).click()
     await capture(page, "multiple-actions")
   }
+})
+
+test("similar bookings and distinct quotation events retain context", async ({
+  page,
+}) => {
+  await mockDashboard(page, new Map())
+  await page.route("**/api/client/service-requests?*", (route) =>
+    route.fulfill({
+      json: {
+        requests: ["REQ-40", "REQ-41", "REQ-42"].map((ref, i) => ({
+          id: "booking-" + i,
+          title: "Website design",
+          referenceNumber: ref,
+          service: { id: "design", name: "Website design" },
+          projectGoals: "Booking goal " + ref,
+          updatedAt: "2026-11-23T03:00:00Z",
+          createdAt: i === 0 ? "2026-11-22T03:00:00Z" : "2026-11-23T03:00:00Z",
+          status: "SUBMITTED",
+        })),
+        total: 3,
+        page: 1,
+        pageSize: 10,
+        summary: {
+          total: 3,
+          pending: 3,
+          inProgress: 0,
+          completed: 0,
+          cancelled: 0,
+        },
+      },
+    }),
+  )
+  await page.route("**/api/request-workflows/notifications", (route) =>
+    route.fulfill({
+      json: {
+        unreadCount: 2,
+        notifications: [0, 1].map((i) => ({
+          id: "notice-" + i,
+          requestId: "booking-" + i,
+          entityId: "quotation-" + i,
+          type: "QUOTATION_SENT",
+          summary: "Quotation v2 is ready for the client's formal decision.",
+          createdAt: "2026-11-23T0" + (3 + i) + ":00:00Z",
+        })),
+      },
+    }),
+  )
+  await page.goto("/dashboard")
+  const booked = page.getByRole("region", { name: "Booked Requests" })
+  await expect(booked.getByText("REQ-41", { exact: true })).toBeVisible()
+  await expect(booked.getByText("REQ-42", { exact: true })).toBeVisible()
+  await expect(booked.getByRole("listitem")).toHaveCount(2)
+  const last = page.getByRole("region", { name: "Your Last Booked Service" })
+  await expect(last.getByText("Website design", { exact: true })).toBeVisible()
+  await expect(last.getByText("Pending", { exact: true })).toBeVisible()
+  await expect(last.locator("time")).toHaveAttribute(
+    "datetime",
+    "2026-11-23T03:00:00Z",
+  )
+  await expect(last.getByRole("link", { name: "Book Again" })).toHaveAttribute(
+    "href",
+    "/services?service=design",
+  )
+  await expect(
+    page.getByRole("region", { name: "Latest from EXP" }),
+  ).toHaveCount(0)
+  await page.getByRole("button", { name: /^Notifications/ }).click()
+  await expect(
+    page.getByRole("menuitem", { name: /Quotation v2 is ready/ }),
+  ).toHaveCount(2)
+  await page.keyboard.press("Escape")
+})
+
+test("team message previews share unread counts and keep sender attribution", async ({
+  page,
+}) => {
+  await mockDashboard(page, new Map())
+  const client = accountFor("USER")
+  let serviceReads = 0
+  let projectReads = 0
+  let writes = 0
+  await page.route("**/api/request-conversations**", (route) => {
+    if (route.request().method() !== "GET") {
+      writes++
+      return route.fulfill({ json: {} })
+    }
+    serviceReads++
+    return route.fulfill({
+      json: {
+        nextCursor: null,
+        unreadCount: 1,
+        conversations: [
+          {
+            id: "booking-chat",
+            client: { id: client.id },
+            title: "Service conversation",
+            service: { name: "Design" },
+            acceptedDepartment: {
+              head: { id: "head", fullName: "Maria Santos" },
+              name: "Design",
+            },
+            lastMessage: {
+              id: "mine",
+              sender: { id: client.id, fullName: client.fullName },
+              body: long,
+              createdAt: "2026-11-23T02:00:00Z",
+            },
+            lastTeamMessage: {
+              id: "team-note",
+              sender: { id: "head", fullName: "Maria Santos" },
+              body: "Your team has shared a proposal",
+              createdAt: "2026-11-23T00:30:00Z",
+            },
+            unreadCount: 1,
+          },
+        ],
+      },
+    })
+  })
+  await page.route("**/api/project-conversations**", (route) => {
+    if (route.request().method() !== "GET") {
+      writes++
+      return route.fulfill({ json: {} })
+    }
+    projectReads++
+    return route.fulfill({
+      json: {
+        nextCursor: null,
+        unreadCount: 1,
+        conversations: [
+          {
+            id: "project-chat",
+            name: "Website project",
+            lastMessage: {
+              id: "attachment",
+              sender: { id: "head", fullName: "Maria Santos" },
+              body: null,
+              deliverable: { fileName: "plan.pdf" },
+              createdAt: "2026-11-23T01:00:00Z",
+            },
+            unreadCount: 1,
+          },
+          {
+            id: "older-chat",
+            name: "Older project",
+            lastMessage: {
+              id: "older",
+              sender: { id: "head", fullName: "Maria Santos" },
+              body: "Earlier note",
+              createdAt: "2026-11-23T00:00:00Z",
+            },
+            unreadCount: 0,
+          },
+        ],
+      },
+    })
+  })
+  await page.goto("/dashboard")
+  const team = page.getByRole("region", { name: "From Your Team" })
+  await expect(team.getByRole("link", { name: "View inbox" })).toHaveAttribute(
+    "href",
+    "/messages",
+  )
+  const previews = team.getByRole("link", { name: /Maria Santos|You:/ })
+  await expect(previews).toHaveCount(2)
+  await expect(previews.first()).toHaveAttribute(
+    "href",
+    "/messages?project=project-chat",
+  )
+  await expect(team.getByText("Attachment: plan.pdf")).toBeVisible()
+  await expect(team.getByText(/You:/)).toHaveCount(0)
+  await expect(
+    team.getByRole("link", { name: /Your team has shared a proposal/ }),
+  ).toHaveAttribute("href", "/messages?request=booking-chat")
+  await expect(team.getByText("Earlier note")).toHaveCount(0)
+  await expect(
+    page.getByRole("link", { name: "Messages, 2 unread" }),
+  ).toBeVisible()
+  expect({ serviceReads, projectReads, writes }).toEqual({
+    serviceReads: 1,
+    projectReads: 1,
+    writes: 0,
+  })
+})
+
+test("team messages retry independently", async ({ page }) => {
+  await mockDashboard(page, new Map())
+  let fail = true
+  await page.route("**/api/project-conversations?*", (route) =>
+    route.fulfill(
+      fail
+        ? { status: 503, json: { error: "Unavailable" } }
+        : {
+            json: {
+              nextCursor: null,
+              unreadCount: 0,
+              conversations: [
+                {
+                  id: "one",
+                  name: "Website project",
+                  unreadCount: 0,
+                  lastMessage: {
+                    id: "one-message",
+                    sender: { id: "staff", fullName: "Maria Santos" },
+                    body: "Ready for review",
+                    createdAt: date,
+                  },
+                },
+              ],
+            },
+          },
+    ),
+  )
+  await page.goto("/dashboard")
+  const team = page.getByRole("region", { name: "From Your Team" })
+  await expect(team.getByRole("alert")).toBeVisible()
+  fail = false
+  await team.getByRole("button", { name: "Try again" }).click()
+  await expect(team.getByRole("link", { name: /View inbox/ })).toBeVisible()
+  await expect(team.getByText("Ready for review")).toBeVisible()
+  await expect(
+    page.getByRole("link", { name: "Messages", exact: true }),
+  ).toBeVisible()
+})
+
+test("Next Up omits the hh location placeholder and retains Manila time", async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(new Date("2026-11-25T16:30:00Z"))
+  await mockDashboard(page, new Map())
+  await page.route("**/api/projects/calendar", (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: "event",
+          type: "consultation",
+          title: "Website consultation",
+          location: "hh",
+          startsAt: "2026-11-26T03:36:00Z",
+        },
+      ],
+    }),
+  )
+  await page.goto("/dashboard")
+  const nextUp = page.getByRole("region", { name: "Next Up" })
+  await expect(
+    nextUp.getByText("Website consultation", { exact: true }),
+  ).toBeVisible()
+  await expect(nextUp.getByText("11:36 AM PHT", { exact: true })).toBeVisible()
+  await expect(nextUp.getByText("hh", { exact: true })).toHaveCount(0)
 })
 
 test("dashboard ranks deadlines by Manila calendar date", async ({ page }) => {
@@ -317,11 +655,17 @@ test("dashboard ranks deadlines by Manila calendar date", async ({ page }) => {
   )
   await page.goto("/dashboard")
   const panel = page.getByRole("region", { name: "Needs Your Input" })
+  await panel.getByRole("button", { name: "Review Now" }).click()
   await expect(panel.getByRole("heading", { level: 3 })).toHaveText([
     "Complete your payment",
     "Sign your agreement",
   ])
   await expect(panel.getByText("1 day overdue", { exact: true })).toBeVisible()
+  await expect(
+    page.getByText("Your payment request is overdue and needs attention.", {
+      exact: true,
+    }),
+  ).toBeVisible()
   await expect(panel.getByText("Due today", { exact: true })).toBeVisible()
   await panel.getByRole("button", { name: "Show all actions" }).click()
   await expect(panel.getByText("Due tomorrow", { exact: true })).toBeVisible()
@@ -359,7 +703,14 @@ test("all sections announce loading, show empty states, and retry independently"
     await expect(
       dashboard.getByText(resource.emptyText, { exact: true }),
     ).toBeVisible()
-  await expect(dashboard.getByText("No requests to summarize")).toBeVisible()
+  await expect(
+    dashboard
+      .getByRole("region", { name: "From Your Team" })
+      .getByText("No conversations with your team yet."),
+  ).toBeVisible()
+  await expect(
+    dashboard.getByRole("region", { name: "Your Last Booked Service" }),
+  ).toHaveCount(0)
   await capture(page, "empty-dashboard")
   for (const [index, name] of [
     [0, "no-appointment"],
@@ -374,13 +725,18 @@ test("all sections announce loading, show empty states, and retry independently"
     ).toBeVisible()
     await expect(
       dashboard
-        .getByRole("region", { name: "Your Most Requested" })
-        .getByText("Maria Santos", { exact: true }),
+        .getByRole("region", { name: "Booked Requests" })
+        .getByText("Activated", { exact: true }),
     ).toBeVisible()
     await capture(page, name)
   }
   for (const resource of resources) modes.set(resource.path, "error")
   await page.reload()
+  await expect(
+    dashboard
+      .getByRole("region", { name: "Your Last Booked Service" })
+      .getByRole("alert"),
+  ).toBeVisible()
   for (const resource of resources)
     await expect(
       dashboard
@@ -403,7 +759,7 @@ test("all sections announce loading, show empty states, and retry independently"
   await expect(dashboard.getByText("5 actions", { exact: true })).toBeVisible()
   await expect(
     dashboard
-      .getByRole("region", { name: "Your Most Requested" })
-      .getByText("Maria Santos", { exact: true }),
+      .getByRole("region", { name: "Booked Requests" })
+      .getByText("Activated", { exact: true }),
   ).toBeVisible()
 })

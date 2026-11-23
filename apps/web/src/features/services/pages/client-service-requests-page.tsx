@@ -65,12 +65,15 @@ function matchesTableSearch(item: ServiceRequestSummary, query: string) {
   ].some((value) => value?.toLowerCase().includes(query))
 }
 
-export function ClientServiceRequestsPage() {
+export function ClientServiceRequestsPage({
+  requestId,
+}: { requestId?: string } = {}) {
   const [search, setSearch] = useState("")
   const query = search.trim()
   const [status, setStatus] = useState<ServiceRequestStatus | "">("")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
   const [selected, setSelected] = useState<ServiceRequestSummary | null>(null)
+  const [dismissedLinkedRequest, setDismissedLinkedRequest] = useState(false)
   const filtered = Boolean(query || status)
 
   const list = usePaginatedList({
@@ -92,6 +95,11 @@ export function ClientServiceRequestsPage() {
   })
   const { setPage, retry } = list
   const summary = (list.data ?? initial).summary
+  const visibleRequest =
+    selected ??
+    (!dismissedLinkedRequest && requestId
+      ? list.data?.requests.find((item) => item.id === requestId)
+      : null)
 
   function clearFilters() {
     setSearch("")
@@ -272,10 +280,13 @@ export function ClientServiceRequestsPage() {
           />
         )}
       </section>
-      {selected && (
+      {visibleRequest && (
         <ClientRequestDetails
-          request={selected}
-          onClose={() => setSelected(null)}
+          request={visibleRequest}
+          onClose={() => {
+            setDismissedLinkedRequest(true)
+            setSelected(null)
+          }}
         />
       )}
     </main>

@@ -39,7 +39,7 @@ test("malformed successful payloads stay within their own section", async ({
   await page.goto("/dashboard")
   const main = page.getByRole("main", { name: "Client dashboard" })
   await expect(main).toBeVisible()
-  await expect(main.getByRole("alert")).toHaveCount(4)
+  await expect(main.getByRole("alert")).toHaveCount(5)
 })
 
 test("a removed final action page returns to the last available page", async ({
@@ -66,6 +66,7 @@ test("a removed final action page returns to the last available page", async ({
   )
   await page.goto("/dashboard")
   const panel = page.getByRole("region", { name: "Needs Your Input" })
+  await panel.getByRole("button", { name: "Review Now" }).click()
   await panel.getByRole("button", { name: "Show all actions" }).click()
   await panel.getByRole("button", { name: "Next page" }).click()
   await expect(panel.getByText("Last obligation")).toBeVisible()
@@ -110,6 +111,7 @@ test("older action responses and preview navigation cannot replace a newer resul
     await page.goto("/dashboard")
     await pending
     await page.evaluate(() => window.dispatchEvent(new Event("online")))
+    await page.getByRole("button", { name: "Review Now" }).click()
     await expect(page.getByText("Current obligation")).toBeVisible()
     release()
     await expect(page.getByText("Stale obligation")).toHaveCount(0)
@@ -117,6 +119,7 @@ test("older action responses and preview navigation cannot replace a newer resul
     await expect(page.getByText("Preview · Sample data")).toBeVisible()
     await expect(page.getByText("Current obligation")).toHaveCount(0)
     await page.goto("/dashboard")
+    await page.getByRole("button", { name: "Review Now" }).click()
     await expect(page.getByText("Current obligation")).toBeVisible()
     await expect(page.getByText("Preview · Sample data")).toHaveCount(0)
   } finally {
@@ -188,6 +191,7 @@ for (const failure of [
     expect(calls).toBe(settledCalls)
     recovered = true
     await panel.getByRole("button", { name: "Try again" }).click()
+    await panel.getByRole("button", { name: "Review Now" }).click()
     await expect(panel.getByText("Current obligation")).toBeVisible()
     await expect(
       page.getByText("Available project", { exact: true }),
@@ -308,7 +312,7 @@ test("missing optional metadata, calendar boundaries, and later access denial ar
     dashboard.getByRole("progressbar", {
       name: "No progress metadata progress",
     }),
-  ).toHaveAttribute("aria-valuenow", "0")
+  ).toHaveCount(0)
   await expect(dashboard.getByText("Unsupported project status")).toHaveCount(0)
   await expect(
     dashboard.getByText("Status unavailable", { exact: true }),
@@ -351,7 +355,12 @@ test("duplicates and incomplete inbox rows do not affect outstanding actions", a
           item,
           null,
           { ...item, id: "invalid", createdAt: "not a date" },
-          { ...item, id: "unlinked", requestId: null },
+          {
+            ...item,
+            id: "unlinked",
+            requestId: null,
+            summary: "Unlinked inbox update",
+          },
         ],
       },
     }),
@@ -362,14 +371,23 @@ test("duplicates and incomplete inbox rows do not affect outstanding actions", a
   const dashboard = page.getByRole("main", { name: "Client dashboard" })
   await page.goto("/dashboard")
   await expect(
-    dashboard.getByText("Review was requested", { exact: true }),
-  ).toHaveCount(1)
+    dashboard
+      .getByRole("region", { name: "From Your Team" })
+      .getByText("Review was requested", { exact: true }),
+  ).toHaveCount(0)
   await expect(
     dashboard.getByText("No pending actions", { exact: true }),
   ).toBeVisible()
   await expect(
     page.getByRole("button", { name: "Notifications, 1 unread" }),
   ).toBeVisible()
+  await page.getByRole("button", { name: "Notifications, 1 unread" }).click()
+  await expect(
+    page.getByRole("menuitem", { name: /Review was requested/ }),
+  ).toHaveCount(1)
+  await expect(
+    page.getByRole("menuitem", { name: /Unlinked inbox update/ }),
+  ).toHaveCount(1)
 })
 
 test("an expired access token refreshes once and reloads the action read", async ({
@@ -396,6 +414,7 @@ test("an expired access token refreshes once and reloads the action read", async
         }),
   )
   await page.goto("/dashboard")
+  await page.getByRole("button", { name: "Review Now" }).click()
   await expect(page.getByText("Current obligation")).toBeVisible()
   expect(refreshes).toBe(1)
 })

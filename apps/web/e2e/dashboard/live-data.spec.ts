@@ -14,6 +14,7 @@ test("loads scoped dashboard records and isolates a failed section", async ({
       id: "1",
       requestId: "quote",
       type: "QUOTATION_SENT",
+      entityId: "quote-1",
       summary: "Quotation available",
       createdAt: future,
       readAt: null,
@@ -48,7 +49,7 @@ test("loads scoped dashboard records and isolates a failed section", async ({
       reason: "Send your brief.",
     },
     {
-      id: "quote-1",
+      id: "quotation:quote-1",
       requestId: "quote",
       reference: "REQ-42",
       service: "Client quotation",
@@ -146,13 +147,19 @@ test("loads scoped dashboard records and isolates a failed section", async ({
     dashboard.getByRole("progressbar", { name: "Client project progress" }),
   ).toHaveAttribute("aria-valuenow", "75")
   await expect(dashboard.getByText("Next confirmed appointment")).toBeVisible()
+  await dashboard.getByRole("button", { name: "Review Now" }).click()
   await expect(
     dashboard.getByText("Provide the requested information"),
   ).toBeVisible()
   await expect(dashboard.getByText("Review your quotation")).toBeVisible()
   await expect(dashboard.getByText("Internal quotation")).toHaveCount(0)
   await expect(dashboard.getByText("Internal operation")).toHaveCount(0)
-  await expect(dashboard.getByText("Quotation available")).toBeVisible()
+  await expect(dashboard.getByText("Quotation available")).toHaveCount(0)
+  await page.getByRole("button", { name: /^Notifications/ }).click()
+  await expect(
+    page.getByRole("menuitem", { name: /Quotation available/ }),
+  ).toBeVisible()
+  await page.keyboard.press("Escape")
   await expect(dashboard.getByText("Preview · Sample data")).toHaveCount(0)
   const booked = dashboard.getByRole("region", { name: "Booked Requests" })
   await expect(booked.getByRole("alert")).toBeVisible()
@@ -219,11 +226,17 @@ test("keeps duplicate event text separate from outstanding actions", async ({
   await expect(dashboard.getByText("No pending actions")).toBeVisible()
   await expect(dashboard.getByText("Send a brief")).toHaveCount(0)
   await expect(
-    dashboard.getByText("Information requested", { exact: true }),
-  ).toHaveCount(2)
+    dashboard
+      .getByRole("region", { name: "From Your Team" })
+      .getByText("Information requested", { exact: true }),
+  ).toHaveCount(0)
   await expect(
     page.getByRole("button", { name: "Notifications, 2 unread" }),
   ).toBeVisible()
+  await page.getByRole("button", { name: "Notifications, 2 unread" }).click()
+  await expect(
+    page.getByRole("menuitem", { name: /Information requested/ }),
+  ).toHaveCount(2)
 })
 
 test("expands the compact action list and reaches later pages", async ({
@@ -257,6 +270,7 @@ test("expands the compact action list and reaches later pages", async ({
   const panel = page.getByRole("region", { name: "Needs Your Input" })
   await expect(panel.getByText("4 actions")).toBeVisible()
   await expect(panel.getByText("Third requirement")).toHaveCount(0)
+  await panel.getByRole("button", { name: "Review Now" }).click()
   await panel.getByRole("button", { name: "Show all actions" }).click()
   await expect(panel.getByText("Third requirement")).toBeVisible()
   await panel.getByRole("button", { name: "Next page" }).click()

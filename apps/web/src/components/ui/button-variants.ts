@@ -1,5 +1,6 @@
 import { cva } from "class-variance-authority"
 import { rowActionButton } from "./row-action-styles"
+import { pillTones } from "./pill"
 
 /**
  * Colour sets for the portal's buttons. Exported for class constants that
@@ -34,6 +35,8 @@ export const buttonVariants = cva(
         brandOutline: buttonTones.brandOutline,
         danger: buttonTones.danger,
         rowAction: rowActionButton,
+        actionInfo: pillTones.info + " hover:brightness-95",
+        actionWarning: pillTones.warning + " hover:brightness-95",
       },
       size: {
         default: "h-9 px-4 text-sm",
@@ -43,6 +46,8 @@ export const buttonVariants = cva(
           "min-h-10 justify-start whitespace-normal px-2.5 py-1.5 text-left text-xs",
         /** Compact inline action. */
         sm: "h-8 px-3 text-xs",
+        actionPill:
+          "min-h-8 max-w-full rounded-full whitespace-normal px-3 py-1.5 text-left text-xs",
         /** Side-panel and toolbar buttons. */
         panel: "h-[34px] rounded-lg px-3 text-xs font-semibold",
         /** Selectable project rows inside a side panel. */

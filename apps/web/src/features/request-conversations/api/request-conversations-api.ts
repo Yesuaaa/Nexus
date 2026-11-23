@@ -67,6 +67,7 @@ export type ConversationSummary = {
   } | null
   bookings?: ConversationBooking[]
   lastMessage: RequestMessage | null
+  lastTeamMessage?: RequestMessage | null
   unreadCount?: number
 }
 
