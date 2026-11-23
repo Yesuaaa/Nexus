@@ -441,6 +441,7 @@ test.describe("Authentication and session regression", () => {
   test("login preserves the loader, session, success toast, and sign-out", async ({
     page,
   }) => {
+    await page.emulateMedia({ reducedMotion: "no-preference" })
     await mockApi(page, "ADMIN")
     await page.goto("/internal/login")
     await page
@@ -448,13 +449,10 @@ test.describe("Authentication and session regression", () => {
       .fill(testAccounts.ADMIN.email)
     await page.getByLabel("Password", { exact: true }).fill("CorrectHorse123!")
     await page.getByRole("button", { name: "Sign In", exact: true }).click()
-    await expect(
-      page.getByRole("status", { name: "Opening your account" }),
-    ).toBeVisible()
+    const loader = page.getByRole("status", { name: "Opening your account" })
+    await expect(loader.getByRole("img", { name: "Converyn" })).toBeVisible()
     await expect(page).toHaveURL(/\/module$/)
-    await expect(
-      page.getByRole("status", { name: "Opening your account" }),
-    ).toHaveCount(0)
+    await expect(loader).toHaveCount(0)
     expect(
       await page.evaluate(() => sessionStorage.getItem("nexus.auth.token")),
     ).toBe("test-session")
@@ -473,13 +471,173 @@ test.describe("Authentication and session regression", () => {
         localStorage.getItem("nexus.auth.refreshToken"),
       ),
     ).toBeNull()
-    await page.getByRole("button", { name: "Open account menu" }).click()
+    await page
+      .getByRole("button", { name: "Account menu", exact: true })
+      .click()
     await page.getByRole("menuitem", { name: "Log out", exact: true }).click()
     await expect(page).toHaveURL(/\/internal\/login$/)
     expect(await storedTokens(page)).toEqual([null, null])
     expect(
       await page.evaluate(() => sessionStorage.getItem("nexus.auth.token")),
     ).toBeNull()
+  })
+
+  for (const [device, width, height] of [
+    ["desktop", 1440, 900],
+    ["tablet", 820, 1180],
+    ["mobile", 390, 844],
+  ] as const) {
+    test(`login reveals the app from the rendered logo on ${device}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height })
+      await page.emulateMedia({ reducedMotion: "no-preference" })
+      await mockApi(page, "ADMIN")
+      await page.goto("/internal/login")
+      await page.addStyleTag({
+        content:
+          '[aria-label="Opening your account"] svg[role="img"] { translate: 24px -16px; }',
+      })
+      await page
+        .getByLabel("Email address", { exact: true })
+        .fill(testAccounts.ADMIN.email)
+      await page
+        .getByLabel("Password", { exact: true })
+        .fill("CorrectHorse123!")
+      await page.getByRole("button", { name: "Sign In", exact: true }).click()
+
+      const loader = page.getByRole("status", { name: "Opening your account" })
+      const opening = loader.locator('mask rect[fill="black"]')
+      await expect(opening).toHaveCSS("clip-path", /^circle\(/)
+      const sample = await opening.evaluate((rect) => {
+        const overlay = rect.closest('[role="status"]')!
+        const artwork = overlay.querySelector("[data-logo-fill]")!
+        const bounds = artwork.getBoundingClientRect()
+        const circle = getComputedStyle(rect).clipPath.match(
+          /^circle\(([\d.]+)px at ([\d.]+)px ([\d.]+)px\)$/,
+        )
+        const x = bounds.x + bounds.width / 2
+        const y = bounds.y + bounds.height / 2
+        return {
+          circle: circle?.slice(1).map(Number),
+          x,
+          y,
+          blocksPointer: overlay.contains(document.elementFromPoint(x, y)),
+          blocksFocus: Boolean(
+            document
+              .querySelector('main[aria-label="Workspace selector"]')
+              ?.closest("[inert]"),
+          ),
+        }
+      })
+      expect(sample.circle?.[1]).toBeCloseTo(sample.x, 2)
+      expect(sample.circle?.[2]).toBeCloseTo(sample.y, 2)
+      expect(sample.x).toBeGreaterThan(width / 2 + 20)
+      expect(sample.y).toBeLessThan(height / 2 - 12)
+      expect(sample.blocksPointer).toBe(true)
+      expect(sample.blocksFocus).toBe(true)
+      await expect(loader).toHaveCount(0)
+      await expect(
+        page.getByRole("main", { name: "Workspace selector" }),
+      ).toBeVisible()
+    })
+  }
+
+  test("module selection reveals the destination from the clicked point", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "no-preference" })
+    await restoreSession(page, "SUPERADMIN")
+    await page.route("**/api/project-management/overview", (route) =>
+      route.fulfill({
+        json: {
+          totals: {
+            totalProjects: 0,
+            planned: 0,
+            inProgress: 0,
+            onHold: 0,
+            completed: 0,
+            cancelled: 0,
+            workspaceGroups: 0,
+            departmentsWithProjects: 0,
+            projectsWithoutDepartment: 0,
+            projectsWithTasks: 0,
+            projectsWithoutTasks: 0,
+            totalTasks: 0,
+            completedTasks: 0,
+            activeProjects: 0,
+            activeProjectsWithoutLead: 0,
+            activeProjectsWithoutTeam: 0,
+            activeAssignments: 0,
+          },
+          statusDistribution: [],
+          departments: [],
+          topStaffAssignments: [],
+          recentlyUpdatedProjects: [],
+        },
+      }),
+    )
+    await page.goto("/module")
+    const card = page.getByRole("link", {
+      name: "Open Project Management workspace",
+    })
+    await expect(card).toBeVisible()
+    const box = await card.boundingBox()
+    expect(box).not.toBeNull()
+    const x = box!.x + 45
+    const y = box!.y + 65
+    await page.mouse.click(x, y)
+    const opening = page.locator('#module-reveal-mask rect[fill="black"]')
+    await expect(opening).toBeAttached()
+    await expect(opening).toHaveCSS(
+      "clip-path",
+      new RegExp(`at ${Math.round(x)}px ${Math.round(y)}px`),
+    )
+    await page.evaluate(() => {
+      const sample = document.createElement("div")
+      sample.id = "reveal-pixel-sample"
+      sample.style.cssText =
+        "position:fixed;inset:0;z-index:99;background:rgb(255,0,255);pointer-events:none"
+      document.body.append(sample)
+    })
+    await expect
+      .poll(async () =>
+        opening.evaluate((element) =>
+          parseFloat(getComputedStyle(element).clipPath.slice(7)),
+        ),
+      )
+      .toBeGreaterThan(30)
+    const screenshot = await page.screenshot()
+    const pixels = await page.evaluate(
+      async ({ image, x, y }) => {
+        const bitmap = new Image()
+        bitmap.src = `data:image/png;base64,${image}`
+        await bitmap.decode()
+        const canvas = document.createElement("canvas")
+        canvas.width = bitmap.width
+        canvas.height = bitmap.height
+        const context = canvas.getContext("2d")!
+        context.drawImage(bitmap, 0, 0)
+        return [
+          [x, y],
+          [2, 2],
+        ].map(([left, top]) =>
+          Array.from(context.getImageData(left, top, 1, 1).data),
+        )
+      },
+      {
+        image: screenshot.toString("base64"),
+        x: Math.round(x),
+        y: Math.round(y),
+      },
+    )
+    expect(pixels[0]).toEqual([255, 0, 255, 255])
+    expect(pixels[1]).not.toEqual([255, 0, 255, 255])
+    await page
+      .locator("#reveal-pixel-sample")
+      .evaluate((element) => element.remove())
+    await expect(page).toHaveURL(/project-management/)
+    await expect(opening).toHaveCount(0)
   })
 
   test("invalid login credentials show toast error and retain entered email", async ({
