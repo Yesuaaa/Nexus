@@ -19,8 +19,8 @@ const inter = localFont({
 })
 
 export const metadata: Metadata = {
-  title: "EXP Digital Solutions",
-  description: "Sign in or create your EXP account.",
+  title: "Converyn",
+  description: "Sign in or create your Converyn account.",
   icons: {
     icon: "/favicon.svg",
   },

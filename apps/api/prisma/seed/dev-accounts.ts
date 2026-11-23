@@ -9,8 +9,20 @@ const accounts = [
   },
   { role: Role.ADMIN, email: "admin@nexus.test", fullName: "Local Admin" },
   { role: Role.STAFF, email: "staff@nexus.test", fullName: "Local Staff" },
+  {
+    role: Role.STAFF,
+    email: "head@nexus.test",
+    fullName: "Local Department Head",
+  },
   { role: Role.USER, email: "client@nexus.test", fullName: "Local Client" },
 ]
+
+const departmentHeadEmail = "head@nexus.test"
+const developmentDepartment = {
+  name: "Development",
+  code: "DEV",
+  description: "Local development department for seeded head workflows",
+}
 
 export function assertDevSeedTarget(env: NodeJS.ProcessEnv) {
   const url = URL.parse(env.DATABASE_URL || env.DIRECT_URL || "")
@@ -63,7 +75,10 @@ export async function seedDevAccounts(prisma: PrismaClient, password: string) {
             ...(account.role === Role.STAFF && {
               employee: {
                 create: {
-                  employeeId: "EXP-DEV-STAFF",
+                  employeeId:
+                    account.email === departmentHeadEmail
+                      ? "EXP-DEV-HEAD"
+                      : "EXP-DEV-STAFF",
                   fullName: account.fullName,
                   email: account.email,
                 },
@@ -72,6 +87,29 @@ export async function seedDevAccounts(prisma: PrismaClient, password: string) {
           },
         })
       }
+
+      const departmentHead = await tx.user.findUniqueOrThrow({
+        where: { email: departmentHeadEmail },
+        select: { id: true },
+      })
+      const department = await tx.department.upsert({
+        where: { name: developmentDepartment.name },
+        update: { headId: departmentHead.id },
+        create: { ...developmentDepartment, headId: departmentHead.id },
+        select: { id: true },
+      })
+
+      await tx.user.update({
+        where: { id: departmentHead.id },
+        data: { departmentId: department.id },
+      })
+      await tx.employee.update({
+        where: { userId: departmentHead.id },
+        data: {
+          departmentId: department.id,
+          position: "Department Head",
+        },
+      })
     },
     { isolationLevel: "Serializable" },
   )
