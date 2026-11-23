@@ -12,7 +12,10 @@ import {
   deviceDateTime,
   deviceDateTimeOccurrences,
 } from "../src/features/attendance/model/attendance.ts"
-import { Permissions } from "../src/features/auth/model/permissions.ts"
+import {
+  canAccessPersonalAttendance,
+  Permissions,
+} from "../src/features/auth/model/permissions.ts"
 import { formatDateTime } from "../src/lib/format.ts"
 
 test("correction times resolve device-zone gaps, folds, and ordinary intervals", (t) => {
@@ -183,4 +186,48 @@ test("all attendance navigation pages preserve module ownership and role boundar
       for (const role of ["USER", "SUPERADMIN"])
         assert.equal(canAccessRoute({ ...staff, role }, link.href), false)
     }
+})
+
+test("[PG-003-F001-A001-T001] personal attendance selection requires active STAFF or ADMIN", () => {
+  const account = (role, isActive = true, permissions = []) => ({
+    role,
+    isActive,
+    permissions,
+    headOf: null,
+  })
+
+  assert.equal(canAccessPersonalAttendance(account("STAFF")), true)
+  assert.equal(canAccessPersonalAttendance(account("ADMIN", true, [])), true)
+  assert.equal(canAccessPersonalAttendance(account("USER")), false)
+  assert.equal(canAccessPersonalAttendance(account("SUPERADMIN")), false)
+  assert.equal(
+    canAccessPersonalAttendance(
+      account("SUPERADMIN", true, [Permissions.EMPLOYEES_READ]),
+    ),
+    false,
+  )
+  assert.equal(canAccessPersonalAttendance(account("STAFF", false)), false)
+  assert.equal(canAccessPersonalAttendance(account("ADMIN", false)), false)
+})
+
+test("[PG-003-F001-A003-T002] attendance entry route enforces active role and read grant", () => {
+  const account = (role, isActive = true, permissions = []) => ({
+    role,
+    isActive,
+    permissions,
+  })
+
+  assert.equal(canAccessRoute(account("STAFF"), "/attendance"), true)
+  assert.equal(canAccessRoute(account("ADMIN"), "/attendance"), true)
+  assert.equal(
+    canAccessRoute(
+      account("SUPERADMIN", true, [Permissions.EMPLOYEES_READ]),
+      "/attendance",
+    ),
+    true,
+  )
+  assert.equal(canAccessRoute(account("SUPERADMIN"), "/attendance"), false)
+  assert.equal(canAccessRoute(account("USER"), "/attendance"), false)
+  assert.equal(canAccessRoute(account("STAFF", false), "/attendance"), false)
+  assert.equal(canAccessRoute(account("ADMIN", false), "/attendance"), false)
 })
