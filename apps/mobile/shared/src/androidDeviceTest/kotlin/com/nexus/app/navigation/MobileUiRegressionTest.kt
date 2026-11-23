@@ -1,9 +1,13 @@
 package com.nexus.app.navigation
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.*
@@ -15,14 +19,36 @@ import com.nexus.app.features.profile.screens.ProfileScreen
 import com.nexus.app.features.auth.screens.LoginScreen
 import com.nexus.app.features.auth.viewmodel.AuthViewModel
 import com.nexus.app.features.booking.FakeBookingGateway
+import com.nexus.app.features.booking.api.BookingGateway
+import com.nexus.app.features.booking.model.*
 import com.nexus.app.features.booking.viewmodel.BookingViewModel
+import com.nexus.app.features.conversations.api.ClientCommunicationRepository
+import com.nexus.app.features.conversations.components.ChatWorkflowForms
+import com.nexus.app.features.projects.api.ProjectsRepository
+import com.nexus.app.features.projects.screens.ProjectScreen
+import com.nexus.app.features.projects.viewmodel.ProjectsViewModel
 import com.nexus.app.features.services.screens.ServicesScreen
 import com.nexus.app.features.booked_requests.screens.BookedRequestsScreen
 import com.nexus.app.features.booked_requests.viewmodel.RequestsViewModel
 import com.nexus.app.features.help.screens.HelpScreen
+import com.nexus.app.features.workflow.api.WorkflowRepository
+import com.nexus.app.features.workflow.model.*
+import com.nexus.app.features.workflow.screens.WorkflowScreen
+import com.nexus.app.features.workflow.viewmodel.WorkflowViewModel
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.*
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.defaultRequest
+import io.ktor.http.*
+import io.ktor.http.content.TextContent
+import io.ktor.serialization.kotlinx.json.json
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Rule
 import org.junit.Test
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 
 class MobileUiRegressionTest {
     @get:Rule val compose = createComposeRule()
@@ -303,5 +329,344 @@ class MobileUiRegressionTest {
         compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Open in Messages"))
         compose.onNodeWithText("Open in Messages").performClick()
         compose.runOnIdle { assertEquals("request", openedRequestId) }
+    }
+
+    @Test fun servicesCatalogPaginatesAtEightPerPageAndShowsTotalCount() {
+        val nineServices = (1..9).map { index ->
+            CatalogService(
+                id = "service-$index",
+                name = "Service $index",
+                description = "Description $index",
+                packages = listOf(ServicePackage("pkg-$index", "Starter")),
+            )
+        }
+        val repo = object : BookingGateway by FakeBookingGateway() {
+            override suspend fun services() = nineServices
+        }
+        compose.setContent {
+            MaterialTheme {
+                CompositionLocalProvider(LocalNexusToast provides remember { NexusToastState() }) {
+                    ServicesScreen(viewModel = remember { BookingViewModel(repo) })
+                }
+            }
+        }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Service 1").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("All services (9)").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Service 9").assertDoesNotExist()
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Showing 1–8 of 9 services"))
+        compose.onNodeWithText("Showing 1–8 of 9 services").assertIsDisplayed()
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Next"))
+        compose.onNodeWithText("Next").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Service 9").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Showing 9–9 of 9 services"))
+        compose.onNodeWithText("Showing 9–9 of 9 services").assertIsDisplayed()
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Previous"))
+        compose.onNodeWithText("Previous").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Service 1").fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @Test fun switchingServicesWithFilledDraftRequiresConfirmation() {
+        val serviceA = CatalogService("svc-a", "Service Alpha", packages = listOf(ServicePackage("pkg-a", "Starter")))
+        val serviceB = CatalogService("svc-b", "Service Beta", packages = listOf(ServicePackage("pkg-b", "Pro")))
+        val repo = object : BookingGateway by FakeBookingGateway() {
+            override suspend fun services() = listOf(serviceA, serviceB)
+            override suspend fun service(id: String) = if (id == "svc-a") serviceA else serviceB
+        }
+        val vm = BookingViewModel(repo)
+        compose.setContent {
+            MaterialTheme {
+                CompositionLocalProvider(LocalNexusToast provides remember { NexusToastState() }) {
+                    ServicesScreen(viewModel = vm)
+                }
+            }
+        }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Service Alpha").fetchSemanticsNodes().isNotEmpty() }
+        compose.runOnIdle {
+            vm.chooseService(serviceA)
+            vm.choosePackage("pkg-a")
+            vm.updateField("goals", "Launch mobile campaign")
+            vm.goTo(1)
+        }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Service Beta").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Service Beta").performScrollTo().performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Continue  \u2192").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Continue  \u2192").performScrollTo().performClick()
+
+        compose.onNodeWithText("Start with a different service?").assertIsDisplayed()
+        compose.onNodeWithText("Keep current draft").performClick()
+        compose.onNodeWithText("Start with a different service?").assertDoesNotExist()
+        compose.runOnIdle { assertEquals("svc-a", vm.state.value.service?.id) }
+
+        compose.onNodeWithText("Service Beta").performScrollTo().performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Continue  \u2192").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Continue  \u2192").performScrollTo().performClick()
+        compose.onNodeWithText("Change service").performClick()
+        compose.waitUntil(10_000) { vm.state.value.service?.id == "svc-b" }
+        compose.onNodeWithText("Service Beta").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun step4SpecialistProfileSheetShowsSocialsPortfolioAndSelection() {
+        val service = CatalogService("svc-1", "Brand Design", packages = listOf(ServicePackage("pkg-1", "Starter")))
+        val richProfile = SpecialistProfile(
+            id = "spec-1",
+            fullName = "Alex Rivera",
+            position = "Principal Designer",
+            bio = "10 years crafting product experiences.",
+            specialties = listOf("UI Systems", "Mobile UX"),
+            socialLinks = listOf(SpecialistSocialLink("LinkedIn", "https://linkedin.com/in/alex")),
+            projects = listOf(
+                SpecialistProject(
+                    id = "port-1",
+                    title = "Nexus Mobile Rebrand",
+                    summary = "Unified design system across Android and iOS.",
+                    contribution = "Led design tokens and component architecture.",
+                    projectUrl = "https://exp.test/work/nexus",
+                ),
+            ),
+        )
+        val repo = object : BookingGateway by FakeBookingGateway() {
+            override suspend fun services() = listOf(service)
+            override suspend fun specialists(serviceId: String) = listOf(Specialist("spec-1", "Alex Rivera", "Principal Designer"))
+            override suspend fun specialistProfile(serviceId: String, specialistId: String) = richProfile
+        }
+        val vm = BookingViewModel(repo)
+        compose.setContent {
+            MaterialTheme {
+                CompositionLocalProvider(LocalNexusToast provides remember { NexusToastState() }) {
+                    ServicesScreen(viewModel = vm)
+                }
+            }
+        }
+        compose.runOnIdle {
+            vm.chooseService(service)
+            vm.choosePackage("pkg-1")
+            vm.updateField("goals", "Redesign")
+            vm.updateField("requirements", "Design system")
+            vm.updateField("expectedTimeline", "4 weeks")
+            vm.goTo(4)
+        }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("View profile").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("View profile").performScrollTo().performClick()
+
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("LinkedIn profile").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("LinkedIn profile").assertIsDisplayed()
+        compose.onNodeWithText("View project →").performScrollTo().performClick()
+        compose.onNodeWithText("CONTRIBUTION").assertIsDisplayed()
+        compose.onNodeWithText("Led design tokens and component architecture.").assertIsDisplayed()
+        compose.onNodeWithText("Back to profile").performClick()
+
+        compose.onNodeWithText("Choose Alex as preferred specialist").performClick()
+        compose.runOnIdle { assertEquals("spec-1", vm.state.value.draft.preferredSpecialistId) }
+    }
+
+    @Test fun projectOverviewExposesNotesTeamTabsAndDeliverableDetails() {
+        val client = HttpClient(MockEngine {
+            respond(
+                """{
+                    "id":"proj-1",
+                    "name":"Brand Launch",
+                    "description":"Complete visual identity and launch kit.",
+                    "status":"IN_PROGRESS",
+                    "startDate":"2026-11-01T00:00:00Z",
+                    "createdAt":"2026-11-01T00:00:00Z",
+                    "request":{"id":"req-1","referenceNumber":"SR-2026-101","service":{"name":"Brand Design"}},
+                    "progress":{"completed":2,"total":4},
+                    "deliverables":[{
+                        "id":"deliv-1",
+                        "title":"Brand Guidelines v1",
+                        "description":"Typography and color palette PDF.",
+                        "sentToClientAt":"2026-11-10T00:00:00Z",
+                        "workflowFile":{"id":"file-1","name":"guidelines.pdf","mimeType":"application/pdf","size":2048},
+                        "clientReviews":[]
+                    }],
+                    "changeRequests":[]
+                }""",
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }) {
+            install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+            defaultRequest { url("https://nexus.test") }
+        }
+        compose.setContent {
+            DisposableEffect(client) { onDispose { client.close() } }
+            MaterialTheme {
+                CompositionLocalProvider(LocalNexusToast provides remember { NexusToastState() }) {
+                    val vm = remember { ProjectsViewModel(ProjectsRepository(client)) }
+                    ProjectScreen(
+                        id = "proj-1",
+                        overview = true,
+                        onBack = {},
+                        onOpen = {},
+                        onEdit = {},
+                        onRequest = {},
+                        onChat = {},
+                        viewModel = vm,
+                    )
+                }
+            }
+        }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Brand Launch").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Latest notes").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Project team").performScrollTo().assertIsDisplayed()
+
+        compose.onNodeWithText("Notes").performScrollTo().performClick()
+        compose.onNodeWithText("Notes and project context shared with you.").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Complete visual identity and launch kit.").performScrollTo().assertIsDisplayed()
+
+        compose.onNodeWithText("Team").performScrollTo().performClick()
+        compose.onNodeWithText("People assigned to this project.").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("No team member assigned yet.").performScrollTo().assertIsDisplayed()
+
+        compose.onNodeWithText("Deliverables").performScrollTo().performClick()
+        compose.onNodeWithText("View deliverable details").performScrollTo().performClick()
+        compose.onNodeWithText(".pdf").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("application/pdf").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("2 KB").performScrollTo().assertIsDisplayed()
+
+        compose.onNodeWithText("Approve deliverable").performScrollTo().performClick()
+        compose.onNodeWithText("Approve this deliverable?").assertIsDisplayed()
+        compose.onNodeWithText("Cancel").performClick()
+        compose.onNodeWithText("Approve this deliverable?").assertDoesNotExist()
+    }
+
+    @Test fun chatWorkflowFormsRenderQuotationBreakdownApprovalAndActiveProject() {
+        val pendingApprovalWorkflow = ClientWorkflow(
+            request = WorkflowRequest(id = "req-1", title = "Brand Package", referenceNumber = "SR-2026-200"),
+            state = "CLIENT_APPROVAL",
+            version = 3,
+            nextAction = "Review and respond to the quotation.",
+            permissions = ClientPermissions(isClient = true),
+            quotations = listOf(
+                Quotation(
+                    id = "q-1",
+                    version = 2,
+                    status = "SENT",
+                    scope = "Brand discovery and UI kit",
+                    total = "45000.00",
+                    currency = "PHP",
+                    timeline = "4 weeks",
+                    paymentTerms = "50% before kickoff",
+                    validUntil = "2099-12-31T00:00:00Z",
+                    lineItems = listOf(
+                        QuotationLineItem("Brand Discovery", 1, "15000.00"),
+                        QuotationLineItem("UI Kit", 2, "15000.00"),
+                    ),
+                    paymentDue = "22500.00",
+                ),
+            ),
+        )
+        val activeWorkflow = pendingApprovalWorkflow.copy(
+            state = "ACTIVE_PROJECT",
+            quotations = listOf(
+                pendingApprovalWorkflow.quotations.single().copy(
+                    status = "ACCEPTED",
+                    lineItems = listOf(QuotationLineItem("Launch Scope", 1, "45000.00")),
+                    paymentDue = "",
+                ),
+            ),
+            approval = WorkflowApproval("q-1", "45000.00", "PHP", "2026-11-15T10:00:00Z", "client-1"),
+            project = WorkflowProject("proj-99", "Brand Launch Workspace", "IN_PROGRESS"),
+        )
+        var openedProjectId: String? = null
+        compose.setContent {
+            MaterialTheme {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    ChatWorkflowForms(
+                        workflow = pendingApprovalWorkflow,
+                        busy = false,
+                        selectedFileId = null,
+                        action = { _, _ -> },
+                        onDetails = {},
+                        onDocuments = {},
+                        onFile = {},
+                    )
+                    ChatWorkflowForms(
+                        workflow = activeWorkflow,
+                        busy = false,
+                        selectedFileId = null,
+                        action = { _, _ -> },
+                        onDetails = {},
+                        onDocuments = {},
+                        onFile = {},
+                        onOpenProject = { openedProjectId = it },
+                    )
+                }
+            }
+        }
+        compose.onNodeWithText("Brand Discovery").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Due before commencement: PHP 22,500.00").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Accept").performScrollTo().assertIsEnabled()
+        compose.onNode(isToggleable()).performScrollTo().performClick()
+        compose.onNodeWithText("Accept").performScrollTo().assertIsNotEnabled()
+
+        compose.onNodeWithText("Quotation formally accepted").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Your project is active").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("View Project").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals("proj-99", openedProjectId) }
+    }
+
+    @Test fun xenditSandboxCheckoutSubmitsAndDisplaysVerifiedBanner() {
+        val dispatchedActions = mutableListOf<String>()
+        val pendingJson = """{
+            "request":{"id":"req-pay","title":"Web Build","serviceName":"Web Development"},
+            "state":"AGREEMENT_PAYMENT_PENDING",
+            "version":4,
+            "nextAction":"Complete payment to continue.",
+            "permissions":{"isClient":true},
+            "payment":{"status":"PENDING","amount":"15000.00","currency":"PHP"}
+        }"""
+        val verifiedJson = """{
+            "request":{"id":"req-pay","title":"Web Build","serviceName":"Web Development"},
+            "state":"READY_FOR_ACTIVATION",
+            "version":5,
+            "nextAction":"Ready for project activation.",
+            "permissions":{"isClient":true},
+            "payment":{"status":"VERIFIED","amount":"15000.00","currency":"PHP","reference":"XENDIT-SANDBOX-999"}
+        }"""
+        val client = HttpClient(MockEngine { request ->
+            val path = request.url.encodedPath
+            when {
+                path.endsWith("/actions") -> {
+                    val body = Json.parseToJsonElement((request.body as TextContent).text).jsonObject
+                    dispatchedActions += body.getValue("type").jsonPrimitive.content
+                    respond(verifiedJson, headers = headersOf(HttpHeaders.ContentType, "application/json"))
+                }
+                path.startsWith("/api/request-workflows/") ->
+                    respond(pendingJson, headers = headersOf(HttpHeaders.ContentType, "application/json"))
+                else -> respond("{}", headers = headersOf(HttpHeaders.ContentType, "application/json"))
+            }
+        }) {
+            install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+            defaultRequest { contentType(ContentType.Application.Json); url("https://nexus.test") }
+        }
+        compose.setContent {
+            DisposableEffect(client) { onDispose { client.close() } }
+            MaterialTheme {
+                val vm = remember { WorkflowViewModel(WorkflowRepository(client)) }
+                val commRepo = remember { ClientCommunicationRepository(client) }
+                WorkflowScreen(
+                    id = "req-pay",
+                    onBack = {},
+                    initialDocuments = true,
+                    viewModel = vm,
+                    repository = commRepo,
+                )
+            }
+        }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Pay securely").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Test mode").assertIsDisplayed()
+        compose.onNodeWithText("4000 0000 0000 0002").performScrollTo().assertIsDisplayed()
+
+        compose.onNodeWithText("Submit payment proof instead").performScrollTo().performClick()
+        compose.onNodeWithText("Payment reference").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Use sandbox card checkout instead").performScrollTo().performClick()
+
+        compose.onNodeWithText("Pay PHP 15,000.00").performScrollTo().performClick()
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithText("Payment successful. Your sandbox card payment was automatically verified.")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.runOnIdle { assertEquals(listOf("COMPLETE_SANDBOX_PAYMENT"), dispatchedActions) }
+        assertTrue(dispatchedActions.contains("COMPLETE_SANDBOX_PAYMENT"))
     }
 }

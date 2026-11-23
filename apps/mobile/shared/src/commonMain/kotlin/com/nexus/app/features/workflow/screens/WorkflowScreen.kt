@@ -42,9 +42,9 @@ import org.koin.compose.viewmodel.koinViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WorkflowScreen(id: String, onBack: () -> Unit, conversationId: String? = null, initialDocuments: Boolean = false,
-    viewModel: WorkflowViewModel = koinViewModel(), onBookingSelected: (String) -> Unit = {}, onOpenThread: ((String) -> Unit)? = null) {
+    viewModel: WorkflowViewModel = koinViewModel(), onBookingSelected: (String) -> Unit = {}, onOpenThread: ((String) -> Unit)? = null,
+    repository: ClientCommunicationRepository = koinInject()) {
     val state by viewModel.state.collectAsState()
-    val repository: ClientCommunicationRepository = koinInject()
     val platformFiles = LocalPlatformFiles.current
     var history by remember(conversationId) { mutableStateOf<History?>(null) }
     var selectedBooking by remember(id) { mutableStateOf(id) }
