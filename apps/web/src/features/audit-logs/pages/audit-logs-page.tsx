@@ -39,6 +39,8 @@ import {
 
 type TimeRange = "" | "24h" | "7d"
 
+const logFilterTriggerClass = "w-[200px]"
+
 const outcomeOptions = [
   { value: "", label: "All outcomes" },
   { value: "SUCCESS", label: "Successful" },
@@ -453,7 +455,7 @@ export function AuditLogsPage({
               announceValue
               value={activity}
               options={activityOptions}
-              triggerClassName="min-w-[145px]"
+              triggerClassName={logFilterTriggerClass}
               onChange={(value) => {
                 setActivity(value)
                 resetSelectionAndPage()
@@ -464,7 +466,7 @@ export function AuditLogsPage({
               announceValue
               value={source}
               options={sourceOptions}
-              triggerClassName="min-w-[150px]"
+              triggerClassName={logFilterTriggerClass}
               onChange={(value) => {
                 setSource(value)
                 resetSelectionAndPage()
@@ -475,7 +477,7 @@ export function AuditLogsPage({
               announceValue
               value={range}
               options={timeOptions}
-              triggerClassName="min-w-[145px]"
+              triggerClassName={logFilterTriggerClass}
               onChange={(value) => {
                 setRange(value as TimeRange)
                 resetSelectionAndPage()

@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import type { ReactNode } from "react"
 import localFont from "next/font/local"
 import { AuthProvider } from "@/features/auth/providers/auth-provider"
+import { IconButtonTooltips } from "@/components/ui/icon-button-tooltips"
 import "../fonts.css"
 import "../index.css"
 
@@ -32,6 +33,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" className={inter.variable}>
       <body>
         <AuthProvider>{children}</AuthProvider>
+        <IconButtonTooltips />
       </body>
     </html>
   )

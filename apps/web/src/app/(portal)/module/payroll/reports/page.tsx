@@ -1,4 +1,6 @@
 "use client"
+
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -528,6 +530,7 @@ export default function PayrollReportsPage() {
                           onClick={() => setSelected(row)}
                         >
                           <Eye size={15} aria-hidden />
+                          <HoverTooltip>View report details</HoverTooltip>
                         </Button>
                       </ResponsiveDataTableCell>
                     </ResponsiveDataTableRow>

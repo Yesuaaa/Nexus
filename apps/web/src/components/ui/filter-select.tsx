@@ -70,7 +70,7 @@ export function FilterSelect<T extends string>({
   /** Trigger classes, e.g. a width. Merged over the standard toolbar style. */
   triggerClassName?: string
   menuClassName?: string
-  /** Fit the popup to its options and wrap labels at the viewport edge. */
+  /** Wrap trigger and option labels within the matching trigger/popup width. */
   fitOptions?: boolean
 }) {
   const selectedIndex = options.findIndex((option) => option.value === value)
