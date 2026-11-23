@@ -87,7 +87,16 @@ fun MyProjectsScreen(onNewRequest: () -> Unit, onProject: (String) -> Unit, view
 fun ProjectScreen(id: String, overview: Boolean, onBack: () -> Unit, onOpen: () -> Unit, onEdit: () -> Unit,
     onRequest: () -> Unit, onChat: () -> Unit, initialTab: String = "OVERVIEW", viewModel: ProjectsViewModel = koinViewModel()) {
     val state by viewModel.state.collectAsState()
-    var tab by rememberSaveable(initialTab) { mutableStateOf(initialTab) }
+    val tabs = listOf(
+        "OVERVIEW" to "Overview",
+        "DELIVERABLES" to "Deliverables",
+        "NOTES" to "Notes",
+        "TEAM" to "Team",
+    )
+    var tab by rememberSaveable(initialTab) {
+        val normalized = initialTab.uppercase()
+        mutableStateOf(if (tabs.any { it.first == normalized }) normalized else "OVERVIEW")
+    }
     val toast = LocalNexusToast.current
     LaunchedEffect(state.success) {
         state.success?.let { toast.show(it, "", ToastKind.SUCCESS); viewModel.clearFeedback() }
@@ -108,39 +117,83 @@ fun ProjectScreen(id: String, overview: Boolean, onBack: () -> Unit, onOpen: () 
                 ) { Text("Edit brief", fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
                 NexusButton("+  New project request", onRequest, enabled = project.editable)
                 if (project.cancellationPending) ProjectCopy("Updates are paused while your cancellation request is under review.")
-                PrimaryTabRow(selectedTabIndex = if (tab == "OVERVIEW") 0 else 1, containerColor = Color.Transparent, contentColor = NexusColors.PrimaryBlue) {
-                    listOf("OVERVIEW" to "Overview", "DELIVERABLES" to "Deliverables").forEach { (value, label) ->
-                        Tab(selected = tab == value, onClick = { tab = value }, modifier = Modifier.heightIn(min = 56.dp), text = { Text(label, fontSize = 14.sp) })
+                val selectedIndex = tabs.indexOfFirst { it.first == tab }.coerceAtLeast(0)
+                PrimaryTabRow(selectedTabIndex = selectedIndex, containerColor = Color.Transparent, contentColor = NexusColors.PrimaryBlue) {
+                    tabs.forEach { (value, label) ->
+                        Tab(selected = tab == value, onClick = { tab = value }, modifier = Modifier.heightIn(min = 56.dp), text = { Text(label, fontSize = 13.sp, maxLines = 1) })
                     }
                 }
             } else ProjectProgressBar(project.progress.completed, project.progress.total)
-            if (!overview || tab == "OVERVIEW") {
-                ProjectCard {
-                    if (overview) ProjectTitle("Project details")
-                    ProjectField("Service", project.request?.service?.name ?: "—")
-                    ProjectField("Request reference", project.request?.referenceNumber ?: project.request?.id ?: "—")
-                    ProjectField("Status", statusLabel(project.status))
-                    if (!overview) ProjectField("Deliverables", "${project.deliverables.size} shared deliverables")
-                    ProjectField("Started", displayDate(project.startDate))
-                    if (overview) ProjectProgressBar(project.progress.completed, project.progress.total)
-                }
-                ProjectCard { ProjectTitle("Project brief"); ProjectCopy(project.description?.takeIf { it.isNotBlank() } ?: "No project brief added yet.") }
-                if (overview) ProjectCard {
-                    ProjectTitle("Project requests")
-                    ProjectCopy("Track scope changes and cancellation requests.")
-                    if (project.changeRequests.isEmpty()) ProjectCopy("No project requests yet. Use ‘New project request’ above to ask the Department Head for a scope change or cancellation.")
-                    project.changeRequests.forEach { request ->
-                        HorizontalDivider(color = NexusColors.Border)
-                        ProjectTitle(if (request.kind == "CANCELLATION") "Cancellation request" else "Change request")
-                        ProjectStatus(request.status)
-                        ProjectCopy(request.details)
-                        ProjectCopy(displayDate(request.createdAt))
-                        request.responseNote?.let { ProjectField("Department Head response", it) }
+            when {
+                !overview || tab == "OVERVIEW" -> {
+                    ProjectCard {
+                        if (overview) ProjectTitle("Project details")
+                        ProjectField("Service", project.request?.service?.name ?: "—")
+                        ProjectField("Request reference", project.request?.referenceNumber ?: project.request?.id ?: "—")
+                        ProjectField("Status", statusLabel(project.status))
+                        if (!overview) ProjectField("Deliverables", "${project.deliverables.size} shared deliverables")
+                        ProjectField("Started", displayDate(project.startDate))
+                        if (overview) ProjectProgressBar(project.progress.completed, project.progress.total)
+                    }
+                    ProjectCard { ProjectTitle("Project brief"); ProjectCopy(project.description?.takeIf { it.isNotBlank() } ?: "No project brief added yet.") }
+                    if (overview) {
+                        ProjectCard {
+                            ProjectTitle("Project requests")
+                            ProjectCopy("Track scope changes and cancellation requests.")
+                            if (project.changeRequests.isEmpty()) ProjectCopy("No project requests yet. Use ‘New project request’ above to ask the Department Head for a scope change or cancellation.")
+                            project.changeRequests.forEach { request ->
+                                HorizontalDivider(color = NexusColors.Border)
+                                ProjectTitle(if (request.kind == "CANCELLATION") "Cancellation request" else "Change request")
+                                ProjectStatus(request.status)
+                                ProjectCopy(request.details)
+                                ProjectCopy(displayDate(request.createdAt))
+                                request.responseNote?.let { ProjectField("Department Head response", it) }
+                            }
+                        }
+                        ProjectCard {
+                            ProjectTitle("Latest notes")
+                            ProjectCopy("No notes added yet.")
+                        }
+                        ProjectCard {
+                            ProjectTitle("Project team")
+                            ProjectField("Team lead", "No team lead assigned.")
+                        }
                     }
                 }
-            } else {
-                if (project.deliverables.isEmpty()) ProjectCard { ProjectTitle("No shared deliverables yet"); ProjectCopy("Work shared by your project team will appear here.") }
-                project.deliverables.forEach { deliverable -> DeliverableCard(project, deliverable, viewModel, state.saving) }
+                tab == "NOTES" -> {
+                    ProjectCard {
+                        ProjectTitle("Project notes")
+                        ProjectCopy("Notes and project context shared with you.")
+                        val briefText = project.description?.takeIf { it.isNotBlank() }
+                        if (briefText != null) {
+                            Surface(
+                                color = NexusColors.PrimaryBlue,
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Project brief", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                    Text(briefText, color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp, lineHeight = 20.sp)
+                                }
+                            }
+                        } else {
+                            ProjectCopy("No notes added yet")
+                        }
+                    }
+                }
+                tab == "TEAM" -> {
+                    ProjectCard {
+                        ProjectTitle("Project team")
+                        ProjectCopy("People assigned to this project.")
+                        ProjectField("Team lead", "No team lead assigned.")
+                        HorizontalDivider(color = NexusColors.Border)
+                        ProjectField("Team member", "No team member assigned yet.")
+                    }
+                }
+                else -> {
+                    if (project.deliverables.isEmpty()) ProjectCard { ProjectTitle("No shared deliverables yet"); ProjectCopy("Work shared by your project team will appear here.") }
+                    project.deliverables.forEach { deliverable -> DeliverableCard(project, deliverable, viewModel, state.saving) }
+                }
             }
             NexusButton("Project chat", onChat, variant = NexusButtonVariant.OUTLINE)
             if (!overview) NexusButton("Open project  ›", onOpen)
@@ -148,26 +201,71 @@ fun ProjectScreen(id: String, overview: Boolean, onBack: () -> Unit, onOpen: () 
     }
 }
 
+private fun formatDeliverableSize(bytes: Int): String =
+    if (bytes < 1024 * 1024) "${maxOf(1, (bytes + 512) / 1024)} KB"
+    else "${((bytes * 10) / (1024 * 1024)) / 10.0} MB"
+
+private fun fileExtensionLabel(fileName: String): String {
+    val dotIndex = fileName.lastIndexOf('.')
+    return if (dotIndex >= 0 && dotIndex < fileName.lastIndex) fileName.substring(dotIndex) else "No extension"
+}
+
 @Composable
 private fun DeliverableCard(project: ClientProject, deliverable: ClientDeliverable, viewModel: ProjectsViewModel, busy: Boolean) {
     val platform = LocalPlatformFiles.current
     var note by rememberSaveable(deliverable.id) { mutableStateOf("") }
+    var showDetails by rememberSaveable(deliverable.id) { mutableStateOf(false) }
     var confirmApproval by rememberSaveable(project.id, deliverable.id, deliverable.workflowFile.id) { mutableStateOf(false) }
     val review = deliverable.clientReviews.firstOrNull()?.takeIf { it.workflowFileId == deliverable.workflowFile.id }
+    val reviewStatusLabel = when (review?.status) {
+        "APPROVED" -> "Approved"
+        "REVISION_REQUESTED" -> "Revision requested"
+        else -> "Awaiting your review"
+    }
     ProjectCard {
-        Text(deliverable.title, Modifier.fillMaxWidth(), fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
-            color = NexusColors.TextPrimary, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+            Text(deliverable.title, Modifier.weight(1f).padding(end = 8.dp), fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                color = NexusColors.TextPrimary, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            ProjectStatus(review?.status ?: "PENDING")
+        }
         deliverable.description?.let { ProjectCopy(it) }
-        Text(deliverable.workflowFile.name, Modifier.fillMaxWidth(), fontSize = 13.sp,
+        Text("${deliverable.workflowFile.name} · ${formatDeliverableSize(deliverable.workflowFile.size)}", Modifier.fillMaxWidth(), fontSize = 13.sp,
             color = NexusColors.TextSecondary, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-        ProjectCopy("Shared ${displayDate(deliverable.sentToClientAt)}")
+        ProjectCopy("Shared ${displayDate(deliverable.sentToClientAt)} · $reviewStatusLabel")
+        TextButton(
+            onClick = { showDetails = !showDetails },
+            shape = NexusButtonShape,
+            contentPadding = PaddingValues(0.dp),
+        ) {
+            Text(if (showDetails) "Hide deliverable details" else "View deliverable details", fontSize = 12.sp, color = NexusColors.PrimaryBlue)
+        }
+        if (showDetails) {
+            HorizontalDivider(color = NexusColors.Border)
+            ProjectField("Project", project.name)
+            ProjectField("File name", deliverable.workflowFile.name)
+            ProjectField("File extension", fileExtensionLabel(deliverable.workflowFile.name))
+            ProjectField("Shared", displayDate(deliverable.sentToClientAt))
+            ProjectField("File type", deliverable.workflowFile.mimeType)
+            ProjectField("File size", formatDeliverableSize(deliverable.workflowFile.size))
+            deliverable.description?.takeIf { it.isNotBlank() }?.let { ProjectField("Description", it) }
+            HorizontalDivider(color = NexusColors.Border)
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             NexusButton("Preview", { platform?.let { viewModel.file(project.id, deliverable, it, true) } }, Modifier.weight(1f), variant = NexusButtonVariant.OUTLINE, enabled = platform != null && !busy)
             NexusButton("Download", { platform?.let { viewModel.file(project.id, deliverable, it, false) } }, Modifier.weight(1f), variant = NexusButtonVariant.OUTLINE, enabled = platform != null && !busy)
         }
         if (review != null) {
             ProjectStatus(review.status)
-            review.note?.let { ProjectCopy(it) }
+            review.note?.takeIf { it.isNotBlank() }?.let {
+                ProjectCopy("Your revision note: $it")
+            }
+            ProjectCopy(
+                when (review.status) {
+                    "APPROVED" -> "You approved this version."
+                    "REVISION_REQUESTED" -> "Your revision request was sent to the project team."
+                    else -> "This project is not accepting deliverable reviews right now."
+                }
+            )
         } else if (project.status != "CANCELLED") {
             NexusTextField(note, { if (it.length <= 2000) note = it }, "Review note", "Describe any revisions needed", singleLine = false, maxLines = 5, enabled = !busy)
             NexusButton("Approve deliverable", { confirmApproval = true }, enabled = !busy)

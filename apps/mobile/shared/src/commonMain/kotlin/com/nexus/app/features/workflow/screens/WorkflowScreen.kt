@@ -140,15 +140,34 @@ fun WorkflowScreen(id: String, onBack: () -> Unit, conversationId: String? = nul
                 Text(workflow.nextAction, fontSize = 12.sp, lineHeight = 18.sp, color = ConversationStyle.Muted)
             } }
             if (workflow.state == "CLIENT_APPROVAL") items(workflow.quotations.takeLast(1), key = { it.id }) { quote ->
+                var quoteConfirmed by remember(quote.id) { mutableStateOf(true) }
                 DetailSection("Quotation v${quote.version}") {
                     Text(quote.currency + " " + quote.total, fontSize = 22.sp, color = ConversationStyle.Navy, fontWeight = FontWeight.SemiBold)
                     Text(quote.scope, fontSize = 14.sp, lineHeight = 21.sp)
                     quote.deliverables.forEach { Text("- $it", fontSize = 14.sp) }
+                    if (quote.lineItems.isNotEmpty()) {
+                        HorizontalDivider(color = ConversationStyle.Divider)
+                        quote.lineItems.forEach { item ->
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("${item.description} (x${item.quantity})", Modifier.weight(1f), fontSize = 12.sp, color = ConversationStyle.Ink)
+                                Text("${quote.currency} ${displayAmount(item.unitPrice)}", fontSize = 12.sp, color = ConversationStyle.Ink)
+                            }
+                        }
+                        HorizontalDivider(color = ConversationStyle.Divider)
+                    }
                     Text(quote.timeline, fontSize = 12.sp, color = ConversationStyle.Muted)
                     Text(quote.paymentTerms, fontSize = 12.sp, color = ConversationStyle.Muted)
+                    if (quote.paymentDue.isNotBlank()) {
+                        Text("Due before commencement: ${quote.currency} ${displayAmount(quote.paymentDue)}", fontSize = 12.sp, color = ConversationStyle.Ink)
+                    }
+                    quote.decisionNote?.takeIf { it.isNotBlank() }?.let { Text(it, fontSize = 12.sp, color = ConversationStyle.Muted) }
                     OutlinedTextField(decisionNote, { decisionNote = it.take(2000) }, label = { Text("Decision note") }, modifier = Modifier.fillMaxWidth())
+                    Row(verticalAlignment = Alignment.Top) {
+                        Checkbox(quoteConfirmed, { quoteConfirmed = it }, colors = CheckboxDefaults.colors(checkedColor = ConversationStyle.Navy))
+                        Text("I have reviewed this quotation and confirm my selected decision.", Modifier.padding(top = 8.dp), fontSize = 12.sp, color = ConversationStyle.Muted)
+                    }
                     Row { listOf("ACCEPT", "REVISE", "DECLINE").forEach { decision ->
-                        TextButton(shape = NexusButtonShape, onClick = { viewModel.action("RESPOND_QUOTATION", mapOf("quotationId" to quote.id, "decision" to decision, "note" to decisionNote)) }, enabled = !state.busy && (decision == "ACCEPT" || decisionNote.isNotBlank())) { Text(humanStatus(decision), fontSize = 12.sp) }
+                        TextButton(shape = NexusButtonShape, onClick = { viewModel.action("RESPOND_QUOTATION", mapOf("quotationId" to quote.id, "decision" to decision, "note" to decisionNote)) }, enabled = !state.busy && quoteConfirmed && (decision == "ACCEPT" || decisionNote.isNotBlank())) { Text(humanStatus(decision), fontSize = 12.sp) }
                     } }
                 }
             }
@@ -332,7 +351,7 @@ private fun SandboxCardPaymentForm(
     var submitted by remember { mutableStateOf(false) }
     val enabled = !busy && !pendingAction
     val nameError = if (cardholder.isBlank()) "Enter the cardholder name." else null
-    val numberError = if (cardNumber.filter { it in '0'..'9' } != "4000000000000002")
+    val numberError = if (cardNumber.filter { it in '0'..'9' } != SANDBOX_CARD_NUMBER)
         "Use the prefilled sandbox card number for this prototype." else null
     val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
     val expiryError = when {
@@ -345,6 +364,7 @@ private fun SandboxCardPaymentForm(
         }
     }
     val cvcError = if (!Regex("^[0-9]{3}$").matches(cvc)) "Enter the 3-digit sandbox security code." else null
+    val validationError = validateSandboxCard(cardholder, cardNumber, expiry, cvc, today.year, today.monthNumber)
     Surface(color = Color.White, border = BorderStroke(1.dp, ConversationStyle.Border), shape = RoundedCornerShape(12.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -365,15 +385,14 @@ private fun SandboxCardPaymentForm(
                 isError = submitted && nameError != null,
                 supportingText = { if (submitted && nameError != null) Text(nameError) })
             OutlinedTextField(cardNumber, {
-                cardNumber = it.filter { char -> char in '0'..'9' }.take(16).chunked(4).joinToString(" ")
+                cardNumber = formatSandboxCardNumber(it)
             }, Modifier.fillMaxWidth(), label = { Text("Card number") }, enabled = enabled, singleLine = true,
                 shape = NexusButtonShape, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 isError = submitted && numberError != null,
                 supportingText = { if (submitted && numberError != null) Text(numberError) })
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
                 OutlinedTextField(expiry, {
-                    val digits = it.filter { char -> char in '0'..'9' }.take(4)
-                    expiry = if (digits.length > 2) digits.take(2) + "/" + digits.drop(2) else digits
+                    expiry = formatSandboxExpiry(it)
                 }, Modifier.weight(1f), label = { Text("Expiry") }, placeholder = { Text("MM/YY") },
                     enabled = enabled, singleLine = true, shape = NexusButtonShape,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -389,7 +408,7 @@ private fun SandboxCardPaymentForm(
             NexusButton(if (busy) "Processing payment…" else "Pay ${payment.currency} ${displayAmount(payment.amount)}",
                 onClick = {
                     submitted = true
-                    if (nameError == null && numberError == null && expiryError == null && cvcError == null) onPay()
+                    if (validationError == null) onPay()
                 }, enabled = enabled)
             Text("Prototype card: 4000 0000 0000 0002 · any future MM/YY · CVC 123",
                 fontSize = 10.sp, lineHeight = 16.sp, color = ConversationStyle.Muted)

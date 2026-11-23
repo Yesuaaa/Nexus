@@ -115,7 +115,7 @@ fun WorkflowDocumentCards(workflow: ClientWorkflow, onFile: (WorkflowFile) -> Un
                     Text(it, fontSize = 12.sp, lineHeight = 18.sp, color = ConversationStyle.Ink)
                 }
             }
-            if (verified && payment.reference?.startsWith("XENDIT-SANDBOX-") == true) {
+            if (payment.isVerifiedSandboxPayment()) {
                 Surface(color = Color(0xFFECFDF3), shape = RoundedCornerShape(8.dp)) {
                     Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Outlined.CheckCircle, null, Modifier.size(18.dp), tint = Color(0xFF067647))

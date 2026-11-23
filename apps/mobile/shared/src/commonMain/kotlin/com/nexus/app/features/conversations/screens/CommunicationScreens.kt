@@ -397,7 +397,8 @@ fun ChatScreen(
     onDetails: (String) -> Unit,
     onBooking: (String) -> Unit = onDetails,
     viewModel: ConversationsViewModel = koinViewModel(),
-    selectedBookingId: String? = null
+    selectedBookingId: String? = null,
+    onOpenProject: ((String) -> Unit)? = null,
 ) {
     val state by viewModel.state.collectAsState()
     val workflowViewModel: WorkflowViewModel = koinViewModel()
@@ -479,7 +480,8 @@ fun ChatScreen(
                     ChatWorkflowForms(workflow, workflowState.busy, workflowState.selectedFileId,
                         workflowViewModel::action, onDetails = { onDetails(workflow.request.id) },
                         onDocuments = { onBooking(workflow.request.id) },
-                        onFile = { file -> files?.let { workflowViewModel.file(it, file, false) } })
+                        onFile = { file -> files?.let { workflowViewModel.file(it, file, false) } },
+                        onOpenProject = onOpenProject)
                 } }
                 items(workflow.events.takeLast(3), key = { "event-${it.id}" }) { event ->
                     SystemEventRow(event.summary, event.summary.contains("verified", ignoreCase = true))

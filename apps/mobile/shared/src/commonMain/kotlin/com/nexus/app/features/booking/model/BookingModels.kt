@@ -37,14 +37,22 @@ typealias CatalogService = com.nexus.app.features.services.model.ServiceDto
 typealias Specialist = com.nexus.app.features.services.model.SpecialistDto
 
 @Serializable
+data class SpecialistSocialLink(val platform: String = "", val url: String = "")
+
+@Serializable
 data class SpecialistProfile(
     val id: String, val fullName: String, val position: String? = null,
     val imageUrl: String? = null, val bio: String? = null,
     val specialties: List<String> = emptyList(), val department: ServiceDepartment? = null,
-    val projects: List<SpecialistProject> = emptyList(), val bannerUrl: String? = null
+    val projects: List<SpecialistProject> = emptyList(), val bannerUrl: String? = null,
+    val socialLinks: List<SpecialistSocialLink> = emptyList()
 )
 @Serializable
-data class SpecialistProject(val id: String, val title: String, val summary: String = "", val thumbnailUrl: String? = null)
+data class SpecialistProject(
+    val id: String, val title: String, val summary: String = "",
+    val thumbnailUrl: String? = null, val contribution: String = "",
+    val projectUrl: String? = null
+)
 
 typealias RequestReceipt = com.nexus.app.features.services.model.BookingReceiptDto
 
