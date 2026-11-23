@@ -586,39 +586,191 @@ export function DashboardPage({
         </div>
       ) : (
         <>
-          <div className="@container mt-5">
-            <div className="grid gap-4 @2xl:grid-cols-[minmax(0,3fr)_minmax(9rem,1fr)]">
+          <div className="@container mt-5 min-w-0">
+            <div className="grid items-start gap-4 @2xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
               <section
-                aria-labelledby="next-up"
-                className="relative isolate grid min-h-32 min-w-0 items-center gap-4 overflow-hidden rounded-2xl bg-[#182f69] bg-linear-to-r from-[#0e172c] via-[#182f69] to-[#1246bd] px-[clamp(18px,3vw,36px)] py-5 text-white shadow-sm lg:grid-cols-[minmax(0,1fr)_auto]"
+                aria-labelledby="client-input"
+                className="min-w-0 overflow-hidden rounded-xl border border-primary/15 bg-card"
               >
                 <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
+                  className={cn(
+                    "flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3",
+                    actionState === "loaded" &&
+                      actionTotal > 0 &&
+                      "bg-[#203f8c] text-white",
+                  )}
                 >
-                  <div className="absolute -right-28 -bottom-52 h-80 w-[34rem] -rotate-18 rounded-[50%] bg-blue-600/45" />
+                  <h2
+                    id="client-input"
+                    tabIndex={-1}
+                    className="flex min-w-0 items-center gap-2 text-base font-semibold"
+                  >
+                    <FileText
+                      size={18}
+                      className="shrink-0"
+                      aria-hidden="true"
+                    />
+                    Needs Your Input
+                  </h2>
+                  {actionState === "loaded" && (
+                    <Pill tone="brand">
+                      <strong className="text-xs tabular-nums">
+                        {actionTotal}
+                      </strong>{" "}
+                      {actionTotal === 1 ? "action" : "actions"}
+                    </Pill>
+                  )}
+                  {actionState === "loaded" && actionTotal > 0 && (
+                    <Button
+                      variant="brandOutline"
+                      size="header"
+                      className="ml-auto"
+                      aria-controls="dashboard-client-action-list"
+                      onClick={() =>
+                        document
+                          .getElementById("dashboard-client-action-list")
+                          ?.focus()
+                      }
+                    >
+                      Review Now <ChevronRight size={14} aria-hidden="true" />
+                    </Button>
+                  )}
                 </div>
+                <div
+                  id="dashboard-client-action-list"
+                  tabIndex={-1}
+                  className="px-4"
+                >
+                  <SectionContent
+                    headingId="client-input"
+                    state={actionState}
+                    retry={preview ? undefined : retryActions}
+                    empty={
+                      preview ? "You’re all caught up" : "No pending actions"
+                    }
+                  >
+                    <ul className="grid gap-2 py-2">
+                      {actions.map((action) => (
+                        <li
+                          key={action.id}
+                          className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-primary/10 last:border-b-0 py-3 min-[1024px]:[@media(max-height:880px)]:py-1.5"
+                        >
+                          <div className="min-w-0">
+                            <h3
+                              className={itemTitle}
+                              id={"dashboard-action-" + action.id}
+                            >
+                              {action.title}
+                            </h3>
+                            {action.deadline && (
+                              <Pill
+                                tone={
+                                  calendarDaysUntil(action.deadline, now) < 0
+                                    ? "danger"
+                                    : calendarDaysUntil(action.deadline, now) <=
+                                        3
+                                      ? "warning"
+                                      : "info"
+                                }
+                              >
+                                <time
+                                  dateTime={action.deadline}
+                                  title={requestDate(action.deadline)}
+                                >
+                                  {deadlineLabel(
+                                    calendarDaysUntil(action.deadline, now),
+                                  )}
+                                </time>
+                              </Pill>
+                            )}
+                            <p className={metadata}>
+                              {action.service}
+                              {action.reference && <> · {action.reference}</>}
+                            </p>
+                            <p className={metadata}>{action.reason}</p>
+                          </div>
+                          <Link
+                            href={action.destination ?? "/service-requests"}
+                            aria-describedby={"dashboard-action-" + action.id}
+                            className={textLink}
+                          >
+                            {action.destination
+                              ? "Open deliverable"
+                              : "View request"}{" "}
+                            <ChevronRight
+                              size={14}
+                              className="inline"
+                              aria-hidden="true"
+                            />
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </SectionContent>
+                </div>
+                {!preview &&
+                  (actionsExpanded ||
+                    (actionState === "loaded" && actionTotal > 2)) && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-3">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-expanded={actionsExpanded}
+                        aria-controls="dashboard-client-action-list"
+                        onClick={() => {
+                          setActionsExpanded(!actionsExpanded)
+                          if (actionsExpanded) setActionPage(1)
+                        }}
+                      >
+                        {actionsExpanded
+                          ? "Show fewer actions"
+                          : "Show all actions"}
+                      </Button>
+                      {actionsExpanded && actionPages > 1 && (
+                        <NumberedPagination
+                          page={actionPage}
+                          totalPages={actionPages}
+                          label="Outstanding action pages"
+                          onPageChange={(page) => {
+                            document.getElementById("client-input")?.focus()
+                            setActionPage(page)
+                          }}
+                          disabled={actionData.loading}
+                        />
+                      )}
+                    </div>
+                  )}
+              </section>
+              <section
+                aria-labelledby="next-up"
+                className="grid min-w-0 content-start gap-3 rounded-xl border border-primary/10 bg-primary/5 p-4"
+              >
                 <div>
                   <h2
                     id="next-up"
                     tabIndex={-1}
-                    className="text-xs font-semibold tracking-widest text-blue-200 uppercase"
+                    className="text-xs font-semibold text-primary"
                   >
                     Next Up
                   </h2>
                   {calendarState === "loaded" && appointment && startsAt ? (
                     <>
-                      <p className="mt-2 [overflow-wrap:anywhere] text-lg leading-tight font-semibold tracking-tight">
+                      <p className="mt-1 [overflow-wrap:anywhere] text-sm leading-tight font-semibold tracking-tight">
                         {appointment.title}
                       </p>
-                      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-white/90">
+                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                         <span className="inline-flex items-center gap-2">
                           <CalendarDays size={16} aria-hidden="true" />
                           {requestDate(startsAt)}
                         </span>
                         <time dateTime={startsAt}>{time} PHT</time>
+                        {appointment.location && (
+                          <span className="[overflow-wrap:anywhere]">
+                            {appointment.location}
+                          </span>
+                        )}
                         {consultationDays !== null && consultationDays >= 0 && (
-                          <span className="font-semibold text-blue-200">
+                          <span className="font-semibold text-primary">
                             {consultationDays === 0
                               ? "Today"
                               : consultationDays === 1
@@ -626,12 +778,6 @@ export function DashboardPage({
                                 : "In " + consultationDays + " days"}
                           </span>
                         )}
-                        <span className="rounded-full bg-white/15 px-3 py-1 [overflow-wrap:anywhere]">
-                          {appointment.project}
-                        </span>
-                        <span className="[overflow-wrap:anywhere]">
-                          {appointment.location}
-                        </span>
                       </div>
                     </>
                   ) : calendarState === "loading" ? (
@@ -642,7 +788,7 @@ export function DashboardPage({
                     </div>
                   ) : (
                     <p
-                      className="mt-2 text-xl font-semibold"
+                      className="mt-2 text-sm font-semibold"
                       role={calendarState === "error" ? "alert" : undefined}
                     >
                       {calendarState === "empty"
@@ -651,7 +797,13 @@ export function DashboardPage({
                     </p>
                   )}
                 </div>
-                <div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <time
+                    dateTime={manilaDay.format(today)}
+                    className="text-xs text-muted-foreground"
+                  >
+                    Today · {weekday}, {month} {day}
+                  </time>
                   <Button asChild variant="brandOutline" size="header">
                     <Link href="/calendar">
                       View Calendar <ArrowRight size={15} aria-hidden="true" />
@@ -672,272 +824,12 @@ export function DashboardPage({
                   )}
                 </div>
               </section>
-              <time
-                dateTime={manilaDay.format(today)}
-                aria-label={"Today: " + requestDate(today.toISOString())}
-                className="relative grid min-w-0 content-center gap-1 overflow-hidden rounded-2xl border border-primary/15 bg-linear-to-br from-card to-blue-100 px-5 py-4 text-[#122759] shadow-sm"
-              >
-                <CalendarDays
-                  size={20}
-                  className="absolute right-4 top-4 text-blue-700"
-                  aria-hidden="true"
-                />
-                <span className="text-xs font-semibold uppercase">
-                  {weekday} · {month}
-                </span>
-                <span className="text-3xl leading-tight font-semibold tabular-nums">
-                  {day}
-                </span>
-              </time>
             </div>
-          </div>
-
-          <div className="@container mt-5 min-w-0">
-            <div className="grid min-w-0 items-start gap-4 @3xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)] @5xl:grid-cols-[minmax(0,2.3fr)_minmax(0,1.35fr)_minmax(12rem,1fr)]">
-              <div className="contents @3xl:col-start-2 @3xl:row-start-1 @3xl:grid @3xl:min-w-0 @3xl:gap-4 @5xl:contents">
-                <section
-                  aria-labelledby="client-input"
-                  className="order-1 min-w-0 @5xl:col-start-2 @5xl:row-start-1 rounded-[13px] border border-primary/15 bg-primary/5 bg-[radial-gradient(ellipse_at_bottom_right,rgba(47,91,255,0.07),transparent_65%)] p-4"
-                >
-                  <div className="mb-2 min-[1024px]:[@media(max-height:880px)]:mb-0 flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1">
-                    <h2
-                      id="client-input"
-                      tabIndex={-1}
-                      className={sectionHeading}
-                    >
-                      <FileText
-                        size={18}
-                        className="mr-2 inline-block size-7 rounded-md bg-blue-100 p-1.5 align-middle text-blue-700"
-                        aria-hidden="true"
-                      />
-                      Needs Your Input
-                    </h2>
-                    {actionState === "loaded" && (
-                      <Pill tone="brand">
-                        <strong className="text-xs tabular-nums">
-                          {actionTotal}
-                        </strong>{" "}
-                        {actionTotal === 1 ? "action" : "actions"}
-                      </Pill>
-                    )}
-                  </div>
-                  <div id="dashboard-client-action-list">
-                    <SectionContent
-                      headingId="client-input"
-                      state={actionState}
-                      retry={preview ? undefined : retryActions}
-                      empty={
-                        preview ? "You’re all caught up" : "No pending actions"
-                      }
-                    >
-                      <ul className="grid gap-2 py-2">
-                        {actions.map((action) => (
-                          <li
-                            key={action.id}
-                            className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-primary/10 last:border-b-0 py-3 min-[1024px]:[@media(max-height:880px)]:py-1.5"
-                          >
-                            <div className="min-w-0">
-                              <h3
-                                className={itemTitle}
-                                id={"dashboard-action-" + action.id}
-                              >
-                                {action.title}
-                              </h3>
-                              {action.deadline && (
-                                <Pill
-                                  tone={
-                                    calendarDaysUntil(action.deadline, now) < 0
-                                      ? "danger"
-                                      : calendarDaysUntil(
-                                            action.deadline,
-                                            now,
-                                          ) <= 3
-                                        ? "warning"
-                                        : "info"
-                                  }
-                                >
-                                  <time
-                                    dateTime={action.deadline}
-                                    title={requestDate(action.deadline)}
-                                  >
-                                    {deadlineLabel(
-                                      calendarDaysUntil(action.deadline, now),
-                                    )}
-                                  </time>
-                                </Pill>
-                              )}
-                              <p className={metadata}>
-                                {action.service}
-                                {action.reference && <> · {action.reference}</>}
-                              </p>
-                              <p className={metadata}>{action.reason}</p>
-                            </div>
-                            <Link
-                              href={action.destination ?? "/service-requests"}
-                              aria-describedby={"dashboard-action-" + action.id}
-                              className={textLink}
-                            >
-                              {action.destination
-                                ? "Open deliverable"
-                                : "View request"}{" "}
-                              <ChevronRight
-                                size={14}
-                                className="inline"
-                                aria-hidden="true"
-                              />
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
-                    </SectionContent>
-                  </div>
-                  {!preview &&
-                    (actionsExpanded ||
-                      (actionState === "loaded" && actionTotal > 2)) && (
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          aria-expanded={actionsExpanded}
-                          aria-controls="dashboard-client-action-list"
-                          onClick={() => {
-                            setActionsExpanded(!actionsExpanded)
-                            if (actionsExpanded) setActionPage(1)
-                          }}
-                        >
-                          {actionsExpanded
-                            ? "Show fewer actions"
-                            : "Show all actions"}
-                        </Button>
-                        {actionsExpanded && actionPages > 1 && (
-                          <NumberedPagination
-                            page={actionPage}
-                            totalPages={actionPages}
-                            label="Outstanding action pages"
-                            onPageChange={(page) => {
-                              document.getElementById("client-input")?.focus()
-                              setActionPage(page)
-                            }}
-                            disabled={actionData.loading}
-                          />
-                        )}
-                      </div>
-                    )}
-                </section>
-
-                <div className="contents @3xl:grid @3xl:gap-4 @5xl:col-start-3 @5xl:row-start-1">
-                  <section
-                    aria-labelledby="quick-actions"
-                    className="order-5 min-w-0 rounded-[13px] border border-border bg-card p-4"
-                  >
-                    <h2 id="quick-actions" className={sectionHeading}>
-                      Quick Actions
-                    </h2>
-                    <ul className="mt-3 grid gap-2">
-                      {[
-                        {
-                          href: "/services",
-                          label: "New Service Request",
-                          icon: Plus,
-                        },
-                        {
-                          href: "/service-requests",
-                          label: "View Booked Requests",
-                          icon: ListChecks,
-                        },
-                        {
-                          href: "/help",
-                          label: "Contact Support",
-                          icon: MessageCircle,
-                        },
-                      ].map(({ href, label, icon: Icon }) => (
-                        <li key={href} className="grid min-w-0">
-                          <Button asChild variant="outline" size="shortcut">
-                            <Link href={href} prefetch={false}>
-                              <Icon
-                                size={16}
-                                className="shrink-0"
-                                aria-hidden="true"
-                              />
-                              <span className="flex-1">{label}</span>
-                              <ChevronRight
-                                size={14}
-                                className="shrink-0 text-muted-foreground"
-                                aria-hidden="true"
-                              />
-                            </Link>
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                  <section
-                    aria-labelledby="most-requested"
-                    className="order-6 min-w-0 px-1 py-2"
-                  >
-                    <h2
-                      id="most-requested"
-                      tabIndex={-1}
-                      className={sectionHeading}
-                    >
-                      Your Most Requested
-                    </h2>
-                    {preferenceState === "loaded" && (
-                      <p className={metadata}>
-                        Based on your latest {requestCount}{" "}
-                        {requestCount === 1 ? "request" : "requests"}.
-                      </p>
-                    )}
-                    <SectionContent
-                      headingId="most-requested"
-                      state={
-                        preferenceState === "error" ? "empty" : preferenceState
-                      }
-                      empty={
-                        preferenceState === "error"
-                          ? "Request statistics unavailable. Retry in Booked Requests."
-                          : "No requests to summarize"
-                      }
-                    >
-                      <dl className="mt-2 divide-y divide-border">
-                        {[
-                          {
-                            label: "Service",
-                            entry: topService,
-                            empty: "No service recorded",
-                          },
-                          {
-                            label: "Specialist",
-                            entry: topSpecialist,
-                            empty: "No specialist requested",
-                          },
-                        ].map(({ label, entry, empty }) => (
-                          <div key={label} className="py-2">
-                            <dt className="text-xs text-muted-foreground">
-                              {label}
-                            </dt>
-                            <dd className="mt-0.5 flex flex-wrap items-center gap-2">
-                              <span className={itemTitle}>
-                                {entry?.name ?? empty}
-                              </span>
-                              {entry && (
-                                <Pill tone="brand">
-                                  {entry.count}{" "}
-                                  {entry.count === 1 ? "request" : "requests"}
-                                </Pill>
-                              )}
-                            </dd>
-                          </div>
-                        ))}
-                      </dl>
-                    </SectionContent>
-                  </section>
-                </div>
-              </div>
-              <div className="contents @3xl:col-start-1 @3xl:row-start-1 @3xl:grid @3xl:min-w-0 @3xl:gap-4">
+            <div className="mt-4 grid items-start gap-4 @2xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+              <div className="grid min-w-0 gap-4">
                 <section
                   aria-labelledby="active-projects"
-                  className="order-3 min-w-0 rounded-[13px] border border-border bg-card @container/projects p-4"
+                  className="min-w-0 rounded-xl border border-border bg-card @container/projects p-4"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-x-3">
                     <h2
@@ -1049,10 +941,9 @@ export function DashboardPage({
                     </ul>
                   </SectionContent>
                 </section>
-
                 <section
                   aria-labelledby="booked-requests"
-                  className="order-4 min-w-0 self-start rounded-[13px] border border-border bg-card p-4"
+                  className="min-w-0 self-start rounded-xl border border-border bg-card p-4"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-x-3">
                     <h2
@@ -1134,6 +1025,109 @@ export function DashboardPage({
                         )
                       })}
                     </ul>
+                  </SectionContent>
+                </section>
+              </div>
+              <div className="grid min-w-0 gap-4">
+                <section
+                  aria-labelledby="quick-actions"
+                  className="@container/shortcuts min-w-0 rounded-xl border border-border bg-card p-4"
+                >
+                  <h2 id="quick-actions" className={sectionHeading}>
+                    Quick Actions
+                  </h2>
+                  <ul className="mt-3 grid gap-2 @min-[18rem]/shortcuts:grid-cols-3">
+                    {[
+                      {
+                        href: "/services",
+                        label: "New Service Request",
+                        icon: Plus,
+                      },
+                      {
+                        href: "/service-requests",
+                        label: "View Booked Requests",
+                        icon: ListChecks,
+                      },
+                      {
+                        href: "/help",
+                        label: "Contact Support",
+                        icon: MessageCircle,
+                      },
+                    ].map(({ href, label, icon: Icon }) => (
+                      <li key={href} className="grid min-w-0">
+                        <Button asChild variant="outline" size="shortcutTile">
+                          <Link href={href} prefetch={false}>
+                            <Icon
+                              size={16}
+                              className="shrink-0 text-primary"
+                              aria-hidden="true"
+                            />
+                            <span>{label}</span>
+                          </Link>
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+                <section
+                  aria-labelledby="most-requested"
+                  className="min-w-0 px-1 py-2"
+                >
+                  <h2
+                    id="most-requested"
+                    tabIndex={-1}
+                    className={sectionHeading}
+                  >
+                    Your Most Requested
+                  </h2>
+                  {preferenceState === "loaded" && (
+                    <p className={metadata}>
+                      Based on your latest {requestCount}{" "}
+                      {requestCount === 1 ? "request" : "requests"}.
+                    </p>
+                  )}
+                  <SectionContent
+                    headingId="most-requested"
+                    state={
+                      preferenceState === "error" ? "empty" : preferenceState
+                    }
+                    empty={
+                      preferenceState === "error"
+                        ? "Request statistics unavailable. Retry in Booked Requests."
+                        : "No requests to summarize"
+                    }
+                  >
+                    <dl className="mt-2 divide-y divide-border">
+                      {[
+                        {
+                          label: "Service",
+                          entry: topService,
+                          empty: "No service recorded",
+                        },
+                        {
+                          label: "Specialist",
+                          entry: topSpecialist,
+                          empty: "No specialist requested",
+                        },
+                      ].map(({ label, entry, empty }) => (
+                        <div key={label} className="py-2">
+                          <dt className="text-xs text-muted-foreground">
+                            {label}
+                          </dt>
+                          <dd className="mt-0.5 flex flex-wrap items-center gap-2">
+                            <span className={itemTitle}>
+                              {entry?.name ?? empty}
+                            </span>
+                            {entry && (
+                              <Pill tone="brand">
+                                {entry.count}{" "}
+                                {entry.count === 1 ? "request" : "requests"}
+                              </Pill>
+                            )}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
                   </SectionContent>
                 </section>
               </div>

@@ -189,9 +189,13 @@ test("long dashboard records fit approved widths and the action list stays keybo
     expect(projectBox).not.toBeNull()
     expect(actionBox).not.toBeNull()
     const shortcutBox = (await preferences.boundingBox())!
+    const nextUpBox = (await dashboard
+      .getByRole("region", { name: "Next Up" })
+      .boundingBox())!
     if (name === "desktop") {
-      expect(actionBox!.x).toBeGreaterThan(projectBox!.x)
-      expect(shortcutBox.x).toBeGreaterThan(actionBox!.x)
+      expect(nextUpBox.x).toBeGreaterThan(actionBox!.x)
+      expect(projectBox!.y).toBeGreaterThan(actionBox!.y)
+      expect(shortcutBox.x).toBeGreaterThan(projectBox!.x)
     } else if (name === "mobile") {
       expect(actionBox!.y).toBeLessThan(projectBox!.y)
       expect(projectBox!.y).toBeLessThan(shortcutBox.y)
@@ -201,9 +205,11 @@ test("long dashboard records fit approved widths and the action list stays keybo
   const services = dashboard.getByRole("link", { name: "Explore Services" })
   await services.focus()
   await page.keyboard.press("Tab")
-  await expect(
-    dashboard.getByRole("link", { name: "View Calendar" }),
-  ).toBeFocused()
+  const review = dashboard.getByRole("button", { name: "Review Now" })
+  await expect(review).toBeFocused()
+  await page.keyboard.press("Enter")
+  await expect(dashboard.locator("#dashboard-client-action-list")).toBeFocused()
+  await dashboard.getByRole("link", { name: "View Calendar" }).focus()
   const calendarLink = dashboard.getByRole("link", { name: "View Calendar" })
   expect(
     await calendarLink.evaluate((node) => {

@@ -37,6 +37,8 @@ export const buttonVariants = cva(
       },
       size: {
         default: "h-9 px-4 text-sm",
+        shortcutTile:
+          "min-h-11 whitespace-normal px-2 py-2 text-center text-xs @min-[18rem]/shortcuts:min-h-20 @min-[18rem]/shortcuts:flex-col",
         shortcut:
           "min-h-10 justify-start whitespace-normal px-2.5 py-1.5 text-left text-xs",
         /** Compact inline action. */
