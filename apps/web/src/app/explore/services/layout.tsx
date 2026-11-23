@@ -6,7 +6,6 @@ export const metadata: Metadata = {
   title: { default: "Services | Converyn", template: "%s | Converyn" },
   description:
     "Explore Converyn services and start a conversation about your next project. No account or booking required.",
-  icons: { icon: [] },
 }
 
 export default function Layout({ children }: { children: ReactNode }) {

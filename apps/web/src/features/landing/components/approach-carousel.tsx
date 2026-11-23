@@ -3,7 +3,103 @@
 import Image from "next/image"
 import { ArrowLeft, ArrowRight } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import styles from "./landing.module.css"
+
+const approachClass = [
+  "relative isolate overflow-hidden [padding-block:88px_62px] bg-(--landing-ink) text-(color:--landing-paper)",
+  "max-[761px]:[padding-block:65px_42px]",
+].join(" ")
+
+const approachHeadingClass = [
+  "max-w-[1264px] mx-auto px-12 flex justify-between items-end gap-12",
+  "[&_h2_>_span]:text-(color:--landing-blue)",
+  "[&>_p]:text-[rgb(242_241_238_/_76%)] [&>_p]:text-[14px] [&>_p]:leading-[1.9]",
+  "max-[1101px]:px-9",
+  "max-[851px]:gap-7",
+  "max-[851px]:[&>_p]:text-[12px]",
+  "max-[761px]:px-6",
+  "max-[761px]:[&>_p]:max-w-[225px]",
+  "max-[761px]:[&>_h2]:text-[32px]",
+  "max-[621px]:items-start max-[621px]:flex-col max-[621px]:gap-5",
+  "max-[621px]:[&>_h2]:text-[36px]",
+  "max-[621px]:[&>_p]:max-w-[360px] max-[621px]:[&>_p]:text-[13px]",
+].join(" ")
+
+const approachViewportClass = [
+  "overflow-x-auto [overscroll-behavior-x:contain] [scroll-snap-type:x_mandatory] scroll-px-[max(48px,calc((100vw_-_1168px)_/_2))] [padding:0_max(48px,calc((100vw_-_1168px)_/_2))_6px] mt-12 [scrollbar-width:none]",
+  "[&::-webkit-scrollbar]:hidden",
+  "focus-visible:[outline:2px_solid_var(--landing-blue)] focus-visible:outline-offset-[7px]",
+  "max-[1101px]:px-9 max-[1101px]:scroll-px-9",
+  "max-[761px]:mt-8.75 max-[761px]:px-6 max-[761px]:scroll-px-6",
+  "motion-reduce:scroll-auto",
+].join(" ")
+
+const approachCardClass = [
+  "grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] [flex:0_0_auto] gap-8.5 w-[min(1000px,calc(100vw_-_120px))] min-h-[468px] p-4.5 bg-(--landing-paper) text-(color:--landing-ink) [border:1px_solid_rgb(242_241_238_/_20%)] rounded-[6px] [scroll-snap-align:start] [box-shadow:0_22px_48px_rgb(0_0_0_/_15%)]",
+  "[&:hover_[data-step-image]_>_img]:[transform:scale(1.035)]",
+  "max-[1101px]:gap-6.5 max-[1101px]:min-h-[440px]",
+  "max-[851px]:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] max-[851px]:gap-6 max-[851px]:min-h-[425px] max-[851px]:p-3.75",
+  "max-[761px]:w-[calc(100vw_-_72px)]",
+  "max-[621px]:grid-cols-1 max-[621px]:gap-0 max-[621px]:p-3 max-[621px]:min-h-0 max-[621px]:rounded-[6px]",
+].join(" ")
+
+const stepImageClass = [
+  "relative min-h-[430px] overflow-hidden rounded-[4px] bg-(--landing-ink)",
+  "[&>_img]:[transition:transform_850ms_cubic-bezier(0.22,1,0.36,1)]",
+  'after:absolute after:[inset:35%_0_0] after:[content:""] after:[background:linear-gradient(_transparent,rgb(18_18_20_/_60%)_65%,rgb(18_18_20_/_95%)_)]',
+  "max-[1101px]:min-h-[400px]",
+  "max-[851px]:min-h-[393px]",
+  "max-[621px]:min-h-0 max-[621px]:aspect-[1.2]",
+].join(" ")
+
+const stepImageCaptionClass = [
+  "absolute z-1 bottom-6.5 left-6.5 right-6.5 text-[#f2f1ee]",
+  "[&>_span]:text-[66px] [&>_span]:leading-[1] [&>_span]:font-normal [&>_span]:tracking-[-4px]",
+  "[&>_p]:mt-3.5 [&>_p]:text-[20px] [&>_p]:font-medium [&>_p]:tracking-[-0.5px]",
+  "max-[851px]:left-5 max-[851px]:bottom-5.75",
+  "max-[851px]:[&>_span]:text-[58px]",
+  "max-[851px]:[&>_p]:text-[18px]",
+  "max-[621px]:left-5 max-[621px]:bottom-5",
+  "max-[621px]:[&>_span]:text-[54px] max-[621px]:[&>_span]:tracking-[-3px]",
+  "max-[621px]:[&>_p]:mt-2.25 max-[621px]:[&>_p]:text-[17px]",
+].join(" ")
+
+const stepContentClass = [
+  "flex flex-col min-w-0 [padding:12px_12px_0_0]",
+  "[&_h3]:max-w-[490px] [&_h3]:mt-6 [&_h3]:text-[clamp(28px,3vw,40px)] [&_h3]:leading-[1.16] [&_h3]:tracking-[-1.7px] [&_h3]:font-medium [&_h3]:text-pretty",
+  "[&>_p]:max-w-[440px] [&>_p]:mt-6 [&>_p]:text-[14px] [&>_p]:leading-[1.9] [&>_p]:text-(color:--landing-muted)",
+  "max-[1101px]:[&_h3]:text-[34px]",
+  "max-[851px]:[padding:10px_7px_0_0]",
+  "max-[851px]:[&_h3]:text-[29px] max-[851px]:[&_h3]:tracking-[-1px]",
+  "max-[851px]:[&>_p]:mt-4.5 max-[851px]:[&>_p]:text-[13px]",
+  "max-[621px]:min-h-[342px] max-[621px]:[padding:25px_12px_12px]",
+  "max-[621px]:[&_h3]:mt-4 max-[621px]:[&_h3]:text-[28px] max-[621px]:[&_h3]:leading-[1.2]",
+  "max-[621px]:[&>_p]:mt-4.5 max-[621px]:[&>_p]:text-[13px]",
+].join(" ")
+
+const stepFooterClass = [
+  "flex flex-wrap justify-between items-end gap-5 pt-12 mt-auto",
+  "[&>_span]:max-w-[170px] [&>_span]:pb-3 [&>_span]:text-[12px] [&>_span]:leading-[1.7] [&>_span]:text-(color:--landing-muted)",
+  "max-[1101px]:pt-8 max-[1101px]:gap-3",
+  "max-[1101px]:[&>_span]:max-w-[150px] max-[1101px]:[&>_span]:text-[11px]",
+  "max-[851px]:items-start max-[851px]:flex-col max-[851px]:pt-6.75 max-[851px]:gap-3.75",
+  "max-[851px]:[&>_span]:max-w-[none] max-[851px]:[&>_span]:pb-0",
+  "max-[621px]:pt-6.5 max-[621px]:gap-4.5",
+  "max-[621px]:[&>_span]:text-[10px]",
+].join(" ")
+
+const approachControlsClass = [
+  "max-w-[1264px] [margin:26px_auto_0] px-12 flex items-center justify-between gap-6",
+  "max-[1101px]:px-9",
+  "max-[761px]:px-6",
+].join(" ")
+
+const carouselArrowsClass = [
+  "flex gap-3",
+  "[&>_button]:grid [&>_button]:[place-items:center] [&>_button]:w-17 [&>_button]:h-10 [&>_button]:[border:1px_solid_rgb(242_241_238_/_8%)] [&>_button]:rounded-[4px] [&>_button]:bg-[rgb(242_241_238_/_12%)] [&>_button]:text-[#f2f1ee] [&>_button]:cursor-pointer [&>_button]:[transition:background_250ms,opacity_250ms]",
+  "[&>_button:hover:not(:disabled)]:bg-(--landing-blue)",
+  "[&>_button:disabled]:[opacity:0.3]",
+  "max-[621px]:[&>_button]:w-15 max-[621px]:[&>_button]:h-9.5",
+].join(" ")
 
 const steps = [
   {
@@ -131,7 +227,7 @@ export function ApproachCarousel() {
   return (
     <section
       id="approach"
-      className={styles.approach}
+      className={approachClass}
       aria-labelledby="approach-heading"
       onFocusCapture={() => setIsPaused(true)}
       onBlurCapture={(event) => {
@@ -140,7 +236,7 @@ export function ApproachCarousel() {
         }
       }}
     >
-      <div className={styles.approachHeading} data-reveal>
+      <div className={approachHeadingClass} data-reveal>
         <h2 id="approach-heading">
           A clear beginning.
           <br />
@@ -155,7 +251,7 @@ export function ApproachCarousel() {
 
       <div
         ref={viewport}
-        className={styles.approachViewport}
+        className={approachViewportClass}
         role="region"
         aria-roledescription="carousel"
         aria-label="Discover, Connect, and Create"
@@ -177,35 +273,35 @@ export function ApproachCarousel() {
           }
         }}
       >
-        <div className={styles.approachTrack}>
+        <div className="relative flex w-[max-content] gap-6 max-[621px]:gap-4">
           {steps.map((step) => (
             <article
               key={step.number}
               data-approach-card
-              className={styles.approachCard}
+              className={approachCardClass}
               aria-roledescription="slide"
               aria-label={step.number + " of 03: " + step.name}
             >
-              <div className={styles.stepImage}>
+              <div className={stepImageClass} data-step-image>
                 <Image
                   src={step.image}
                   alt={step.imageAlt}
                   fill
                   sizes="(max-width: 620px) 85vw, (max-width: 900px) 40vw, 380px"
-                  className={styles.coverImage}
+                  className="object-cover"
                 />
-                <div className={styles.stepImageCaption}>
+                <div className={stepImageCaptionClass}>
                   <span>{step.number}</span>
                   <p>{step.name}</p>
                 </div>
               </div>
-              <div className={styles.stepContent}>
-                <span className={styles.stepKicker}>
+              <div className={stepContentClass}>
+                <span className="text-[10px] leading-[1.6] uppercase tracking-[1.3px] text-(color:--landing-muted) max-[621px]:text-[8px]">
                   The {step.name.toLowerCase()} stage
                 </span>
                 <h3>{step.title}</h3>
                 <p>{step.description}</p>
-                <div className={styles.stepFooter}>
+                <div className={stepFooterClass}>
                   <span>{step.outcome}</span>
                 </div>
               </div>
@@ -214,8 +310,8 @@ export function ApproachCarousel() {
         </div>
       </div>
 
-      <div className={styles.approachControls}>
-        <div className={styles.carouselArrows}>
+      <div className={approachControlsClass}>
+        <div className={carouselArrowsClass}>
           <button
             type="button"
             aria-label="Previous step"
@@ -231,7 +327,7 @@ export function ApproachCarousel() {
             <ArrowRight size={20} aria-hidden="true" />
           </button>
         </div>
-        <span className={styles.carouselCount}>
+        <span className="text-[12px] [font-variant-numeric:tabular-nums] text-[#f2f1ee] [&>_span]:text-[rgb(242_241_238_/_56%)]">
           {String(active + 1).padStart(2, "0")}
           <span> / 03</span>
         </span>

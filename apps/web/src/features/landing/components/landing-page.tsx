@@ -1,16 +1,164 @@
 import Link from "next/link"
-import Image from "next/image"
+import localFont from "next/font/local"
 import { ArrowUpRight } from "lucide-react"
 import {
   LandingFaq,
   LandingHeader,
   LandingMotion,
+  PinnedHero,
   ServiceMarquee,
 } from "./landing-interactions"
 import { LandingFooter } from "./landing-footer"
 import { ApproachCarousel } from "./approach-carousel"
 import { AboutStoryCards } from "./about-story-cards"
-import styles from "./landing.module.css"
+import { HeroHalftone } from "./hero-halftone"
+import { LandingSmoothScroll } from "./landing-smooth-scroll"
+
+const sora = localFont({
+  src: "../../../../public/font/Sora/Sora-VariableFont_wght.ttf",
+  variable: "--font-landing-heading",
+  display: "swap",
+})
+
+const heroClass = [
+  "relative max-w-[1360px] min-h-[calc(100svh_-_var(--landing-header-height))] mx-auto [padding:76px_48px_84px] grid grid-cols-[minmax(0,1fr)_40%] items-center gap-x-8 gap-y-4 min-[761px]:grid-rows-[1fr_auto]",
+  "[&_h1]:text-[clamp(36px,4.3vw,66px)] [&_h1]:leading-[1.09] [&_h1]:tracking-[-3px] [&_h1]:font-medium",
+  "[&_h1_>_span]:text-(color:--landing-blue)",
+  "min-[1500px]:py-23.75",
+  "max-[1101px]:[padding:64px_32px_70px]",
+  "max-[1101px]:[&_h1]:text-[clamp(42px,4.6vw,48px)] max-[1101px]:[&_h1]:tracking-[-2.5px]",
+  "max-[851px]:gap-x-6.25",
+  "max-[851px]:[&_h1]:text-[36px] max-[851px]:[&_h1]:tracking-[-2px]",
+  "max-[761px]:grid-cols-1 max-[761px]:[padding:58px_24px_48px] max-[761px]:gap-9.5",
+  "max-[761px]:[&_h1]:text-[clamp(20px,6.5vw,48px)] max-[761px]:[&_h1]:tracking-[-1px]",
+].join(" ")
+
+const heroCopyClass = [
+  "relative z-10 py-6.5",
+  "[&>_p]:max-w-[560px] [&>_p]:mt-7.5 [&>_p]:text-(color:--landing-muted) [&>_p]:text-[16px] [&>_p]:leading-[1.9]",
+  "max-[1101px]:[&>_p]:text-[15px]",
+  "max-[851px]:[&>_p]:text-[14px] max-[851px]:[&>_p]:mt-6",
+  "max-[761px]:p-0",
+  "max-[761px]:[&>_p]:max-w-[460px] max-[761px]:[&>_p]:text-[15px] max-[761px]:[&>_p]:leading-[1.9]",
+].join(" ")
+
+const heroActionsClass = [
+  "flex flex-wrap gap-3.5 mt-9.5",
+  "max-[1101px]:gap-3 max-[1101px]:mt-7.5",
+  "max-[851px]:flex-col max-[851px]:items-start",
+  "max-[851px]:[&>_:is(a,button)]:min-w-[205px] max-[851px]:[&>_:is(a,button)]:justify-between",
+  "max-[761px]:flex-row max-[761px]:items-center max-[761px]:gap-3 max-[761px]:mt-7.5",
+  "max-[761px]:[&>_:is(a,button)]:min-w-0 max-[761px]:[&>_:is(a,button)]:text-[12px] max-[761px]:[&>_:is(a,button)]:gap-4",
+  "max-[381px]:[align-items:stretch] max-[381px]:flex-col",
+  "max-[381px]:[&>_:is(a,button)]:justify-between",
+].join(" ")
+
+const buttonPrimaryClass = [
+  "relative isolate min-h-13 inline-flex items-center justify-center gap-6 [padding:14px_22px] [border:1px_solid_var(--landing-ink)] rounded-[4px] text-[13px] font-medium [transition:background_500ms_ease-in-out,color_500ms_ease-in-out] text-(color:--landing-paper) bg-(--landing-ink)",
+  'before:absolute before:[content:""] before:-inset-0.25 before:[z-index:-1] before:rounded-[inherit] before:pointer-events-none before:[transition:opacity_500ms_ease-in-out] before:[background:linear-gradient(_245deg,var(--landing-ink)_40%,var(--landing-blue)_100%_)] before:opacity-0',
+  'after:absolute after:[content:""] after:-inset-0.25 after:[z-index:-1] after:rounded-[inherit] after:pointer-events-none after:[transition:opacity_500ms_ease-in-out] after:[background:linear-gradient(_60deg,var(--landing-ink)_0%,var(--landing-blue)_100%_)] after:opacity-100',
+  "[&:hover::before]:opacity-100",
+  "[&:focus-visible::before]:opacity-100",
+  "[&:hover::after]:opacity-0",
+  "[&:focus-visible::after]:opacity-0",
+  "[&_svg]:shrink-0 [&_svg]:[transition:transform_500ms_ease-in-out]",
+  "[&:hover_svg]:[transform:translateX(5px)]",
+  "[&:focus-visible_svg]:[transform:translateX(5px)]",
+  "max-[1101px]:gap-4 max-[1101px]:text-[12px] max-[1101px]:px-4.5",
+].join(" ")
+
+const buttonSecondaryClass = [
+  "relative isolate min-h-13 inline-flex items-center justify-center gap-6 [padding:14px_22px] [border:1px_solid_var(--landing-ink)] rounded-[4px] text-[13px] font-medium [transition:background_500ms_ease-in-out,color_500ms_ease-in-out] bg-transparent text-(color:--landing-ink)",
+  "[&_svg]:shrink-0 [&_svg]:[transition:transform_500ms_ease-in-out]",
+  "[&:hover_svg]:[transform:translateX(5px)]",
+  "[&:focus-visible_svg]:[transform:translateX(5px)]",
+  "hover:bg-(--landing-ink) hover:text-(color:--landing-paper)",
+  "focus-visible:bg-(--landing-ink) focus-visible:text-(color:--landing-paper)",
+  "max-[1101px]:gap-4 max-[1101px]:text-[12px] max-[1101px]:px-4.5",
+].join(" ")
+
+const heroStepsClass = [
+  "relative z-10 col-start-1 grid w-full max-w-[840px] grid-cols-3 justify-self-start gap-5 [margin:22px_0_0] p-0 list-none",
+  "[&_li]:grid [&_li]:gap-2 [&_li]:max-w-[270px]",
+  "[&_strong]:text-[15px] [&_strong]:leading-[1.5] [&_strong]:font-semibold",
+  "[&_span]:text-(color:--landing-muted) [&_span]:text-[14px] [&_span]:leading-[1.65]",
+  "max-[761px]:grid-cols-1 max-[761px]:gap-5.5 max-[761px]:mt-0",
+  "max-[761px]:[&_li]:max-w-[400px]",
+].join(" ")
+
+const sectionHeadingClass = [
+  "flex items-end justify-between gap-16.25",
+  "[&>_p]:max-w-[300px] [&>_p]:text-[15px] [&>_p]:leading-[1.85] [&>_p]:text-(color:--landing-muted)",
+  "max-[1101px]:gap-10",
+  "max-[851px]:[&>_p]:max-w-[240px] max-[851px]:[&>_p]:text-[14px]",
+  "max-[761px]:flex-col max-[761px]:items-start max-[761px]:gap-6",
+  "max-[761px]:[&>_p]:max-w-[440px] max-[761px]:[&>_p]:text-[14px]",
+].join(" ")
+
+const servicePreviewClass = [
+  "pt-7 [border-top:1px_solid_var(--landing-line)]",
+  "[&_h3]:text-[20px] [&_h3]:leading-[1.4] [&_h3]:tracking-[-0.6px] [&_h3]:font-medium",
+  "[&_p]:max-w-[290px] [&_p]:mt-3 [&_p]:text-(color:--landing-muted) [&_p]:text-[14px] [&_p]:leading-[1.85]",
+  "max-[761px]:pt-6.25",
+  "max-[761px]:[&_p]:max-w-[440px]",
+].join(" ")
+
+const previewLinkClass = [
+  "inline-flex items-center gap-3.5 mt-5.75 text-[12px] font-medium text-(color:--landing-ink)",
+  "hover:text-(color:--landing-blue)",
+  "[&_svg]:[transition:transform_300ms]",
+  "[&:hover_svg]:[transform:translate(2px,-2px)]",
+].join(" ")
+
+const aboutClass = [
+  "max-w-[1264px] m-auto [padding:128px_48px] grid grid-cols-[1.1fr_1fr] items-center gap-25",
+  "max-[1101px]:px-9 max-[1101px]:gap-13.75",
+  "max-[851px]:py-23.75 max-[851px]:gap-9.5",
+  "max-[761px]:grid-cols-1 max-[761px]:[padding:80px_24px] max-[761px]:gap-9.5",
+  "max-[851px]:min-[761px]:gap-7.5 max-[851px]:min-[761px]:grid-cols-[1fr_1fr]",
+].join(" ")
+
+const aboutCopyClass = [
+  "[&>_p]:max-w-[390px] [&>_p]:mt-6.5 [&>_p]:text-(color:--landing-muted) [&>_p]:text-[15px] [&>_p]:leading-[1.95]",
+  "[&>_p_+_p]:mt-4.5",
+  "[&>_:is(a,button)]:mt-8",
+  "max-[851px]:[&>_p]:text-[14px]",
+  "max-[761px]:[&>_p]:max-w-[480px] max-[761px]:[&>_p]:text-[15px]",
+  "max-[761px]:[&>_:is(a,button)]:mt-7",
+].join(" ")
+
+const faqClass = [
+  "max-w-[1264px] m-auto [padding:0_48px_120px] grid grid-cols-[0.9fr_1.1fr] items-start gap-22.5",
+  "[&_h2]:max-w-[330px]",
+  "max-[1101px]:px-9",
+  "max-[851px]:gap-12.5",
+  "max-[761px]:grid-cols-1 max-[761px]:[padding:0_24px_80px] max-[761px]:gap-8.75",
+  "max-[761px]:[&_h2]:max-w-[none]",
+].join(" ")
+
+const contactClass = [
+  "max-w-[1168px] m-auto [padding:72px_65px] flex items-center justify-between gap-11.25 bg-(--landing-ink) text-(color:--landing-paper) rounded-[6px]",
+  "[&_h2]:text-[clamp(38px,4.3vw,58px)] [&_h2]:tracking-[-2.5px]",
+  "[&_h2_>_span]:text-(color:--landing-blue)",
+  "[&_p]:mt-6 [&_p]:text-[color-mix(in_srgb,var(--landing-paper)_72%,var(--landing-ink))] [&_p]:text-[14px] [&_p]:leading-[1.8]",
+  "max-[1101px]:mx-9 max-[1101px]:[padding:60px_42px]",
+  "max-[851px]:[padding:55px_38px] max-[851px]:gap-7.5",
+  "max-[851px]:[&_h2]:text-[42px]",
+  "max-[761px]:flex-col max-[761px]:items-start max-[761px]:gap-8.75 max-[761px]:mx-4 max-[761px]:[padding:48px_28px]",
+  "max-[761px]:[&_h2]:text-[clamp(38px,8vw,52px)] max-[761px]:[&_h2]:tracking-[-2px]",
+  "max-[761px]:[&_p]:mt-5.5 max-[761px]:[&_p]:text-[14px]",
+].join(" ")
+
+const buttonLightClass = [
+  "relative isolate min-h-13 inline-flex items-center justify-center gap-6 [padding:14px_22px] [border:1px_solid_var(--landing-ink)] rounded-[4px] text-[13px] font-medium [transition:background_500ms_ease-in-out,color_500ms_ease-in-out] shrink-0 bg-(--landing-paper) text-(color:--landing-ink) [border-color:var(--landing-paper)]",
+  "[&_svg]:shrink-0 [&_svg]:[transition:transform_500ms_ease-in-out]",
+  "[&:hover_svg]:[transform:translateX(5px)]",
+  "[&:focus-visible_svg]:[transform:translateX(5px)]",
+  "hover:bg-transparent hover:text-(color:--landing-paper)",
+  "focus-visible:bg-transparent focus-visible:text-(color:--landing-paper)",
+  "max-[1101px]:gap-4 max-[1101px]:text-[12px] max-[1101px]:px-4.5",
+  "max-[761px]:text-[13px]",
+].join(" ")
 
 const services = [
   {
@@ -50,221 +198,179 @@ const questions = [
 
 export function LandingPage() {
   return (
-    <LandingMotion>
-      <a className={styles.skipLink} href="#main-content">
-        Skip to content
-      </a>
-      <LandingHeader />
-
-      <main id="main-content">
-        <section className={styles.hero} aria-labelledby="hero-heading">
-          <div className={styles.heroCopy} data-reveal>
-            <h1 id="hero-heading">
-              Creative ideas.
-              <br />
-              Connected growth.
-            </h1>
-            <p>
-              Bring your brand to life through creative content, digital
-              marketing, and web experiences designed around your goals.
-            </p>
-            <div className={styles.heroActions}>
-              <Link href="/explore/services" className={styles.buttonPrimary}>
-                Make an Inquiry
-              </Link>
-              <Link href="/login" className={styles.buttonSecondary}>
-                Sign in
-              </Link>
-            </div>
-          </div>
-          <div
-            className={styles.heroMosaic}
-            role="group"
-            aria-label="An angular mosaic of creative and digital ideas"
-            data-reveal
-          >
-            <div className={styles.mosaicUpper}>
-              <div className={styles.mosaicUpperPhoto}>
-                <Image
-                  src="/landing/converyn-team-collaboration.webp"
-                  alt="Illustrative creative and technology team planning a digital project"
-                  fill
-                  preload
-                  sizes="(max-width: 760px) 90vw, 50vw"
-                  className={styles.coverImage}
-                />
-              </div>
-              <div className={styles.mosaicDiagonalPhoto}>
-                <Image
-                  src="/landing/converyn-team-design.webp"
-                  alt="Illustrative digital designer working with a pen tablet and laptop"
-                  fill
-                  sizes="(max-width: 760px) 40vw, 22vw"
-                  className={styles.coverImage}
-                />
-              </div>
-            </div>
-            <div className={styles.mosaicBase}>
-              <Image
-                src="/landing/converyn-team-conversation.webp"
-                alt="Illustrative team discussing digital project requirements"
-                fill
-                sizes="(max-width: 760px) 72vw, 40vw"
-                className={styles.coverImage}
-              />
-            </div>
-            <div className={styles.mosaicAccentOne}>
-              <Image
-                src="/landing/converyn-grid-mobile.webp"
-                alt="A mobile website design concept"
-                fill
-                sizes="(max-width: 760px) 16vw, 90px"
-                className={styles.coverImage}
-              />
-            </div>
-            <div className={styles.mosaicAccentTwo}>
-              <Image
-                src="/landing/converyn-product-create.webp"
-                alt="A desktop displaying a digital design concept"
-                fill
-                sizes="(max-width: 760px) 16vw, 90px"
-                className={styles.coverImage}
-              />
-            </div>
-            <div className={styles.mosaicAccentThree}>
-              <Image
-                src="/landing/converyn-team-strategy.webp"
-                alt="Illustrative strategist reviewing website wireframes"
-                fill
-                sizes="(max-width: 760px) 16vw, 90px"
-                className={styles.coverImage}
-              />
-            </div>
-          </div>
-          <ol className={styles.heroSteps} aria-label="How we work">
-            <li>
-              <strong>1. Discuss</strong>
-              <span>
-                Tell us about your goals, ideas, and the support you need.
-              </span>
-            </li>
-            <li>
-              <strong>2. Quote</strong>
-              <span>
-                Receive a clear scope, timeline, and tailored proposal.
-              </span>
-            </li>
-            <li>
-              <strong>3. Approve</strong>
-              <span>
-                Confirm the plan and let&apos;s bring the work to life.
-              </span>
-            </li>
-          </ol>
-        </section>
-
-        <ServiceMarquee />
-
-        <section
-          id="expertise"
-          className={styles.services}
-          aria-labelledby="expertise-heading"
+    <div
+      className={`${sora.variable} [&_h1]:[font-family:var(--font-landing-heading),sans-serif] [&_h2]:[font-family:var(--font-landing-heading),sans-serif] [&_h3]:[font-family:var(--font-landing-heading),sans-serif]`}
+    >
+      <LandingMotion>
+        <LandingSmoothScroll />
+        <a
+          className="fixed left-4 -top-20 z-100 [padding:12px_20px] bg-(--landing-paper) text-(color:--landing-ink) focus:top-4"
+          href="#main-content"
         >
-          <div className={styles.sectionHeading} data-reveal>
-            <h2 id="expertise-heading">
-              A little of what
-              <br />
-              <span>we can do together.</span>
-            </h2>
-            <p>
-              Different needs. Connected expertise. Discover a starting point
-              for your next project.
-            </p>
-          </div>
-          <div className={styles.previewGrid}>
-            {services.map((service) => (
-              <article
-                key={service.title}
-                className={styles.servicePreview}
+          Skip to content
+        </a>
+        <LandingHeader />
+
+        <main id="main-content">
+          <PinnedHero>
+            <section className={heroClass} aria-labelledby="hero-heading">
+              <div className={heroCopyClass} data-reveal>
+                <h1 id="hero-heading">
+                  CREATIVE IDEAS.
+                  <br />
+                  <span className="whitespace-nowrap !text-inherit">
+                    CONNECTED GROWTH.
+                  </span>
+                </h1>
+                <p>
+                  Bring your brand to life through creative content, digital
+                  marketing, and web experiences designed around your goals.
+                </p>
+                <div className={heroActionsClass}>
+                  <Link href="/explore/services" className={buttonPrimaryClass}>
+                    Make an Inquiry
+                  </Link>
+                  <Link href="/login" className={buttonSecondaryClass}>
+                    Sign in
+                  </Link>
+                </div>
+              </div>
+              <HeroHalftone />
+              <ol className={heroStepsClass} aria-label="How we work">
+                <li>
+                  <strong>1. Discuss</strong>
+                  <span>
+                    Tell us about your goals, ideas, and the support you need.
+                  </span>
+                </li>
+                <li>
+                  <strong>2. Quote</strong>
+                  <span>
+                    Receive a clear scope, timeline, and tailored proposal.
+                  </span>
+                </li>
+                <li>
+                  <strong>3. Approve</strong>
+                  <span>
+                    Confirm the plan and let&apos;s bring the work to life.
+                  </span>
+                </li>
+              </ol>
+            </section>
+          </PinnedHero>
+
+          <div className="relative z-10 bg-(--landing-paper)">
+            <ServiceMarquee />
+
+            <section
+              id="expertise"
+              className="max-w-[1264px] m-auto [padding:116px_48px_120px] max-[1101px]:px-9 max-[761px]:[padding:76px_24px_80px]"
+              aria-labelledby="expertise-heading"
+            >
+              <div className={sectionHeadingClass} data-reveal>
+                <h2 id="expertise-heading">
+                  A little of what
+                  <br />
+                  <span>we can do together.</span>
+                </h2>
+                <p>
+                  Different needs. Connected expertise. Discover a starting
+                  point for your next project.
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-11 mt-13 max-[851px]:gap-6.5 max-[761px]:grid-cols-1 max-[761px]:gap-7.5 max-[761px]:mt-9.5">
+                {services.map((service) => (
+                  <article
+                    key={service.title}
+                    className={servicePreviewClass}
+                    data-reveal
+                  >
+                    <h3>{service.title}</h3>
+                    <p>{service.description}</p>
+                    <Link href="/explore/services" className={previewLinkClass}>
+                      Explore services
+                      <ArrowUpRight size={16} aria-hidden="true" />
+                    </Link>
+                  </article>
+                ))}
+              </div>
+              <div
+                className="flex justify-center mt-10.5 max-[761px]:mt-8"
                 data-reveal
               >
-                <h3>{service.title}</h3>
-                <p>{service.description}</p>
-                <Link href="/explore/services" className={styles.previewLink}>
-                  Explore services
-                  <ArrowUpRight size={16} aria-hidden="true" />
+                <Link href="/explore/services" className={buttonPrimaryClass}>
+                  View all services
+                  <ArrowUpRight size={18} aria-hidden="true" />
                 </Link>
-              </article>
-            ))}
+              </div>
+            </section>
+
+            <ApproachCarousel />
+
+            <section
+              id="about"
+              className={aboutClass}
+              aria-labelledby="about-heading"
+            >
+              <AboutStoryCards />
+              <div className={aboutCopyClass} data-reveal>
+                <h2 id="about-heading">
+                  Different skills.
+                  <br />
+                  <span>One shared direction.</span>
+                </h2>
+                <p>
+                  Converyn brings creative thinking and digital expertise into
+                  the same conversation, connecting what your business needs
+                  with what it could become.
+                </p>
+                <p>
+                  We believe the strongest work starts with listening, a clear
+                  purpose, and care for the details. Together, we make room for
+                  better ideas and meaningful progress.
+                </p>
+                <Link href="/explore/services" className={buttonSecondaryClass}>
+                  Explore our expertise
+                  <ArrowUpRight size={18} aria-hidden="true" />
+                </Link>
+              </div>
+            </section>
+
+            <section
+              id="faq"
+              className={faqClass}
+              aria-labelledby="faq-heading"
+            >
+              <h2 id="faq-heading" data-reveal>
+                A little more <span>clarity.</span>
+              </h2>
+              <LandingFaq items={questions} />
+            </section>
+
+            <section
+              id="contact"
+              className={contactClass}
+              aria-labelledby="contact-heading"
+              data-reveal
+            >
+              <div>
+                <h2 id="contact-heading">
+                  Something in mind?
+                  <br />
+                  <span>Let’s connect.</span>
+                </h2>
+                <p>Bring your questions, your goals, or your next big idea.</p>
+              </div>
+              <Link href="/explore/services" className={buttonLightClass}>
+                Start a conversation
+                <ArrowUpRight size={20} aria-hidden="true" />
+              </Link>
+            </section>
           </div>
-          <div className={styles.previewActions} data-reveal>
-            <Link href="/explore/services" className={styles.buttonPrimary}>
-              View all services
-              <ArrowUpRight size={18} aria-hidden="true" />
-            </Link>
-          </div>
-        </section>
+        </main>
 
-        <ApproachCarousel />
-
-        <section
-          id="about"
-          className={styles.about}
-          aria-labelledby="about-heading"
-        >
-          <AboutStoryCards />
-          <div className={styles.aboutCopy} data-reveal>
-            <h2 id="about-heading">
-              Different skills.
-              <br />
-              <span>One shared direction.</span>
-            </h2>
-            <p>
-              Converyn brings creative thinking and digital expertise into the
-              same conversation, connecting what your business needs with what
-              it could become.
-            </p>
-            <p>
-              We believe the strongest work starts with listening, a clear
-              purpose, and care for the details. Together, we make room for
-              better ideas and meaningful progress.
-            </p>
-            <Link href="/explore/services" className={styles.buttonSecondary}>
-              Explore our expertise
-              <ArrowUpRight size={18} aria-hidden="true" />
-            </Link>
-          </div>
-        </section>
-
-        <section id="faq" className={styles.faq} aria-labelledby="faq-heading">
-          <h2 id="faq-heading" data-reveal>
-            A little more <span>clarity.</span>
-          </h2>
-          <LandingFaq items={questions} />
-        </section>
-
-        <section
-          id="contact"
-          className={styles.contact}
-          aria-labelledby="contact-heading"
-          data-reveal
-        >
-          <div>
-            <h2 id="contact-heading">
-              Something in mind?
-              <br />
-              <span>Let’s connect.</span>
-            </h2>
-            <p>Bring your questions, your goals, or your next big idea.</p>
-          </div>
-          <Link href="/explore/services" className={styles.buttonLight}>
-            Start a conversation
-            <ArrowUpRight size={20} aria-hidden="true" />
-          </Link>
-        </section>
-      </main>
-
-      <LandingFooter />
-    </LandingMotion>
+        <LandingFooter />
+      </LandingMotion>
+    </div>
   )
 }
