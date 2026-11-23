@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, type ReactNode } from "react"
+import { usePathname, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import type { Account } from "@/features/auth/model/types"
 import { canAccessMessages } from "@/features/auth/model/permissions"
@@ -33,6 +34,13 @@ export function AppLayout({
   onSignOut: () => void
   children: ReactNode
 }) {
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const hideSidebar =
+    pathname === "/messages" &&
+    (searchParams.get("scope") === "service" ||
+      searchParams.get("scope") === "project" ||
+      searchParams.get("mode") === "internal")
   const [collapsed, setCollapsed] = useState(
     () =>
       readSidebarCollapsedPreference() ??
@@ -78,7 +86,7 @@ export function AppLayout({
       data-collapsed={collapsed}
       data-drawer-open={drawerOpen}
     >
-      {drawerOpen && (
+      {drawerOpen && !hideSidebar && (
         <button
           type="button"
           className="fixed inset-0 z-20 hidden w-full cursor-pointer border-0 bg-[rgb(15_28_53_/_48%)] max-[767px]:block"
@@ -86,18 +94,20 @@ export function AppLayout({
           onClick={() => setDrawerOpen(false)}
         />
       )}
-      <Sidebar
-        account={account}
-        collapsed={collapsed}
-        drawerOpen={drawerOpen}
-        onToggleCollapse={toggleSidebar}
-        onCloseDrawer={() => setDrawerOpen(false)}
-      />
+      {!hideSidebar && (
+        <Sidebar
+          account={account}
+          collapsed={collapsed}
+          drawerOpen={drawerOpen}
+          onToggleCollapse={toggleSidebar}
+          onCloseDrawer={() => setDrawerOpen(false)}
+        />
+      )}
       <div
         className={cn(
           "h-dvh min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain p-2 transition-[margin-left] duration-[240ms] max-[767px]:m-0 max-[767px]:p-1.5 motion-reduce:transition-none",
           // Sidebar inset (8px) + its width; the p-2 above is the 8px gap.
-          collapsed ? "ml-[72px]" : "ml-[240px]",
+          hideSidebar ? "ml-0" : collapsed ? "ml-[72px]" : "ml-[240px]",
         )}
       >
         <Topbar
@@ -105,6 +115,7 @@ export function AppLayout({
           onOpenMenu={() => setDrawerOpen(true)}
           onSignOut={onSignOut}
           showMessages={canAccessMessages(account)}
+          showNavigationMenu={!hideSidebar}
         />
         {children}
       </div>

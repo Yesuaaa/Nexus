@@ -739,9 +739,9 @@ export function Sidebar({
             so the first link lines up with the panel's top edge. */}
         <div
           className={cn(
-            "flex h-[69px] flex-none items-center gap-2 pr-3 pl-5",
+            "flex h-[69px] flex-none items-center gap-2 pr-3 pl-3",
             collapsed &&
-              "justify-center px-0 max-[767px]:justify-start max-[767px]:pr-3 max-[767px]:pl-5",
+              "justify-center px-0 max-[767px]:justify-start max-[767px]:pr-3 max-[767px]:pl-3",
           )}
         >
           <div

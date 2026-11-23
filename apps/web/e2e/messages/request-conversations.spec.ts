@@ -572,18 +572,13 @@ for (const width of [1440, 390]) {
     await expect(
       page.getByRole("region", { name: "Request conversation" }),
     ).toBeVisible()
-    if (width < 768)
-      await page.getByRole("button", { name: "Open navigation menu" }).click()
-    const sidebar = page.getByRole("navigation", {
-      name: "Main menu",
-      exact: true,
-    })
+    await expect(page.locator("#app-sidebar")).toHaveCount(0)
     await expect(
-      sidebar.getByRole("link", { name: "Service Messages", exact: true }),
-    ).toHaveAttribute("aria-current", "page")
+      page.getByRole("link", { name: "Back to workspace", exact: true }),
+    ).toHaveAttribute("href", "/module")
     await expect(
-      sidebar.getByText("Service Operations", { exact: true }),
-    ).toBeVisible()
+      page.getByRole("button", { name: "Open navigation menu" }),
+    ).toHaveCount(0)
   })
 }
 

@@ -1,4 +1,5 @@
 import * as React from "react"
+import { focusRing } from "@/components/layout/styles"
 import { cn } from "@/lib/utils"
 
 const Table = React.forwardRef<HTMLTableElement, React.ComponentProps<"table">>(
@@ -72,4 +73,47 @@ const TableCell = React.forwardRef<
 ))
 TableCell.displayName = "TableCell"
 
-export { Table, TableHeader, TableBody, TableRow, TableHead, TableCell }
+/** Full-width row shown when a semantic table's data failed to load. */
+function TableErrorRow({
+  message,
+  onRetry,
+  colSpan,
+  className,
+}: {
+  message: React.ReactNode
+  onRetry: () => void
+  colSpan: number
+  className?: string
+}) {
+  return (
+    <TableRow>
+      <TableCell colSpan={colSpan} className={cn("p-0", className)}>
+        <div className="grid min-h-[150px] place-content-center gap-3 p-6 text-center text-xs text-[#65718a]">
+          <div role="alert" className="grid justify-items-center gap-3">
+            <p className="m-0">{message}</p>
+            <button
+              type="button"
+              className={cn(
+                "cursor-pointer rounded border-0 bg-transparent p-0 font-bold text-[#244993]",
+                focusRing,
+              )}
+              onClick={onRetry}
+            >
+              Try again
+            </button>
+          </div>
+        </div>
+      </TableCell>
+    </TableRow>
+  )
+}
+
+export {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+  TableErrorRow,
+}

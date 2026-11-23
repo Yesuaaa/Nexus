@@ -67,6 +67,7 @@ export function IconButtonTooltips() {
       hide()
       if (
         !button ||
+        button.hasAttribute("data-no-tooltip") ||
         button.disabled ||
         button.getAttribute("aria-disabled") === "true" ||
         button.getAttribute("aria-expanded") === "true" ||
@@ -86,10 +87,13 @@ export function IconButtonTooltips() {
         .map((id) => document.getElementById(id)?.textContent?.trim())
         .filter(Boolean)
         .join(" ")
-      const label =
-        button.getAttribute("title") ||
-        button.getAttribute("aria-label") ||
-        labelledBy
+      const label = button.querySelector(
+        ".lucide-ellipsis, .lucide-ellipsis-vertical",
+      )
+        ? "More"
+        : button.getAttribute("title") ||
+          button.getAttribute("aria-label") ||
+          labelledBy
       if (!label) return
 
       active = button

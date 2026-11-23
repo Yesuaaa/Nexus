@@ -97,6 +97,7 @@ export function ModuleCarousel({ modules }: { modules: WorkspaceModule[] }) {
           variant="brandOutline"
           size="sm"
           aria-label={label}
+          data-no-tooltip
           disabled={
             direction < 0 ? activeIndex === 0 : activeIndex === moduleCount - 1
           }

@@ -4,7 +4,6 @@ import { useDatePreferences } from "@/features/settings/providers/preferences-pr
 import Link from "next/link"
 import { useMemo, useState } from "react"
 import { CheckCircle2, FileCheck2, FolderKanban, Plus } from "lucide-react"
-import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { contentClass } from "@/components/layout/styles"
 import {
@@ -51,6 +50,7 @@ export function ClientProjectsPage() {
     data: projects = noProjects,
     loading,
     error,
+    retry,
   } = useAsyncResource((signal) => listClientProjects(signal), [], {
     fallbackError: "Couldn't load your projects.",
   })
@@ -177,15 +177,20 @@ export function ClientProjectsPage() {
           />
         </div>
 
-        {error ? (
-          <Alert as="div" className="rounded-xl px-5 py-6 text-sm">
-            {error}
-          </Alert>
-        ) : loading || table.searchPending ? (
+        {loading || table.searchPending ? (
           <ClientTableSkeleton
             label="your projects"
             columns={7}
             gridClassName="grid grid-cols-[76px_minmax(180px,1.25fr)_minmax(180px,1.25fr)_minmax(145px,.9fr)_minmax(100px,.7fr)_minmax(130px,.9fr)_120px] items-center gap-3.5"
+          />
+        ) : error ? (
+          <ClientProjectsTable
+            projects={[]}
+            formatDate={formatDate}
+            viewKey={table.viewKey}
+            quickKey={`${filter}:${sort}:${query}`}
+            error={error}
+            onRetry={retry}
           />
         ) : projects.length === 0 ? (
           <EmptyState
@@ -220,6 +225,8 @@ export function ClientProjectsPage() {
               viewKey={table.viewKey}
               quickKey={`${filter}:${sort}:${query}`}
               onRowsSettled={table.onRowsSettled}
+              error={error}
+              onRetry={retry}
             />
             <TablePaginationFooter
               {...table.footer}

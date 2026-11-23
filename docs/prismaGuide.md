@@ -194,3 +194,9 @@ The `db:studio` launcher loads `apps/api/.env` and starts the installed Prisma C
 | Seed skips an existing account                                        | The seed deliberately preserves accounts and passwords; use the application to manage existing accounts.                                                                                                                                                                                        |
 
 To check runtime connectivity, start the API and open `http://localhost:3001/api/db-check`. Its `SELECT 1` probe checks connectivity, not whether all migrations have been applied. `/api/health` only checks that the API is running.
+
+## Public Services and guest inquiry storage
+
+The public Services feature adds ServiceInquiry and ServiceInquiryStatus. The entity stores a service association, bounded visitor contact information and requirements, a unique submission key and duplicate fingerprint, PENDING/CONTACTED/CLOSED/SPAM status, latest reviewer/note/time, optimistic version, and creation/update times. Service deletion is restricted when inquiry history exists. Reviewer deletion sets its association to null.
+
+Inquiries are independent of ServiceRequest, RequestConversation, Project, and payment/invoice workflows. Schema, indexes, migration instructions, public field projections, and API contracts are documented in [public Services and inquiries](features/public-services-inquiries.md).

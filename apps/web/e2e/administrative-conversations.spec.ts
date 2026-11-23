@@ -455,6 +455,12 @@ test("metadata errors, retry and pagination use the existing read-only UI", asyn
       .getByRole("alert")
       .filter({ hasText: "Metadata temporarily unavailable" }),
   ).toBeVisible()
+  await expect(
+    page.getByRole("table", {
+      name: "Business conversations",
+      exact: true,
+    }),
+  ).toBeVisible()
   failed = false
   await page.getByRole("button", { name: "Retry", exact: true }).click()
   const table = page.getByRole("table", {
