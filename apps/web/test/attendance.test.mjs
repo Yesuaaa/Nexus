@@ -11,12 +11,22 @@ import {
   attendanceDate,
   deviceDateTime,
   deviceDateTimeOccurrences,
+  defaultRange,
 } from "../src/features/attendance/model/attendance.ts"
 import {
   canAccessPersonalAttendance,
   Permissions,
 } from "../src/features/auth/model/permissions.ts"
 import { formatDateTime } from "../src/lib/format.ts"
+
+test("[PG-007-F001-A002-T003] default overview range uses UTC date serialization", (t) => {
+  t.mock.timers.enable({
+    apis: ["Date"],
+    now: new Date("2026-11-23T04:30:00.000Z"),
+  })
+
+  assert.deepEqual(defaultRange(), { from: "2026-10-24", to: "2026-11-24" })
+})
 
 test("correction times resolve device-zone gaps, folds, and ordinary intervals", (t) => {
   const originalZone = process.env.TZ
@@ -101,9 +111,27 @@ test("attendance navigation grants self-service independently of employee manage
     assert.equal(canAccessRoute(head, path), true)
     assert.equal(canAccessRoute(admin, path), true)
   }
+  // PG-005-F001-A001-T002: access also requires an active actor and grant.
+  const privilegedWithoutRead = [
+    { ...staff, role: "ADMIN" },
+    { ...staff, role: "SUPERADMIN" },
+  ]
+  const inactiveHead = { ...head, isActive: false }
+  const inactiveAdmin = { ...admin, isActive: false }
+  for (const actor of [
+    { ...staff, role: "USER" },
+    inactiveHead,
+    inactiveAdmin,
+    ...privilegedWithoutRead,
+  ]) {
+    for (const path of ["/attendance/audit", "/attendance/time-logs/audit"])
+      assert.equal(canAccessRoute(actor, path), false, path)
+  }
+  const superadmin = { ...admin, role: "SUPERADMIN" }
+  for (const path of ["/attendance/audit", "/attendance/time-logs/audit"])
+    assert.equal(canAccessRoute(superadmin, path), true, path)
   assert.equal(canAccessRoute(head, "/attendance/settings"), false)
   assert.equal(canAccessRoute(admin, "/attendance/settings"), true)
-  const superadmin = { ...admin, role: "SUPERADMIN" }
   for (const group of attendanceNavigation)
     for (const link of group.links)
       assert.equal(
@@ -153,6 +181,59 @@ test("live elapsed time preserves overnight attribution and pauses during unpaid
     elapsedWork(paused, Date.parse("2026-11-14T01:30:00+08:00")),
     3.5 * 3600000,
   )
+
+  // PG-006-F001-A003-T006 adds boundary coverage without replacing the
+  // existing overnight, unpaid-break, split-session, or long-duration checks.
+  const bounded = {
+    sessions: [
+      {
+        ...session,
+        startedAt: "2026-11-13T09:00:00+08:00",
+        endedAt: "2026-11-13T10:00:00+08:00",
+      },
+    ],
+  }
+  assert.equal(elapsedWork(bounded, Date.parse("2026-11-13T08:59:59+08:00")), 0)
+  assert.equal(
+    elapsedWork(bounded, Date.parse("2026-11-13T12:00:00+08:00")),
+    60 * 60000,
+  )
+  assert.equal(
+    elapsedWork(
+      {
+        sessions: [
+          {
+            ...bounded.sessions[0],
+            endedAt: null,
+            suspendedAt: "2026-11-13T10:00:00+08:00",
+          },
+        ],
+      },
+      Date.parse("2026-11-13T12:00:00+08:00"),
+    ),
+    60 * 60000,
+  )
+  assert.equal(
+    elapsedWork(
+      {
+        sessions: [
+          {
+            ...bounded.sessions[0],
+            breaks: [
+              {
+                startedAt: "2026-11-13T09:30:00+08:00",
+                endedAt: "2026-11-13T09:45:00+08:00",
+                isPaid: true,
+              },
+            ],
+          },
+        ],
+      },
+      Date.parse("2026-11-13T12:00:00+08:00"),
+    ),
+    60 * 60000,
+  )
+
   const split = {
     sessions: [
       { ...session, endedAt: "2026-11-14T04:00:00+08:00" },
@@ -230,4 +311,45 @@ test("[PG-003-F001-A003-T002] attendance entry route enforces active role and re
   assert.equal(canAccessRoute(account("USER"), "/attendance"), false)
   assert.equal(canAccessRoute(account("STAFF", false), "/attendance"), false)
   assert.equal(canAccessRoute(account("ADMIN", false), "/attendance"), false)
+})
+
+test("[PG-004-F001-A001-T001] adjustment route enforces active roles and employee read grant", () => {
+  const account = (role, isActive = true, permissions = []) => ({
+    role,
+    isActive,
+    permissions,
+  })
+
+  assert.equal(
+    canAccessRoute(account("STAFF"), "/attendance/adjustments"),
+    true,
+  )
+  assert.equal(
+    canAccessRoute(account("ADMIN"), "/attendance/adjustments"),
+    true,
+  )
+  assert.equal(
+    canAccessRoute(
+      account("SUPERADMIN", true, [Permissions.EMPLOYEES_READ]),
+      "/attendance/adjustments",
+    ),
+    true,
+  )
+  assert.equal(
+    canAccessRoute(account("SUPERADMIN"), "/attendance/adjustments"),
+    false,
+  )
+  assert.equal(
+    canAccessRoute(account("USER"), "/attendance/adjustments"),
+    false,
+  )
+  for (const role of ["STAFF", "ADMIN", "SUPERADMIN"])
+    assert.equal(
+      canAccessRoute(
+        account(role, false, [Permissions.EMPLOYEES_READ]),
+        "/attendance/adjustments",
+      ),
+      false,
+      `${role} must be active`,
+    )
 })

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 import type { AttendanceOverview } from "../src/features/attendance/api/attendance-api"
 import {
   configureRegressionTest,
@@ -8,6 +8,15 @@ import {
 
 configureRegressionTest()
 test.skip(live, "Async resource regression uses isolated API failures")
+
+function figureValue(page: Page, label: string) {
+  return page
+    .getByLabel("Attendance figures")
+    .getByText(label, { exact: true })
+    .locator("xpath=following-sibling::dd[1]")
+    .locator("span")
+    .first()
+}
 
 test("attendance request failures show an error and recover on retry", async ({
   page,
@@ -61,10 +70,25 @@ test("attendance request failures show an error and recover on retry", async ({
   await expect(
     page.getByText("Attendance unavailable (1)", { exact: true }),
   ).toBeVisible({ timeout: 30_000 })
+  // PG-007-F001-A010-T015 additive assertions: unavailable report content.
+  for (const label of [
+    "Attendance days",
+    "Check-ins",
+    "Check-outs",
+    "Still clocked in",
+  ])
+    await expect(figureValue(page, label)).toHaveText("—")
+  await expect(
+    page.getByText("Check-in summaries unavailable.", { exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByText("Recent activity unavailable.", { exact: true }),
+  ).toBeVisible()
   await page.getByRole("button", { name: "Retry", exact: true }).click()
   await expect(
     page.getByText("Attendance unavailable (2)", { exact: true }),
   ).toBeVisible()
+  await expect(figureValue(page, "Attendance days")).toHaveText("—")
   await page.getByRole("button", { name: "Retry", exact: true }).click()
   await expect(
     page.getByRole("button", { name: "Retry", exact: true }),
@@ -72,5 +96,18 @@ test("attendance request failures show an error and recover on retry", async ({
   await expect(
     page.getByRole("heading", { name: "Attendance Overview", exact: true }),
   ).toBeVisible()
+  await expect(
+    page.getByText("Attendance unavailable (1)", { exact: true }),
+  ).toHaveCount(0)
+  await expect(
+    page.getByText("Attendance unavailable (2)", { exact: true }),
+  ).toHaveCount(0)
+  await expect(figureValue(page, "Attendance days")).toHaveText("0")
+  await expect(
+    page.getByText("Check-in summaries unavailable.", { exact: true }),
+  ).toHaveCount(0)
+  await expect(
+    page.getByText("Recent activity unavailable.", { exact: true }),
+  ).toHaveCount(0)
   expect(attempts).toBe(3)
 })
