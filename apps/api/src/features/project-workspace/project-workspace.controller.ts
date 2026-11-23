@@ -7,6 +7,7 @@ import { parsePage } from "../../shared/query/pagination.js"
 import { parseWorkspaceIdentity } from "./workspace-identity.js"
 import {
   addProjectTask,
+  mutateKanbanColumn,
   assignProjectTeamLead,
   cancelProjectWorkspace,
   createProjectWorkspaces,
@@ -224,6 +225,46 @@ projectWorkspaceRouter.put(
   },
 )
 
+projectWorkspaceRouter.post("/:id/columns", async (request, response) => {
+  response.json(
+    await mutateKanbanColumn(
+      request.auth!.user.id,
+      String(request.params.id),
+      "create",
+      null,
+      request.body as unknown,
+    ),
+  )
+})
+projectWorkspaceRouter.patch(
+  "/:id/columns/:columnId",
+  async (request, response) => {
+    response.json(
+      await mutateKanbanColumn(
+        request.auth!.user.id,
+        String(request.params.id),
+        "rename",
+        String(request.params.columnId),
+        request.body as unknown,
+      ),
+    )
+  },
+)
+projectWorkspaceRouter.delete(
+  "/:id/columns/:columnId",
+  async (request, response) => {
+    response.json(
+      await mutateKanbanColumn(
+        request.auth!.user.id,
+        String(request.params.id),
+        "delete",
+        String(request.params.columnId),
+        null,
+      ),
+    )
+  },
+)
+
 projectWorkspaceRouter.post(
   "/:id/projects/:projectId/tasks",
   async (request, response) => {
@@ -257,6 +298,12 @@ projectWorkspaceRouter.patch(
         String(request.params.projectId),
         String(request.params.taskId),
         status,
+        body &&
+          typeof body === "object" &&
+          "columnId" in body &&
+          typeof body.columnId === "string"
+          ? body.columnId
+          : null,
       ),
     )
   },

@@ -40,6 +40,9 @@ export const buttonVariants = cva(
       },
       size: {
         default: "h-9 px-4 text-sm",
+        boardAction: "h-8 w-8 p-0 text-xs",
+        boardCard:
+          "min-h-11 w-full flex-col items-start justify-start gap-1 whitespace-normal px-3 py-2 pr-10 text-left text-xs",
         shortcutTile:
           "min-h-11 whitespace-normal px-2 py-2 text-center text-xs @min-[18rem]/shortcuts:min-h-20 @min-[18rem]/shortcuts:flex-col",
         shortcut:

@@ -10,6 +10,7 @@ import { CheckCircle2, ChevronDown, Pause, Play } from "lucide-react"
 import { contentClass } from "@/components/layout/styles"
 import { ProjectSummary } from "../components/project-summary"
 import { WorkspaceOverview } from "../components/workspace-overview"
+import { WorkspaceBoard } from "../components/workspace-board"
 import { PlanEditor, emptyPlan } from "../components/plan-editor"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -96,6 +97,7 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
   const [tab, setTab] = useState<DetailTab>(
     searchParams.get("tab") === "deliverables" ? "Deliverables" : "Overview",
   )
+  const [workView, setWorkView] = useState("list")
   const [busy, setBusy] = useState(false)
   const [statusBusy, setStatusBusy] = useState(false)
   const [editing, setEditing] = useState<{
@@ -180,6 +182,14 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
             )
           ? "Send every deliverable to the client first."
           : "This workspace has no active services to complete."
+  const workViewSelector = (
+    <Tabs value={workView} onValueChange={setWorkView}>
+      <TabsList aria-label="Work view">
+        <TabsTrigger value="list">List</TabsTrigger>
+        <TabsTrigger value="board">Board</TabsTrigger>
+      </TabsList>
+    </Tabs>
+  )
   return (
     <main className={`${contentClass} p-[clamp(16px,2.1vw,32px)]`}>
       {error && (
@@ -335,6 +345,9 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
               />
             </TabsContent>
             <TabsContent value="Work" className="m-0 outline-none">
+              {!editing && workView !== "board" && (
+                <div className="mb-4 flex justify-end">{workViewSelector}</div>
+              )}
               {editing ? (
                 <section className="mb-5 rounded-xl border border-[#dfe4ec] p-5">
                   <h2 className="text-sm font-semibold">
@@ -370,6 +383,12 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
                     </Button>
                   </div>
                 </section>
+              ) : workView === "board" ? (
+                <WorkspaceBoard
+                  viewSwitcher={workViewSelector}
+                  workspace={workspace}
+                  onUpdated={updateWorkspaceAndNotify}
+                />
               ) : (
                 <WorkspaceOverview
                   workspace={workspace}

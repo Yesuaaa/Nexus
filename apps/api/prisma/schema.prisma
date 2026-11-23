@@ -1806,3 +1806,26 @@ model PayrollReconciliationDecision {
   @@unique([calculationId, category, subjectId, requestId], map: "payroll_reconcile_decision_request_uq")
   @@unique([calculationId, category, subjectId, version], map: "payroll_reconcile_decision_version_uq")
 }
+
+model WorkspaceKanbanColumn {
+  id           String   @id @default(cuid())
+  workspaceKey String
+  name         String   @db.VarChar(120)
+  position     Int
+  assignments  WorkspaceKanbanAssignment[]
+
+  @@unique([workspaceKey, position])
+  @@unique([workspaceKey, id])
+  @@index([workspaceKey])
+}
+
+model WorkspaceKanbanAssignment {
+  workspaceKey String
+  projectId    String
+  taskId       String
+  columnId     String
+  column       WorkspaceKanbanColumn @relation(fields: [workspaceKey, columnId], references: [workspaceKey, id], onDelete: Cascade)
+
+  @@id([workspaceKey, projectId, taskId])
+  @@index([columnId])
+}
