@@ -298,6 +298,273 @@ test("unpaid break timer freezes and correction request uses the real API", asyn
   await expect(page.getByText("Pending", { exact: true })).toBeVisible()
 })
 
+test("[PG-004-F001-A006-T008] mixed queue submits and reloads a persisted correction", async ({
+  page,
+}) => {
+  const reason = `PG-004 direct correction ${randomUUID()}`
+  await clock("2026-11-17T12:00:00+08:00")
+  await signIn(page, "staff")
+  await page.goto("/attendance/adjustments")
+  await page
+    .getByRole("button", { name: "Request correction", exact: true })
+    .click()
+  const dialog = page.getByRole("dialog", {
+    name: "Request missing attendance",
+  })
+  await dialog
+    .getByLabel("Actual clock-in", { exact: true })
+    .fill("2026-11-16T09:00")
+  await dialog
+    .getByLabel("Actual clock-out", { exact: true })
+    .fill("2026-11-16T10:00")
+  await dialog.getByLabel("Reason", { exact: true }).fill(reason)
+
+  const submitted = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/api/attendance/adjustments",
+  )
+  const refreshed = page
+    .waitForResponse((response) => {
+      const url = new URL(response.url())
+      return (
+        response.request().method() === "GET" &&
+        url.pathname === "/api/attendance/adjustments" &&
+        url.searchParams.get("scope") === "mine"
+      )
+    })
+    .catch(() => undefined)
+  await dialog
+    .getByRole("button", { name: "Submit request", exact: true })
+    .click()
+  const createdResponse = await submitted
+  const createdBody = await createdResponse.text()
+  expect(createdResponse.status(), createdBody).toBe(201)
+  const { adjustment: created } = JSON.parse(createdBody) as {
+    adjustment: {
+      id: string
+      type: string
+      status: string
+      requestedById: string
+      reason: string
+    }
+  }
+  expect(created).toMatchObject({
+    type: "CORRECTION",
+    status: "PENDING",
+    requestedById: fixture.actors.staff.userId,
+    reason,
+  })
+  expect((await refreshed)?.status()).toBe(200)
+  await expect(dialog).toHaveCount(0)
+  await expect(
+    page.getByText("Correction requested", { exact: true }),
+  ).toBeVisible()
+  const row = page.getByRole("row").filter({ hasText: reason })
+  await expect(row.getByText("Correction", { exact: true })).toBeVisible()
+  await expect(row.getByText("Pending", { exact: true })).toBeVisible()
+
+  const persisted = await overtimeFixtureCall(
+    "staff",
+    `${overtimeAdjustments}/${created.id}`,
+  )
+  expect(persisted.status, await persisted.clone().text()).toBe(200)
+  expect(await persisted.json()).toMatchObject({
+    adjustment: {
+      id: created.id,
+      type: "CORRECTION",
+      status: "PENDING",
+      requestedById: fixture.actors.staff.userId,
+      reason,
+    },
+  })
+})
+
+test("[PG-004-F001-A009-T014] mixed queue finalizes and rejects corrections", async ({
+  page,
+}) => {
+  await clock("2026-11-20T12:00:00+08:00")
+  const approvedReason = `PG-004 HR approval ${randomUUID()}`
+  const rejectedReason = `PG-004 HR rejection ${randomUUID()}`
+  const approvedTimes = {
+    startedAt: "2026-11-18T02:00:00.000Z",
+    endedAt: "2026-11-18T03:00:00.000Z",
+  }
+  const rejectedTimes = {
+    startedAt: "2026-11-19T02:00:00.000Z",
+    endedAt: "2026-11-19T03:00:00.000Z",
+  }
+
+  async function submitCorrection(reason: string, times: typeof approvedTimes) {
+    const response = await overtimeFixtureCall(
+      "staff",
+      overtimeAdjustments,
+      "POST",
+      {
+        type: "CORRECTION",
+        requestKey: randomUUID(),
+        ...times,
+        reason,
+      },
+    )
+    expect(response.status, await response.clone().text()).toBe(201)
+    return ((await response.json()) as { adjustment: { id: string } })
+      .adjustment.id
+  }
+
+  const approvedId = await submitCorrection(approvedReason, approvedTimes)
+  const rejectedId = await submitCorrection(rejectedReason, rejectedTimes)
+  const verification = await overtimeFixtureCall(
+    "head",
+    `${overtimeAdjustments}/${approvedId}/review`,
+    "POST",
+    {
+      decision: "APPROVED",
+      note: "Department Head verified this correction",
+    },
+  )
+  expect(verification.status, await verification.clone().text()).toBe(200)
+  expect(await verification.json()).toMatchObject({
+    adjustment: { id: approvedId, status: "VERIFIED" },
+  })
+  const rejectedVerification = await overtimeFixtureCall(
+    "head",
+    `${overtimeAdjustments}/${rejectedId}/review`,
+    "POST",
+    {
+      decision: "APPROVED",
+      note: "Department Head verified the second correction",
+    },
+  )
+  expect(
+    rejectedVerification.status,
+    await rejectedVerification.clone().text(),
+  ).toBe(200)
+  expect(await rejectedVerification.json()).toMatchObject({
+    adjustment: { id: rejectedId, status: "VERIFIED" },
+  })
+
+  const rejectionHistoryBefore = await overtimeFixtureCall(
+    "staff",
+    "/attendance/me/history?from=2026-11-19&to=2026-11-19",
+  )
+  expect(rejectionHistoryBefore.status).toBe(200)
+  const before = (await rejectionHistoryBefore.json()) as {
+    workdays: { sessions: { startedAt: string; endedAt: string | null }[] }[]
+  }
+
+  await signIn(page, "admin")
+  await page.goto("/attendance/adjustments")
+  await expect(
+    page.getByRole("row").filter({ hasText: approvedReason }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("row").filter({ hasText: rejectedReason }),
+  ).toBeVisible()
+
+  const approvedMenu = overtimeRowMenu(page, approvedId)
+  await approvedMenu.click()
+  await page
+    .getByRole("menuitem", { name: "Approve request", exact: true })
+    .click()
+  const approvalPanel = page.getByRole("dialog", {
+    name: "Approve attendance correction",
+  })
+  await approvalPanel
+    .getByRole("textbox", { name: "Review note", exact: true })
+    .fill("HR approved the verified correction")
+  const approvedResponse = overtimeResponse(
+    page,
+    "POST",
+    `${overtimeAdjustments}/${approvedId}/review`,
+  )
+  await approvalPanel
+    .getByRole("button", { name: "Confirm decision", exact: true })
+    .click()
+  const approvalResult = await approvedResponse
+  expect(approvalResult.status()).toBe(200)
+  expect(await approvalResult.json()).toMatchObject({
+    adjustment: { id: approvedId, status: "APPROVED" },
+  })
+  await expect(approvalPanel).toHaveCount(0)
+  await expect(
+    page.getByRole("row").filter({ hasText: approvedReason }),
+  ).toContainText("Approved")
+
+  const rejectedMenu = overtimeRowMenu(page, rejectedId)
+  await rejectedMenu.click()
+  await page
+    .getByRole("menuitem", { name: "Reject request", exact: true })
+    .click()
+  const rejectionPanel = page.getByRole("dialog", {
+    name: "Reject attendance correction",
+  })
+  await rejectionPanel
+    .getByRole("textbox", { name: "Review note", exact: true })
+    .fill("HR rejected the unsupported correction")
+  const rejectedResponse = overtimeResponse(
+    page,
+    "POST",
+    `${overtimeAdjustments}/${rejectedId}/review`,
+  )
+  await rejectionPanel
+    .getByRole("button", { name: "Confirm decision", exact: true })
+    .click()
+  const rejectionResult = await rejectedResponse
+  expect(rejectionResult.status()).toBe(200)
+  expect(await rejectionResult.json()).toMatchObject({
+    adjustment: { id: rejectedId, status: "REJECTED" },
+  })
+  await expect(rejectionPanel).toHaveCount(0)
+  await expect(
+    page.getByRole("row").filter({ hasText: rejectedReason }),
+  ).toContainText("Rejected")
+
+  const [approvedDetail, rejectedDetail, approvedHistory, rejectedHistory] =
+    await Promise.all([
+      overtimeFixtureCall("staff", `${overtimeAdjustments}/${approvedId}`),
+      overtimeFixtureCall("staff", `${overtimeAdjustments}/${rejectedId}`),
+      overtimeFixtureCall(
+        "staff",
+        "/attendance/me/history?from=2026-11-18&to=2026-11-18",
+      ),
+      overtimeFixtureCall(
+        "staff",
+        "/attendance/me/history?from=2026-11-19&to=2026-11-19",
+      ),
+    ])
+  for (const response of [
+    approvedDetail,
+    rejectedDetail,
+    approvedHistory,
+    rejectedHistory,
+  ])
+    expect(response.status, await response.clone().text()).toBe(200)
+  expect(await approvedDetail.json()).toMatchObject({
+    adjustment: { id: approvedId, status: "APPROVED" },
+  })
+  expect(await rejectedDetail.json()).toMatchObject({
+    adjustment: { id: rejectedId, status: "REJECTED" },
+  })
+  const approved = (await approvedHistory.json()) as {
+    workdays: { sessions: { startedAt: string; endedAt: string | null }[] }[]
+  }
+  const rejected = (await rejectedHistory.json()) as {
+    workdays: { sessions: { startedAt: string; endedAt: string | null }[] }[]
+  }
+  expect(approved.workdays.flatMap(({ sessions }) => sessions)).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        startedAt: approvedTimes.startedAt,
+        endedAt: approvedTimes.endedAt,
+      }),
+    ]),
+  )
+  expect(rejected.workdays.flatMap(({ sessions }) => sessions)).toEqual(
+    before.workdays.flatMap(({ sessions }) => sessions),
+  )
+})
+
 test("department head reviews scoped requests and HR policy settings work", async ({
   page,
 }) => {
@@ -3406,6 +3673,76 @@ test("overtime conflict recovers a stale HR approval after Superadmin rejection"
   await expect(detail.getByText(rejection, { exact: true })).toBeVisible()
 })
 
+test("[PG-004-F001-A010-T015] mixed queue reconciles a concurrent overtime decision", async ({
+  page,
+  browser,
+}) => {
+  const { id } = await seedOvertimeReview("2026-11-21", true, "correction-dst")
+  const path = `${overtimeAdjustments}/${id}`
+  const winningNote = `Superadmin rejected mixed-route overtime ${randomUUID()}`
+  await signIn(page, "admin")
+  await page.goto(overtimeAdjustments)
+  const menu = overtimeRowMenu(page, id)
+  await expect(menu).toBeVisible()
+  await menu.click()
+  await page
+    .getByRole("menuitem", { name: "Approve request", exact: true })
+    .click()
+  const review = page.getByRole("dialog", { name: "Approve overtime" })
+  await review
+    .getByRole("textbox", { name: "Review note", exact: true })
+    .fill("HR approval prepared before the competing decision")
+
+  await recordWinningOvertimeDecision(
+    browser,
+    new URL(page.url()).origin,
+    id,
+    "Reject",
+    winningNote,
+  )
+  const stale = overtimeResponse(page, "POST", `${path}/review`)
+  await review
+    .getByRole("button", { name: "Confirm decision", exact: true })
+    .click()
+  const conflict = await stale
+  expect(conflict.status()).toBe(409)
+
+  const details = page.getByRole("dialog", { name: "Overtime request" })
+  await expect(details.getByRole("alert")).toHaveText(
+    "This request has already been reviewed",
+  )
+  await expect(details.getByText("Rejected", { exact: true })).toBeVisible()
+  await expect(details.getByText(winningNote, { exact: true })).toBeVisible()
+  await expect(
+    details.getByRole("textbox", { name: "Review note", exact: true }),
+  ).toHaveCount(0)
+  await expect(
+    details.getByRole("button", { name: "Confirm decision", exact: true }),
+  ).toHaveCount(0)
+  await details.getByRole("button", { name: "Done", exact: true }).click()
+  await expect(page.getByRole("row").filter({ has: menu })).toContainText(
+    "Rejected",
+  )
+  await menu.click()
+  await expect(
+    page.getByRole("menuitem", { name: "Approve request", exact: true }),
+  ).toHaveCount(0)
+  await expect(
+    page.getByRole("menuitem", { name: "Reject request", exact: true }),
+  ).toHaveCount(0)
+
+  const persisted = await overtimeFixtureCall("admin", path)
+  expect(persisted.status, await persisted.clone().text()).toBe(200)
+  expect(await persisted.json()).toMatchObject({
+    adjustment: {
+      id,
+      status: "REJECTED",
+      reviewNote: winningNote,
+      reviewedById: fixture.actors.superadmin.userId,
+    },
+  })
+})
+
 test("overtime conflict shows the winning approval after a stale rejection leaves the filtered queue", async ({
   page,
   browser,
@@ -3512,6 +3849,80 @@ test("overtime conflict clears private details after the Head loses review acces
     })
   } finally {
     recovery.release()
+    const restored = await overtimeFixtureCall("admin", department, "PUT", {
+      headId: fixture.actors.head.userId,
+    })
+    expect(restored.status, await restored.text()).toBe(200)
+  }
+
+  await page.goto(overtimeAdjustments)
+  const mixedMenu = overtimeRowMenu(page, id)
+  await expect(mixedMenu).toBeVisible()
+  await mixedMenu.click()
+  await page
+    .getByRole("menuitem", { name: "Verify overtime", exact: true })
+    .click()
+  const mixedPanel = page.getByRole("dialog", { name: "Verify overtime" })
+  await expect(mixedPanel.getByText(reason, { exact: true })).toBeVisible()
+  await mixedPanel
+    .getByRole("textbox", { name: "Review note", exact: true })
+    .fill("Mixed queue verification prepared before leadership changed")
+
+  const mixedReplacement = await overtimeFixtureCall(
+    "admin",
+    department,
+    "PUT",
+    { headId: fixture.actors["correction-dst"].userId },
+  )
+  expect(mixedReplacement.status, await mixedReplacement.text()).toBe(200)
+  const mixedRecovery = requestGate()
+  try {
+    await page.route(
+      `**/api${path}`,
+      async (route) => {
+        mixedRecovery.start()
+        await mixedRecovery.pending
+        await route.fallback()
+      },
+      { times: 1 },
+    )
+    const mixedConflict = overtimeResponse(page, "POST", `${path}/review`)
+    const mixedDetail = overtimeResponse(page, "GET", path)
+    const mixedList = overtimeResponse(page, "GET", overtimeAdjustments)
+    await mixedPanel
+      .getByRole("button", { name: "Confirm decision", exact: true })
+      .click()
+    const denied = await mixedConflict
+    expect(denied.status()).toBe(403)
+    const { error } = (await denied.json()) as { error: string }
+    await mixedRecovery.started
+    await expect(
+      page.getByRole("alert").filter({ hasText: error }),
+    ).toBeVisible()
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await expect(mixedMenu).toHaveCount(0)
+    mixedRecovery.release()
+    const [detailResult, listResult] = await Promise.all([
+      mixedDetail,
+      mixedList,
+    ])
+    expect(detailResult.status()).toBe(404)
+    expect(listResult.status()).toBe(403)
+    await expect(page.getByText(error, { exact: true }).first()).toBeVisible()
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await expect(page.getByText(reason, { exact: true })).toHaveCount(0)
+    await expect(mixedMenu).toHaveCount(0)
+    const unchanged = await overtimeFixtureCall("correction-dst", path)
+    expect(unchanged.status).toBe(200)
+    expect(await unchanged.json()).toMatchObject({
+      adjustment: {
+        status: "PENDING",
+        verifiedById: null,
+        reviewedById: null,
+      },
+    })
+  } finally {
+    mixedRecovery.release()
     const restored = await overtimeFixtureCall("admin", department, "PUT", {
       headId: fixture.actors.head.userId,
     })

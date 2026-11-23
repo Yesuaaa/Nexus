@@ -2,9 +2,9 @@
 
 **Updated:** 2026-11-23  
 **Repository:** Converyn Nexus  
-**Current branch/HEAD:** 293-test-full-system-audit-for-verifying-recent-changes / 9335f946dd09a9870a20222034488e82317ca58c
+**Current branch/HEAD:** 293-test-full-system-audit-for-verifying-recent-changes / b870c7a2b8a07e5bd6583f2dd625d9cdd8bc26a2 (PG-004 Phase 2.1 discovery baseline; worktree was clean at task entry)
 **Historical worktree at PG-002 implementation entry:** Existing untracked Phase 2 ledger and seven PG-002 design documents; no tracked changes.
-**Overall status:** PG-001 and PG-002 source-supported implementation and focused verification are recorded below. PG-003 authorized test implementation and focused verification are complete; contract C001/T010 remains blocked. This ledger does not infer status for pages without an inspected record.
+**Overall status:** PG-001 through PG-004 have recorded focused implementation and verification results. PG-003 contract C001/T010 remains blocked. PG-004 test implementation and focused verification are complete, with application defect PG-004-D-001 documented. This ledger does not infer status for pages without an inspected record.
 
 | Page   | Route       | Current stage/status                                                                                                                 | Evidence and outstanding item                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | ------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -44,7 +44,7 @@ Next build/typegen regenerated apps/web/next-env.d.ts; that incidental generated
 
 ## Scope boundary
 
-Only PG-001, PG-002, and PG-003 have verified Phase 2 records entered here. No status or historical test result is inferred for another page.
+PG-001 through PG-004 have recorded implementation and focused verification results. PG-004 verification covers only `/attendance/adjustments`; no status or historical test result is inferred for other pages, and the entire Attendance module is not claimed verified.
 
 ## PG-003 Phase 2.2 implementation and execution state
 
@@ -64,3 +64,45 @@ Only PG-001, PG-002, and PG-003 have verified Phase 2 records entered here. No s
 | `pnpm lint`                            | Passed, exit code 0.                                    |
 | `pnpm typecheck`                       | Passed, exit code 0 for web and API.                    |
 | Contract T010 / C001                   | Blocked; excluded from passing-test totals.             |
+
+## PG-004 Phase 2.1 discovery and test-design state
+
+- Discovery baseline: branch `293-test-full-system-audit-for-verifying-recent-changes`, HEAD `b870c7a2b8a07e5bd6583f2dd625d9cdd8bc26a`; worktree clean at entry. The request reported `9335f946dd09a9870a20222034488e82317ca58c`; the current repository source was used without resetting Git state.
+- PG-004 is `/attendance/adjustments`, rendered by the default-mode `AttendanceAdjustmentsPage`. Route identity matches Phase 1. The route has a guarded policy entry but no direct sidebar link; the current sidebar points to the request overview and typed correction/overtime paths. Current PG-004 source directly uses attendance API only; no `leave-api` call is present.
+- Eleven atomic behaviors and 19 unique test case records are documented in [PG-004](phase-2/PG-004/PG-004_FUNCTIONAL_DISCOVERY.md). Classification: 12 NEW TEST REQUIRED, 2 ADDITIONAL ASSERTION REQUIRED, 5 EXISTING COVERAGE SUFFICIENT, 0 CONTRACT CLARIFICATION REQUIRED.
+- Implementable additions total 14 unique cases: 1 unit, 1 API/PGlite, 8 browser cases and 4 browser/API/PGlite integration cases. Existing coverage and contract-blocked cases are excluded from this total.
+- Existing direct PG-004 browser coverage includes real correction submission followed by a Pending queue check and Department Head verification. Existing API suites cover ownership/replay, scope, filters, staged decisions, and attendance persistence. Default mixed-queue filters, route-owned correction launch, ordinary row details, HR/rejection UI, and default-route overtime recovery need additional coverage.
+- No tests were implemented or executed. No application or test source was changed. Existing PG-001 through PG-003 execution evidence and deferred contracts remain preserved above.
+
+| PG-004 Phase 2.1 gate                           | Result                                                                                                          |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Page identity and current source reconciliation | Complete; `/attendance/adjustments`, default mixed-list mode.                                                   |
+| Atomic feature mapping                          | Complete; 11 source-supported behaviors.                                                                        |
+| Existing-test and fixture audit                 | Complete; declaration presence recorded separately from pass status.                                            |
+| Proposed cases                                  | 19 unique records; 14 implementable additions, 0 contract-blocked.                                              |
+| Documentation                                   | Seven PG-004 design records authored; `pnpm format`, `pnpm lint`, and `pnpm typecheck` passed with exit code 0. |
+| Application/test source modifications           | None.                                                                                                           |
+| Test execution                                  | Not run, as required by the Phase 2.1 scope.                                                                    |
+
+- `pnpm format` first encountered a sandbox access denial on pnpm's global store lock; the reviewed retry passed. `pnpm lint` and `pnpm typecheck` passed. Typecheck regenerated `apps/web/next-env.d.ts`; its incidental change was restored to the task-entry contents.
+
+## PG-004 Phase 2.2 implementation and execution state
+
+- Implemented the 14 approved addition/assertion records: T001, T002–T009, T011, and T014–T017. T017 is a nested assertion in T011; T016 extends the existing access-loss conflict test. The five existing-sufficient records T010/T012/T013/T018/T019 remain preserved.
+- Focused execution: web unit 8/8; management API/PGlite 16/16; overtime API 1/1; correction/overtime API 18/18. Mocked PG-004 browser cases: six passed and one nested T017 assertion failed with confirmed application defect PG-004-D-001. T008/T014/T015/T016 real browser/API/PGlite scenarios passed. Existing Head verification, Superadmin role/capability matrix, typed-route stale overtime conflicts, check-ins correction workflow, and four DST/time-zone browser cases passed.
+- PG-004-D-001 is reproducible on `/attendance/adjustments`: keyboard ArrowDown changes a row-action trigger to `aria-expanded=true`, but the accessible View details menu item is absent. Pointer menu/details behavior passes. Production source was not modified; the failed approved assertion and evidence are documented in the PG-004 reports.
+- Test/fixture failures found during early runs were corrected: alert locator strictness, status-text encoding, synthetic clock setup, response assertion shape, admin pending-row scope precondition, session response matching, and shared-employee session chronology. Their final cases pass.
+- No production code, API behavior, authorization policy, schema, migration, or shared test fixture changed. `apps/web/next-env.d.ts` was regenerated by typegen and restored to task-entry contents. No full repository regression suite was run and no PG-005 work began.
+
+| PG-004 Phase 2.2 gate                           | Result                                                                                            |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Approved test inventory                         | 14/14 additions/assertions implemented and accounted for.                                         |
+| Focused unit tests                              | Passed, 8/8.                                                                                      |
+| Focused API/PGlite suites                       | Passed, 35/35 across management, overtime, and correction/overtime suites.                        |
+| Mocked PG-004 browser suite                     | Six passed; T017 failed with application defect PG-004-D-001. T011's read-only assertions passed. |
+| Real browser/API/PGlite integrations            | T008/T014/T015/T016 passed; existing T013 also passed.                                            |
+| Existing role/time-zone/concurrency regressions | Focused suites passed; details are in `PG-004_TEST_EXECUTION_RESULTS.md`.                         |
+| `pnpm format`                                   | Passed, exit code 0 after the PG-004 reports were authored.                                       |
+| `pnpm lint`                                     | Passed, exit code 0.                                                                              |
+| `pnpm typecheck`                                | Passed, exit code 0 for web and API.                                                              |
+| PG-005                                          | Not started; awaiting authorization.                                                              |

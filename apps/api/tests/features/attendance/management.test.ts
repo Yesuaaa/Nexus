@@ -1190,3 +1190,95 @@ test(
     )
   },
 )
+
+test(
+  "[PG-004-F001-A002-T009] adjustment list paginates ten stable scoped rows",
+  { timeout: 120000 },
+  async (t) => {
+    const { prisma, base } = await startPgliteApp(t)
+    const department = await prisma.department.create({
+      data: { name: "Adjustment pagination team" },
+    })
+    const user = await prisma.user.create({
+      data: {
+        email: "adjustment-pagination@management.test",
+        fullName: "Pagination Staff",
+        role: "STAFF",
+        passwordHash: "test-only",
+      },
+    })
+    const employee = await prisma.employee.create({
+      data: {
+        employeeId: "ADJ-PAGE-001",
+        fullName: "Pagination Staff",
+        userId: user.id,
+        departmentId: department.id,
+      },
+    })
+    const token = (await issueSession(user)).token
+    const request = (page: string) =>
+      fetch(`${base}/attendance/adjustments?scope=mine&page=${page}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+    for (let index = 0; index < 11; index += 1) {
+      const startedAt = new Date(Date.UTC(2026, 10, 1, 9, index))
+      await prisma.attendanceAdjustment.create({
+        data: {
+          employeeId: employee.id,
+          requestedById: user.id,
+          requestKey: randomUUID(),
+          reason: `Pagination fixture ${index}`,
+          proposedStartedAt: startedAt,
+          proposedEndedAt: new Date(startedAt.getTime() + 60_000),
+          createdAt: new Date(Date.UTC(2026, 10, 1, 0, index)),
+        },
+      })
+    }
+
+    const firstResponse = await request("1")
+    assert.equal(firstResponse.status, 200, await firstResponse.clone().text())
+    const first = (await firstResponse.json()) as {
+      adjustments: { id: string }[]
+      total: number
+      page: number
+      pageSize: number
+    }
+    assert.equal(first.total, 11)
+    assert.equal(first.page, 1)
+    assert.equal(first.pageSize, 10)
+    assert.equal(first.adjustments.length, 10)
+
+    const secondResponse = await request("2")
+    assert.equal(
+      secondResponse.status,
+      200,
+      await secondResponse.clone().text(),
+    )
+    const second = (await secondResponse.json()) as {
+      adjustments: { id: string }[]
+      total: number
+      page: number
+      pageSize: number
+    }
+    assert.equal(second.total, 11)
+    assert.equal(second.page, 2)
+    assert.equal(second.pageSize, 10)
+    assert.equal(second.adjustments.length, 1)
+
+    const expected = await prisma.attendanceAdjustment.findMany({
+      where: { employeeId: employee.id },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: { id: true },
+    })
+    assert.deepEqual(
+      [...first.adjustments, ...second.adjustments].map(({ id }) => id),
+      expected.map(({ id }) => id),
+    )
+
+    for (const invalidPage of ["0", "1.5", "100001"]) {
+      const invalid = await request(invalidPage)
+      assert.equal(invalid.status, 400, `page=${invalidPage}`)
+    }
+  },
+)

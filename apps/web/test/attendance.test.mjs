@@ -231,3 +231,44 @@ test("[PG-003-F001-A003-T002] attendance entry route enforces active role and re
   assert.equal(canAccessRoute(account("STAFF", false), "/attendance"), false)
   assert.equal(canAccessRoute(account("ADMIN", false), "/attendance"), false)
 })
+
+test("[PG-004-F001-A001-T001] adjustment route enforces active roles and employee read grant", () => {
+  const account = (role, isActive = true, permissions = []) => ({
+    role,
+    isActive,
+    permissions,
+  })
+
+  assert.equal(
+    canAccessRoute(account("STAFF"), "/attendance/adjustments"),
+    true,
+  )
+  assert.equal(
+    canAccessRoute(account("ADMIN"), "/attendance/adjustments"),
+    true,
+  )
+  assert.equal(
+    canAccessRoute(
+      account("SUPERADMIN", true, [Permissions.EMPLOYEES_READ]),
+      "/attendance/adjustments",
+    ),
+    true,
+  )
+  assert.equal(
+    canAccessRoute(account("SUPERADMIN"), "/attendance/adjustments"),
+    false,
+  )
+  assert.equal(
+    canAccessRoute(account("USER"), "/attendance/adjustments"),
+    false,
+  )
+  for (const role of ["STAFF", "ADMIN", "SUPERADMIN"])
+    assert.equal(
+      canAccessRoute(
+        account(role, false, [Permissions.EMPLOYEES_READ]),
+        "/attendance/adjustments",
+      ),
+      false,
+      `${role} must be active`,
+    )
+})
