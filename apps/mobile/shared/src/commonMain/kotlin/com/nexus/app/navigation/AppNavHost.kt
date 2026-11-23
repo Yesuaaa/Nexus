@@ -423,7 +423,8 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                         val selectedBookingId by entry.savedStateHandle.getStateFlow<String?>("selectedBookingId", null).collectAsState()
                         ChatScreen(id, user?.id ?: "", selectedBookingId = selectedBookingId, onBack = { navController.popBackStack() },
                             onDetails = { bookingId -> navController.navigate("workflow/$bookingId?conversationId=$id") },
-                            onBooking = { navController.navigate("workflow/$it?conversationId=$id&documents=true") })
+                            onBooking = { navController.navigate("workflow/$it?conversationId=$id&documents=true") },
+                            onOpenProject = { navController.navigate("projects/$it/overview") })
                     }
                     composable(Routes.WORKFLOW, arguments = listOf(navArgument("conversationId") { nullable = true; defaultValue = null }, navArgument("documents") { type = NavType.BoolType; defaultValue = false })) { entry ->
                         val id = entry.arguments?.getString("requestId") ?: return@composable

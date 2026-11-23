@@ -5,6 +5,7 @@ import com.nexus.app.core.components.NexusAlertDialog
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalUriHandler
 import com.nexus.app.features.conversations.model.ConversationMeeting
 import kotlinx.coroutines.launch
@@ -15,17 +16,26 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Assignment
 import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material.icons.outlined.RocketLaunch
+import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nexus.app.core.theme.NexusButtonShape
 import com.nexus.app.features.workflow.model.ClientWorkflow
 import com.nexus.app.features.workflow.model.WorkflowFile
+
+private fun formatWorkflowTimestamp(value: String): String = runCatching {
+    Instant.parse(value).toLocalDateTime(TimeZone.currentSystemDefault()).let {
+        "${it.date} ${it.hour.toString().padStart(2, '0')}:${it.minute.toString().padStart(2, '0')}"
+    }
+}.getOrDefault(value)
 
 /** Forms are keyed by booking and record so drafts never bleed into another thread. */
 @Composable
@@ -36,7 +46,8 @@ fun ChatWorkflowForms(
     action: (String, Map<String, String>) -> Unit,
     onDetails: () -> Unit,
     onDocuments: () -> Unit,
-    onFile: (WorkflowFile) -> Unit
+    onFile: (WorkflowFile) -> Unit,
+    onOpenProject: ((String) -> Unit)? = null,
 ) {
     val writable = workflow.permissions.isClient && workflow.state !in setOf(
         "PENDING_REVIEW", "CANCELLED", "DECLINED", "ACTIVE_PROJECT", "ON_HOLD"
@@ -75,20 +86,76 @@ fun ChatWorkflowForms(
     workflow.quotations.maxByOrNull { it.version }?.let { quote ->
         key(workflow.request.id, quote.id) {
             var note by rememberSaveable { mutableStateOf("") }
+            var confirmed by rememberSaveable(quote.id) { mutableStateOf(true) }
             var confirmDecision by remember { mutableStateOf<String?>(null) }
+            val expired = runCatching { Instant.parse(quote.validUntil) <= Clock.System.now() }.getOrDefault(false)
             DocumentFrame("Quotation v${quote.version}", Icons.Outlined.ReceiptLong, humanStatus(quote.status), quote.status == "ACCEPTED") {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Reference number", fontSize = 11.sp, color = ConversationStyle.Muted)
+                    Text(workflow.request.referenceNumber ?: workflow.request.id, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = ConversationStyle.Navy)
+                }
                 Text("${quote.currency} ${quote.total}", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = ConversationStyle.Navy)
                 Text(quote.scope, fontSize = 13.sp, color = ConversationStyle.Ink)
                 quote.deliverables.forEach { Text("- $it", fontSize = 13.sp, color = ConversationStyle.Ink) }
+                if (quote.lineItems.isNotEmpty()) {
+                    HorizontalDivider(color = ConversationStyle.Divider)
+                    Row(Modifier.fillMaxWidth()) {
+                        Text("Item", Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = ConversationStyle.Muted)
+                        Text("Qty", Modifier.width(40.dp), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = ConversationStyle.Muted, textAlign = TextAlign.End)
+                        Text("Unit price", Modifier.width(96.dp), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = ConversationStyle.Muted, textAlign = TextAlign.End)
+                    }
+                    quote.lineItems.forEach { item ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                            Text(item.description, Modifier.weight(1f), fontSize = 12.sp, color = ConversationStyle.Ink)
+                            Text(item.quantity.toString(), Modifier.width(40.dp), fontSize = 12.sp, color = ConversationStyle.Ink, textAlign = TextAlign.End)
+                            Text("${quote.currency} ${displayAmount(item.unitPrice)}", Modifier.width(96.dp), fontSize = 12.sp, color = ConversationStyle.Ink, textAlign = TextAlign.End)
+                        }
+                    }
+                    HorizontalDivider(color = ConversationStyle.Divider)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Total", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = ConversationStyle.Ink)
+                        Text("${quote.currency} ${displayAmount(quote.total)}", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = ConversationStyle.Ink)
+                    }
+                }
                 Text(quote.timeline, fontSize = 12.sp, color = ConversationStyle.Muted)
                 Text(quote.paymentTerms, fontSize = 12.sp, color = ConversationStyle.Muted)
-                if (writable && workflow.state == "CLIENT_APPROVAL" && quote.status == "SENT") {
+                if (quote.paymentDue.isNotBlank()) {
+                    Text("Due before commencement: ${quote.currency} ${displayAmount(quote.paymentDue)}", fontSize = 12.sp, color = ConversationStyle.Ink)
+                }
+                if (quote.validUntil.isNotBlank()) {
+                    Text(
+                        "Valid until: ${formatWorkflowTimestamp(quote.validUntil)}" + if (expired && quote.status == "SENT") " · Expired" else "",
+                        fontSize = 12.sp,
+                        color = if (expired && quote.status == "SENT") MaterialTheme.colorScheme.error else ConversationStyle.Muted,
+                    )
+                }
+                quote.decisionNote?.takeIf { it.isNotBlank() }?.let { decisionNote ->
+                    Surface(color = ConversationStyle.Background, shape = RoundedCornerShape(6.dp)) {
+                        Text(decisionNote, Modifier.fillMaxWidth().padding(10.dp), fontSize = 12.sp, color = ConversationStyle.Ink)
+                    }
+                }
+                if (writable && workflow.state == "CLIENT_APPROVAL" && quote.status == "SENT" && !expired) {
                     OutlinedTextField(note, { note = it.take(2000) }, modifier = Modifier.fillMaxWidth(),
                         enabled = !busy, label = { Text("Decision note") }, shape = NexusButtonShape)
+                    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Checkbox(
+                            checked = confirmed,
+                            onCheckedChange = { confirmed = it },
+                            enabled = !busy,
+                            colors = CheckboxDefaults.colors(checkedColor = ConversationStyle.Navy),
+                        )
+                        Text(
+                            "I have reviewed this quotation and confirm my selected decision. Only these buttons record formal approval.",
+                            fontSize = 11.sp,
+                            lineHeight = 16.sp,
+                            color = ConversationStyle.Muted,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         listOf("ACCEPT", "REVISE", "DECLINE").forEach { decision ->
                             TextButton(shape = NexusButtonShape,
-                                enabled = !busy && (decision == "ACCEPT" || note.isNotBlank()),
+                                enabled = !busy && confirmed && (decision == "ACCEPT" || note.isNotBlank()),
                                 onClick = { confirmDecision = decision }) { Text(humanStatus(decision), fontSize = 12.sp) }
                         }
                     }
@@ -106,9 +173,48 @@ fun ChatWorkflowForms(
             }
         }
     }
+    workflow.approval?.let { approval ->
+        val acceptedQuote = workflow.quotations.find { it.id == approval.quotationId }
+        DocumentFrame("Quotation formally accepted", Icons.Outlined.VerifiedUser, "Approved", complete = true) {
+            Text(
+                "You accepted quotation version ${acceptedQuote?.version ?: "—"} for ${approval.currency} ${displayAmount(approval.amount)}.",
+                fontSize = 13.sp,
+                lineHeight = 20.sp,
+                color = ConversationStyle.Ink,
+            )
+            if (approval.approvedAt.isNotBlank()) {
+                Text(
+                    "${formatWorkflowTimestamp(approval.approvedAt)} · Formal approval recorded",
+                    fontSize = 11.sp,
+                    color = ConversationStyle.Muted,
+                )
+            }
+        }
+    }
     WorkflowDocumentCards(workflow, onFile)
     if (workflow.agreement != null || workflow.payment != null) {
         OutlinedButton(shape = NexusButtonShape, enabled = !busy, onClick = onDocuments) { Text("Review agreement and payment forms") }
+    }
+    if (workflow.state == "ACTIVE_PROJECT" && workflow.project != null) {
+        val activeProject = workflow.project
+        DocumentFrame("Your project is active", Icons.Outlined.RocketLaunch, "Active project", complete = true) {
+            Text(activeProject.name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = ConversationStyle.Ink)
+            Text(
+                "Your consultation history and approved documents remain available in this conversation.",
+                fontSize = 13.sp,
+                lineHeight = 20.sp,
+                color = ConversationStyle.Muted,
+            )
+            if (onOpenProject != null) {
+                Button(
+                    onClick = { onOpenProject(activeProject.id) },
+                    shape = NexusButtonShape,
+                    colors = primaryColors,
+                ) {
+                    Text("View Project")
+                }
+            }
+        }
     }
     Surface(shape = RoundedCornerShape(12.dp), color = Color.White, border = BorderStroke(1.dp, Color(0xFFD8E1EF))) {
         Text(workflow.nextAction, Modifier.padding(12.dp), fontSize = 12.sp, color = ConversationStyle.Muted)

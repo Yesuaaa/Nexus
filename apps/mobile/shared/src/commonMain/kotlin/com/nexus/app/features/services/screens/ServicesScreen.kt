@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material.icons.outlined.WorkOutline
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -44,7 +45,10 @@ import com.nexus.app.core.theme.NexusColors
 import com.nexus.app.features.booking.components.*
 import com.nexus.app.features.booking.model.*
 import com.nexus.app.features.booking.viewmodel.BookingViewModel
+import com.nexus.app.features.conversations.components.SpecialistProfileSheet
 import org.koin.compose.viewmodel.koinViewModel
+
+private const val SERVICES_PAGE_SIZE = 8
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,6 +60,8 @@ fun ServicesScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val toast = LocalNexusToast.current
+    var currentPage by rememberSaveable(state.search, state.department) { mutableStateOf(1) }
+    var pendingService by remember { mutableStateOf<CatalogService?>(null) }
     LaunchedEffect(viewModel) {
         viewModel.toasts.collect { toast.show(it.title, it.message, it.kind) }
     }
@@ -63,6 +69,34 @@ fun ServicesScreen(
     val selectedPackage = service?.packages?.find { it.id == state.draft.packageId }
     val locked = state.submitting || state.pendingSubmission != null
     val selectedPrice = selectedPackage?.price() ?: service?.price().orEmpty()
+    val filteredServices = remember(state.services, state.search, state.department) {
+        state.services.filter {
+            (state.search.isBlank() || it.name.contains(state.search, true) || it.description.contains(state.search, true) ||
+                it.departments.any { d -> d.name.contains(state.search, true) }) &&
+                (state.department.isBlank() || it.departments.any { d -> d.id == state.department })
+        }
+    }
+    val pageCount = maxOf(1, (filteredServices.size + SERVICES_PAGE_SIZE - 1) / SERVICES_PAGE_SIZE)
+    val safePage = currentPage.coerceIn(1, pageCount)
+    val pageStart = (safePage - 1) * SERVICES_PAGE_SIZE
+    val visibleServices = filteredServices.drop(pageStart).take(SERVICES_PAGE_SIZE)
+    val firstVisible = if (filteredServices.isEmpty()) 0 else pageStart + 1
+    val lastVisible = minOf(pageStart + SERVICES_PAGE_SIZE, filteredServices.size)
+
+    fun exploreService(target: CatalogService) {
+        val hasDraftRequirements = listOf(
+            state.draft.goals,
+            state.draft.requirements,
+            state.draft.expectedTimeline,
+            state.draft.additionalDetails,
+        ).any { it.isNotBlank() }
+        if (service != null && service.id != target.id && hasDraftRequirements) {
+            viewModel.closeDetails()
+            pendingService = target
+        } else {
+            viewModel.chooseService(target)
+        }
+    }
     LazyColumn(
         modifier.fillMaxSize().background(Color(0xFFF7F8FA)).imePadding(),
         contentPadding = PaddingValues(start = 24.dp, end = 24.dp,
@@ -99,24 +133,21 @@ fun ServicesScreen(
             item { NexusSearchField(state.search, viewModel::search, "Search services") }
             item {
                 val departments = state.services.flatMap { it.departments }.distinctBy { it.id }
-                FilterMenu(departments.find { it.id == state.department }?.name ?: "All services",
-                    listOf("" to "All services") + departments.map { it.id to it.name },
-                    modifier = Modifier.width(208.dp), onSelect = viewModel::department)
+                val allLabel = if (state.services.isNotEmpty()) "All services (${state.services.size})" else "All services"
+                FilterMenu(departments.find { it.id == state.department }?.name ?: allLabel,
+                    listOf("" to allLabel) + departments.map { it.id to it.name },
+                    modifier = Modifier.width(224.dp), onSelect = viewModel::department)
             }
             if (state.loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             state.error?.let { item { RetryNotice(it, viewModel::loadCatalog) } }
-            val services = state.services.filter {
-                (state.search.isBlank() || it.name.contains(state.search, true) || it.description.contains(state.search, true)) &&
-                    (state.department.isBlank() || it.departments.any { d -> d.id == state.department })
-            }
-            if (!state.loading && state.error == null && services.isEmpty()) item {
+            if (!state.loading && state.error == null && filteredServices.isEmpty()) item {
                 BookingPanel("No services found") {
                     Text(if (state.services.isEmpty()) "No active services are available yet. Please check again later."
                         else "Try another search or department.", color = NexusColors.TextSecondary)
                     TextButton(shape = NexusButtonShape, onClick = { viewModel.search(""); viewModel.department(""); viewModel.loadCatalog() }) { Text("Reset and refresh") }
                 }
             }
-            items(services.chunked(2), key = { it.first().id }) { row ->
+            items(visibleServices.chunked(2), key = { it.first().id }) { row ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                     row.forEach { item ->
                         Card(onClick = { viewModel.showDetails(item) }, modifier = Modifier.weight(1f),
@@ -168,6 +199,36 @@ fun ServicesScreen(
                         }
                     }
                     if (row.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+            if (!state.loading && state.error == null && filteredServices.isNotEmpty()) {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            "Showing $firstVisible–$lastVisible of ${filteredServices.size} services",
+                            fontSize = 12.sp,
+                            color = NexusColors.TextSecondary,
+                        )
+                        if (pageCount > 1) {
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                TextButton(
+                                    shape = NexusButtonShape,
+                                    onClick = { currentPage = (safePage - 1).coerceAtLeast(1) },
+                                    enabled = safePage > 1,
+                                ) { Text("Previous") }
+                                Text("$safePage / $pageCount", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = NexusColors.PrimaryBlue)
+                                TextButton(
+                                    shape = NexusButtonShape,
+                                    onClick = { currentPage = (safePage + 1).coerceAtMost(pageCount) },
+                                    enabled = safePage < pageCount,
+                                ) { Text("Next") }
+                            }
+                        }
+                    }
                 }
             }
         } else {
@@ -316,22 +377,42 @@ fun ServicesScreen(
                             details.clientRequirements.forEach { Text("\u2022 $it", fontSize = 13.sp) }
                         }
                     }
-                    BookingContinueButton(onClick = { viewModel.chooseService(details) },
+                    BookingContinueButton(onClick = { exploreService(details) },
                         enabled = !locked, modifier = Modifier.fillMaxWidth())
                 }
             }
         }
     }
 
+    pendingService?.let { pending ->
+        NexusAlertDialog(
+            onDismissRequest = { pendingService = null },
+            title = { Text("Start with a different service?") },
+            text = {
+                Text("Changing to ${pending.name} will clear the package, project details, and specialist preference in your current draft.")
+            },
+            confirmButton = {
+                NexusDialogButton(onClick = {
+                    viewModel.chooseService(pending)
+                    pendingService = null
+                }) { Text("Change service") }
+            },
+            dismissButton = {
+                NexusDialogButton(onClick = { pendingService = null }) { Text("Keep current draft") }
+            },
+        )
+    }
+
     state.profile?.let { profile ->
-        NexusAlertDialog(onDismissRequest = viewModel::closeProfile,
-            title = { Text(profile.fullName) },
-            text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(profile.position ?: "Specialist")
-                Text(profile.bio ?: "No biography has been added.")
-                if (profile.specialties.isNotEmpty()) Text(profile.specialties.joinToString(" ? "))
-            } },
-            confirmButton = { NexusDialogButton(onClick = viewModel::closeProfile) { Text("Close") } })
+        SpecialistProfileSheet(
+            profile = profile,
+            department = profile.department?.name ?: service?.departments?.firstOrNull()?.name.orEmpty(),
+            onClose = viewModel::closeProfile,
+            loading = state.profileLoading,
+            allowSelection = !locked,
+            selected = state.draft.preferredSpecialistId == profile.id,
+            onChoose = { viewModel.chooseSpecialist(profile.id) },
+        )
     }
 }
 

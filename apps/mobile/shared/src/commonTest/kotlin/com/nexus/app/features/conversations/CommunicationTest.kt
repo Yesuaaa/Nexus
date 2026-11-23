@@ -13,6 +13,7 @@ import com.nexus.app.features.notifications.model.NotificationFeed
 import com.nexus.app.features.notifications.model.WorkflowNotification
 import com.nexus.app.features.notifications.viewmodel.NotificationsViewModel
 import com.nexus.app.features.workflow.api.WorkflowRepository
+import com.nexus.app.features.workflow.model.isVerifiedSandboxPayment
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.*
@@ -326,6 +327,168 @@ class CommunicationTest {
             vm.viewModelScope.cancel()
             client.close()
         }
+    }
+    @Test fun xenditSandboxCardFormattingAndValidationRules() {
+        assertEquals(
+            "4000 0000 0000 0002",
+            com.nexus.app.features.workflow.model.formatSandboxCardNumber("4000-0000-0000-0002-9999"),
+        )
+        assertEquals(
+            "12/30",
+            com.nexus.app.features.workflow.model.formatSandboxExpiry("12309"),
+        )
+        assertNull(
+            com.nexus.app.features.workflow.model.validateSandboxCard(
+                cardholder = "Nexus Test Customer",
+                cardNumber = "4000 0000 0000 0002",
+                expiry = "12/30",
+                cvc = "123",
+                todayYear = 2026,
+                todayMonth = 11,
+            ),
+        )
+        assertEquals(
+            "Use the prefilled sandbox card number for this prototype.",
+            com.nexus.app.features.workflow.model.validateSandboxCard(
+                cardholder = "Nexus Test Customer",
+                cardNumber = "4111 1111 1111 1111",
+                expiry = "12/30",
+                cvc = "123",
+                todayYear = 2026,
+                todayMonth = 11,
+            ),
+        )
+        assertEquals(
+            "Enter a valid expiry date in MM/YY format.",
+            com.nexus.app.features.workflow.model.validateSandboxCard(
+                cardholder = "Nexus Test Customer",
+                cardNumber = "4000 0000 0000 0002",
+                expiry = "13/30",
+                cvc = "123",
+                todayYear = 2026,
+                todayMonth = 11,
+            ),
+        )
+        assertEquals(
+            "Enter a future expiry date.",
+            com.nexus.app.features.workflow.model.validateSandboxCard(
+                cardholder = "Nexus Test Customer",
+                cardNumber = "4000 0000 0000 0002",
+                expiry = "10/26",
+                cvc = "123",
+                todayYear = 2026,
+                todayMonth = 11,
+            ),
+        )
+        assertEquals(
+            "Enter the 3-digit sandbox security code.",
+            com.nexus.app.features.workflow.model.validateSandboxCard(
+                cardholder = "Nexus Test Customer",
+                cardNumber = "4000 0000 0000 0002",
+                expiry = "12/30",
+                cvc = "12",
+                todayYear = 2026,
+                todayMonth = 11,
+            ),
+        )
+        assertEquals(
+            "Enter the cardholder name.",
+            com.nexus.app.features.workflow.model.validateSandboxCard(
+                cardholder = "   ",
+                cardNumber = "4000 0000 0000 0002",
+                expiry = "12/30",
+                cvc = "123",
+                todayYear = 2026,
+                todayMonth = 11,
+            ),
+        )
+
+        val verifiedSandbox = com.nexus.app.features.workflow.model.Payment(
+            status = "VERIFIED",
+            amount = "15000.00",
+            currency = "PHP",
+            reference = "XENDIT-SANDBOX-12345",
+        )
+        val manualVerified = verifiedSandbox.copy(reference = "BANK-REF-001")
+        assertTrue(verifiedSandbox.isVerifiedSandboxPayment())
+        assertFalse(manualVerified.isVerifiedSandboxPayment())
+    }
+    @Test fun requestMeetingRescheduleSendsExpectedPatchPayload() = runTest {
+        var patchPath = ""
+        var patchBody: JsonObject? = null
+        val client = client { request ->
+            assertEquals(HttpMethod.Patch, request.method)
+            patchPath = request.url.encodedPath
+            patchBody = Json.parseToJsonElement((request.body as TextContent).text).jsonObject
+            respond(
+                """{"meeting":{"id":"meet-1","startsAt":"2026-11-25T09:00:00Z","endsAt":"2026-11-25T10:00:00Z","location":"https://meet.exp.test/room","notes":"Scope alignment","status":"SCHEDULED","version":3,"proposedStartsAt":"2026-11-26T14:00:00Z","rescheduleNote":"Need afternoon slot"}}""",
+                headers = jsonHeaders,
+            )
+        }
+        client.use {
+            val meeting = ConversationMeeting(
+                id = "meet-1",
+                startsAt = "2026-11-25T09:00:00Z",
+                endsAt = "2026-11-25T10:00:00Z",
+                location = "https://meet.exp.test/room",
+                notes = "Scope alignment",
+                status = "SCHEDULED",
+                version = 2,
+            )
+            val updated = ClientCommunicationRepository(it).requestMeetingReschedule(
+                id = "conv-1",
+                meeting = meeting,
+                startsAt = "2026-11-26T14:00:00Z",
+                note = "  Need afternoon slot  ",
+            )
+            assertEquals("/api/request-conversations/conv-1/meetings/meet-1", patchPath)
+            assertEquals("REQUEST_RESCHEDULE", patchBody?.getValue("type")?.jsonPrimitive?.content)
+            assertEquals(2, patchBody?.getValue("expectedVersion")?.jsonPrimitive?.int)
+            assertEquals("2026-11-26T14:00:00Z", patchBody?.getValue("startsAt")?.jsonPrimitive?.content)
+            assertEquals("Need afternoon slot", patchBody?.getValue("note")?.jsonPrimitive?.content)
+            assertEquals(3, updated.version)
+            assertEquals("2026-11-26T14:00:00Z", updated.proposedStartsAt)
+            assertEquals("Need afternoon slot", updated.rescheduleNote)
+        }
+    }
+    @Test fun quotationAndSpecialistProfileDeserializeExtendedParityFields() {
+        val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+        val workflow = json.decodeFromString<com.nexus.app.features.workflow.model.ClientWorkflow>(
+            """{
+                "request":{"id":"req-1","title":"Brand Redesign","referenceNumber":"SR-2026-0099","serviceName":"Branding"},
+                "state":"AGREEMENT_PAYMENT_PENDING",
+                "version":4,
+                "nextAction":"Complete payment",
+                "permissions":{"isClient":true},
+                "quotations":[{
+                    "id":"quote-1","version":2,"status":"ACCEPTED","scope":"Full brand identity",
+                    "deliverables":["Logo","Guidelines"],"total":"45000.00","currency":"PHP",
+                    "timeline":"4 weeks","paymentTerms":"50% downpayment","validUntil":"2026-12-31T00:00:00Z",
+                    "lineItems":[{"description":"Brand Discovery","quantity":1,"unitPrice":"15000.00"},{"description":"Visual System","quantity":2,"unitPrice":"15000.00"}],
+                    "paymentDue":"22500.00","decisionNote":"Approved by client"
+                }],
+                "approval":{"quotationId":"quote-1","amount":"45000.00","currency":"PHP","approvedAt":"2026-11-20T08:30:00Z","approvedById":"client-1"}
+            }"""
+        )
+        val quote = workflow.quotations.single()
+        assertEquals(2, quote.lineItems.size)
+        assertEquals("Brand Discovery", quote.lineItems.first().description)
+        assertEquals("22500.00", quote.paymentDue)
+        assertEquals("Approved by client", quote.decisionNote)
+        assertEquals("quote-1", workflow.approval?.quotationId)
+        assertEquals("45000.00", workflow.approval?.amount)
+
+        val profile = json.decodeFromString<com.nexus.app.features.booking.model.SpecialistProfile>(
+            """{
+                "id":"spec-1","fullName":"Maya Santos","position":"Lead Designer",
+                "socialLinks":[{"platform":"LinkedIn","url":"https://linkedin.com/in/mayasantos"}],
+                "projects":[{"id":"p-1","title":"Fintech App","summary":"Mobile UX","contribution":"Lead UI/UX","projectUrl":"https://exp.test/work/fintech"}]
+            }"""
+        )
+        assertEquals(1, profile.socialLinks.size)
+        assertEquals("LinkedIn", profile.socialLinks.single().platform)
+        assertEquals("Lead UI/UX", profile.projects.single().contribution)
+        assertEquals("https://exp.test/work/fintech", profile.projects.single().projectUrl)
     }
     private val jsonHeaders = headersOf(HttpHeaders.ContentType, "application/json")
     private fun client(handler: MockRequestHandler) = HttpClient(MockEngine(handler)) {
