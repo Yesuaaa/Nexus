@@ -84,6 +84,7 @@ const resources = [
           title: long,
           referenceNumber: "REQ-" + "349".repeat(12),
           service: { name: "Design" },
+          preferredSpecialistName: "Maria Santos",
           status: "ACTIVATED",
           createdAt: date,
         },
@@ -93,38 +94,6 @@ const resources = [
           referenceNumber: null,
           service: { name: "SEO" },
           status: "SUBMITTED",
-          createdAt: date,
-        },
-      ],
-    },
-  },
-  {
-    path: "/api/request-workflows/notifications",
-    region: "Recent Updates",
-    emptyText: "No recent updates",
-    empty: { notifications: [], unreadCount: 0 },
-    populated: {
-      unreadCount: 1,
-      notifications: [
-        {
-          id: "notice-1",
-          requestId: "req-1",
-          type: "CONSULTATION_SCHEDULED",
-          summary: long,
-          createdAt: date,
-        },
-        {
-          id: "notice-2",
-          requestId: "req-2",
-          type: "PROJECT_ACTIVATED",
-          summary: "Your project is ready",
-          createdAt: date,
-        },
-        {
-          id: "notice-3",
-          requestId: "req-2",
-          type: "DELIVERABLE_CLIENT_REVIEWED",
-          summary: "Review received",
           createdAt: date,
         },
       ],
@@ -190,6 +159,12 @@ test("long dashboard records fit approved widths and the action list stays keybo
   await page.goto("/dashboard")
   const dashboard = page.getByRole("main", { name: "Client dashboard" })
   const panel = dashboard.getByRole("region", { name: "Needs Your Input" })
+  const preferences = dashboard.getByRole("region", {
+    name: "Your Most Requested",
+  })
+  await expect(
+    dashboard.getByRole("link", { name: "New Request", exact: true }),
+  ).toHaveAttribute("href", "/services")
   await expect(panel.getByText("5 actions", { exact: true })).toBeVisible()
   const viewports = [
     [1536, 850, "desktop"],
@@ -199,7 +174,7 @@ test("long dashboard records fit approved widths and the action list stays keybo
     [768, 1300, "small-tablet"],
     [390, 844, "mobile"],
   ] as const
-  for (const [width, height] of viewports) {
+  for (const [width, height, name] of viewports) {
     await page.setViewportSize({ width, height })
     expect(
       await dashboard
@@ -213,8 +188,14 @@ test("long dashboard records fit approved widths and the action list stays keybo
     const actionBox = await panel.boundingBox()
     expect(projectBox).not.toBeNull()
     expect(actionBox).not.toBeNull()
-    if (width >= 1024) expect(actionBox!.x).toBeGreaterThan(projectBox!.x)
-    else expect(actionBox!.y).toBeGreaterThan(projectBox!.y)
+    const shortcutBox = (await preferences.boundingBox())!
+    if (name === "desktop") {
+      expect(actionBox!.x).toBeGreaterThan(projectBox!.x)
+      expect(shortcutBox.x).toBeGreaterThan(actionBox!.x)
+    } else if (name === "mobile") {
+      expect(actionBox!.y).toBeLessThan(projectBox!.y)
+      expect(projectBox!.y).toBeLessThan(shortcutBox.y)
+    }
   }
   await page.setViewportSize({ width: 1536, height: 1350 })
   const services = dashboard.getByRole("link", { name: "Explore Services" })
@@ -289,14 +270,16 @@ test("long dashboard records fit approved widths and the action list stays keybo
     panel.getByRole("link", { name: "Open deliverable" }),
   ).toHaveAttribute("href", "/projects/project-1/deliverables/milestone-1")
   await expect(
-    panel.getByRole("link", { name: "Find in Booked Requests" }).first(),
+    panel.getByRole("link", { name: "View request" }).first(),
   ).toHaveAttribute("href", "/service-requests")
   if (process.env.NEXUS_DASHBOARD_SCREENSHOTS) {
     stress = false
     await page.reload()
     await expect(panel.getByText("5 actions", { exact: true })).toBeVisible()
     await expect(
-      dashboard.getByText("Your project is ready", { exact: true }),
+      dashboard
+        .getByRole("region", { name: "Your Most Requested" })
+        .getByText("Maria Santos", { exact: true }),
     ).toBeVisible()
     for (const [width, height, name] of viewports) {
       await page.setViewportSize({ width, height })
@@ -306,6 +289,39 @@ test("long dashboard records fit approved widths and the action list stays keybo
     await panel.getByRole("button", { name: "Show all actions" }).click()
     await capture(page, "multiple-actions")
   }
+})
+
+test("dashboard ranks deadlines by Manila calendar date", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-11-25T16:30:00Z"))
+  await mockDashboard(page, new Map())
+  await page.route("**/api/request-workflows/outstanding-actions?**", (route) =>
+    route.fulfill({
+      json: {
+        actions: [
+          { ...actions[0], title: "No deadline" },
+          { ...actions[1], deadline: "2026-11-26T16:00:00Z" },
+          { ...actions[2], deadline: "2026-11-26T15:00:00Z" },
+          { ...actions[3], deadline: "2026-11-25T15:00:00Z" },
+        ],
+        total: 4,
+        page: 1,
+        pageSize: 10,
+      },
+    }),
+  )
+  await page.goto("/dashboard")
+  const panel = page.getByRole("region", { name: "Needs Your Input" })
+  await expect(panel.getByRole("heading", { level: 3 })).toHaveText([
+    "Complete your payment",
+    "Sign your agreement",
+  ])
+  await expect(panel.getByText("1 day overdue", { exact: true })).toBeVisible()
+  await expect(panel.getByText("Due today", { exact: true })).toBeVisible()
+  await panel.getByRole("button", { name: "Show all actions" }).click()
+  await expect(panel.getByText("Due tomorrow", { exact: true })).toBeVisible()
+  await expect(panel.getByRole("heading", { level: 3 }).last()).toHaveText(
+    "No deadline",
+  )
 })
 
 test("all sections announce loading, show empty states, and retry independently", async ({
@@ -323,12 +339,10 @@ test("all sections announce loading, show empty states, and retry independently"
   try {
     await page.goto("/dashboard")
     const dashboard = page.getByRole("main", { name: "Client dashboard" })
+    await expect(dashboard.getByRole("status")).toHaveText("Loading dashboard…")
     await expect(
-      dashboard.getByText("Loading section…", { exact: true }),
-    ).toHaveCount(4)
-    await expect(
-      dashboard.getByText("Loading appointment…", { exact: true }),
-    ).toHaveCount(1)
+      dashboard.getByRole("region", { name: "Active Projects" }),
+    ).toHaveCount(0)
   } finally {
     release()
   }
@@ -339,6 +353,7 @@ test("all sections announce loading, show empty states, and retry independently"
     await expect(
       dashboard.getByText(resource.emptyText, { exact: true }),
     ).toBeVisible()
+  await expect(dashboard.getByText("No requests to summarize")).toBeVisible()
   await capture(page, "empty-dashboard")
   for (const [index, name] of [
     [0, "no-appointment"],
@@ -352,7 +367,9 @@ test("all sections announce loading, show empty states, and retry independently"
       dashboard.getByText(resources[index].emptyText, { exact: true }),
     ).toBeVisible()
     await expect(
-      dashboard.getByText("Your project is ready", { exact: true }),
+      dashboard
+        .getByRole("region", { name: "Your Most Requested" })
+        .getByText("Maria Santos", { exact: true }),
     ).toBeVisible()
     await capture(page, name)
   }
@@ -379,6 +396,8 @@ test("all sections announce loading, show empty states, and retry independently"
   }
   await expect(dashboard.getByText("5 actions", { exact: true })).toBeVisible()
   await expect(
-    dashboard.getByText("Your project is ready", { exact: true }),
+    dashboard
+      .getByRole("region", { name: "Your Most Requested" })
+      .getByText("Maria Santos", { exact: true }),
   ).toBeVisible()
 })

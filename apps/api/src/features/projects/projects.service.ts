@@ -230,6 +230,9 @@ export async function getProject(userId: string, id: string) {
 }
 
 export async function listClientProjects(userId: string) {
+  const visibleAssignment = {
+    employee: { status: "ACTIVE", user: activeStaff },
+  } as const
   return getPrisma()!.$transaction(
     async (tx) => {
       const account = await tx.user.findFirst({
@@ -248,6 +251,12 @@ export async function listClientProjects(userId: string) {
           startDate: true,
           updatedAt: true,
           workPlan: true,
+          staff: {
+            where: visibleAssignment,
+            orderBy: [{ isTeamLead: "desc" }, { id: "asc" }],
+            take: 3,
+            select: { employee: { select: { fullName: true } } },
+          },
           request: {
             select: {
               id: true,
@@ -257,6 +266,7 @@ export async function listClientProjects(userId: string) {
           },
           _count: {
             select: {
+              staff: { where: visibleAssignment },
               milestones: {
                 where: {
                   deliveryStatus: "SENT_TO_CLIENT",
@@ -268,13 +278,23 @@ export async function listClientProjects(userId: string) {
         },
         orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
       })
-      return projects.map(({ workPlan, _count, ...project }) => {
+      return projects.map(({ workPlan, staff, _count, ...project }) => {
         const progress = projectTaskProgress(workPlan)
         return {
           ...project,
           completedTasks: progress.completed,
           taskCount: progress.total,
           deliverableCount: _count.milestones,
+          memberCount: _count.staff,
+          memberInitials: staff.map(({ employee }) =>
+            employee.fullName
+              .trim()
+              .split(/\s+/u)
+              .slice(0, 2)
+              .map((part) => Array.from(part)[0] ?? "")
+              .join("")
+              .toUpperCase(),
+          ),
         }
       })
     },

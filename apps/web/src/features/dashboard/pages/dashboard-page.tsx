@@ -3,7 +3,7 @@
 import { useCurrentTime } from "@/lib/use-current-time"
 import { watchVisibleRefresh } from "@/lib/visible-refresh"
 import { useAsyncResource } from "@/lib/use-async-resource"
-import { apiRequest } from "@/features/auth/api/auth-api"
+import { apiRequest, getToken } from "@/features/auth/api/auth-api"
 import { listClientProjects } from "@/features/projects/api/projects-api"
 import { listMyServiceRequests } from "@/features/services/api/client-services-api"
 import {
@@ -16,10 +16,17 @@ import {
   type CalendarEvent,
   type CalendarResponse,
 } from "@/features/calendar/model/calendar"
-import { useWorkflowInbox } from "@/features/workflow-notifications/components/workflow-notification-provider"
 import { useEffect, useState, type ReactNode } from "react"
 import Link from "next/link"
-import { ArrowRight, CalendarDays, CircleCheck, FileText } from "lucide-react"
+import {
+  ArrowRight,
+  CalendarDays,
+  ChevronRight,
+  FileText,
+  ListChecks,
+  MessageCircle,
+  Plus,
+} from "lucide-react"
 import { PageHeader } from "@/components/layout/page-header"
 import { contentClass, focusRing } from "@/components/layout/styles"
 import { Avatar } from "@/components/ui/avatar"
@@ -39,43 +46,82 @@ import {
   requestDate,
   serviceRequestStatuses,
 } from "@/features/services/model/service-request-status"
+import { getInitials } from "@/lib/initials"
 import { cn } from "@/lib/utils"
 import {
   actions as sampleActions,
   appointment as sampleAppointment,
   projects as sampleProjects,
   requests as sampleRequests,
-  updates as sampleUpdates,
   type PreviewState,
 } from "../model/dashboard-preview"
+
+function deadlineTime(value?: string | null) {
+  return value && Number.isFinite(Date.parse(value))
+    ? Date.parse(value)
+    : Number.POSITIVE_INFINITY
+}
+
+const manilaDay = new Intl.DateTimeFormat("en-CA", {
+  timeZone: calendarTimeZone,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+})
+function calendarDaysUntil(target: string, now: number) {
+  return Math.round(
+    (Date.parse(manilaDay.format(new Date(target))) -
+      Date.parse(manilaDay.format(new Date(now)))) /
+      86_400_000,
+  )
+}
+
+function deadlineLabel(days: number) {
+  if (days < 0) return days === -1 ? "1 day overdue" : `${-days} days overdue`
+  if (days === 0) return "Due today"
+  return days === 1 ? "Due tomorrow" : `Due in ${days} days`
+}
 
 const textLink = cn(
   "inline-flex min-h-9 items-center gap-1.5 rounded-sm text-xs font-semibold text-[#203f8c] hover:underline focus-visible:underline",
   focusRing,
 )
-const sectionHeading = "text-[22px] leading-tight font-semibold tracking-tight"
+const sectionHeading = "text-sm leading-snug font-semibold"
 const itemTitle =
-  "min-w-0 [overflow-wrap:anywhere] text-[15px] leading-snug font-semibold"
+  "min-w-0 [overflow-wrap:anywhere] text-[13px] leading-snug font-semibold"
 const metadata =
   "mt-1 [overflow-wrap:anywhere] text-xs leading-relaxed text-muted-foreground"
-const updateIcons = {
-  plan: FileText,
-  calendar: CalendarDays,
-  milestone: CircleCheck,
+function mostRequested(names: unknown[]) {
+  const counts = new Map<string, { name: string; count: number }>()
+  for (const value of names) {
+    if (typeof value !== "string" || !value.trim()) continue
+    const name = value.trim()
+    const key = name.toLowerCase()
+    const entry = counts.get(key)
+    if (entry) entry.count += 1
+    else counts.set(key, { name, count: 1 })
+  }
+  // Stable sorting favors the most recent request when counts tie.
+  return [...counts.values()].sort((a, b) => b.count - a.count)[0]
 }
-const activityKinds = new Map<string, keyof typeof updateIcons>([
-  ["CONSULTATION_SCHEDULED", "calendar"],
-  ["CONSULTATION_RESCHEDULE_CONFIRMED", "calendar"],
-  ["CONSULTATION_COMPLETED", "calendar"],
-  ["CONSULTATION_CANCELLED", "calendar"],
-  ["PROJECT_ACTIVATED", "plan"],
-  ["PROJECT_MILESTONE_UPDATED", "milestone"],
-  ["PROJECT_DELIVERABLE_SENT_TO_CLIENT", "milestone"],
-  ["DELIVERABLE_CLIENT_REVIEWED", "milestone"],
-  ["QUOTATION_SENT", "plan"],
-  ["REQUIREMENT_REQUESTED", "plan"],
-  ["APPROVAL_CONFIRMED", "plan"],
-])
+
+// Reject malformed service responses inside the resource hook, before React renders them.
+function dashboardRows<T>(
+  rows: T[] | undefined,
+  valid: (row: T) => boolean,
+): T[] {
+  if (
+    !Array.isArray(rows) ||
+    rows.some((row) => !row || typeof row !== "object" || !valid(row))
+  )
+    throw new Error("Unexpected dashboard data")
+  return rows
+}
+
+function validDashboardDate(value: unknown): value is string {
+  return typeof value === "string" && Number.isFinite(Date.parse(value))
+}
+
 function resourceState(
   resource: { loading: boolean; error: string | boolean },
   hasData: boolean,
@@ -141,7 +187,7 @@ function SectionContent({
 function ViewAll({ href, label }: { href: string; label: string }) {
   return (
     <Link className={textLink} href={href} aria-label={label}>
-      View all <ArrowRight size={14} aria-hidden="true" />
+      View all <ChevronRight size={14} aria-hidden="true" />
     </Link>
   )
 }
@@ -152,21 +198,67 @@ export function DashboardPage({
   preview?: { state: PreviewState; startsAt: string }
 }) {
   const account = usePortalAccount()
-  const inbox = useWorkflowInbox()
   const now = useCurrentTime()
   const enabled = account.role === "USER" && !preview
-  const projectData = useAsyncResource(listClientProjects, [account.id], {
-    enabled,
-  })
+  const projectData = useAsyncResource(
+    async (signal) =>
+      dashboardRows(
+        await listClientProjects(signal),
+        (item) =>
+          typeof item.id === "string" &&
+          typeof item.name === "string" &&
+          typeof item.status === "string",
+      ),
+    [account.id],
+    { enabled },
+  )
   const requestData = useAsyncResource(
-    (signal) => listMyServiceRequests({ page: 1, sortOrder: "desc", signal }),
+    async (signal) => {
+      const result = await listMyServiceRequests({
+        page: 1,
+        sortOrder: "desc",
+        signal,
+      })
+      const rows = dashboardRows(
+        result?.requests,
+        (item) =>
+          typeof item.id === "string" && typeof item.status === "string",
+      )
+      return { rows, summary: result.summary }
+    },
     [account.id],
     { enabled },
   )
   const [actionsExpanded, setActionsExpanded] = useState(false)
   const [actionPage, setActionPage] = useState(1)
   const actionData = useAsyncResource(
-    (signal) => listClientOutstandingActions(actionPage, signal),
+    async (signal) => {
+      const result = await listClientOutstandingActions(actionPage, signal)
+      dashboardRows(
+        result?.actions,
+        (item) =>
+          typeof item.id === "string" &&
+          typeof item.title === "string" &&
+          typeof item.service === "string" &&
+          typeof item.reason === "string" &&
+          (item.reference == null || typeof item.reference === "string") &&
+          (item.deadline == null || validDashboardDate(item.deadline)) &&
+          (item.destination == null ||
+            (typeof item.destination === "string" &&
+              /^\/projects\/[\w%.~-]+\/deliverables\/[\w%.~-]+$/.test(
+                item.destination,
+              ))),
+      )
+      if (
+        !Number.isSafeInteger(result.total) ||
+        result.total < 0 ||
+        !Number.isSafeInteger(result.pageSize) ||
+        result.pageSize <= 0 ||
+        result.page !== actionPage
+      )
+        throw new Error("Unexpected action page")
+      return result
+    },
     [account.id, actionPage],
     { enabled },
   )
@@ -196,76 +288,174 @@ export function DashboardPage({
         "/api/projects/calendar",
         { signal },
       )
-      return (Array.isArray(response) ? response : response.events)
+      return dashboardRows(
+        Array.isArray(response) ? response : response?.events,
+        (event) =>
+          typeof event.title === "string" && typeof event.type === "string",
+      )
         .filter(
           (event) =>
             (event.type === "consultation" || event.type === "meeting") &&
             !event.pending &&
-            !event.completed,
+            !event.completed &&
+            validDashboardDate(event.startsAt),
         )
         .sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt))
     },
     [account.id],
     { enabled },
   )
+  const [readyAccountId, setReadyAccountId] = useState<string | null>(null)
+  const requestsPending =
+    projectData.loading ||
+    requestData.loading ||
+    calendarData.loading ||
+    actionData.loading
+  const initialLoading =
+    enabled && readyAccountId !== account.id && requestsPending
+  if (enabled && readyAccountId !== account.id && !requestsPending) {
+    setReadyAccountId(account.id)
+  }
+
+  const { retry: retryProjects } = projectData
+  const { retry: retryRequests } = requestData
+  const { retry: retryCalendar } = calendarData
+  useEffect(() => {
+    if (!enabled) return
+    return watchVisibleRefresh(
+      () => {
+        retryProjects()
+        retryRequests()
+        retryCalendar()
+      },
+      { poll: false },
+    )
+  }, [enabled, retryProjects, retryRequests, retryCalendar])
+  const sectionFailed = Boolean(
+    projectData.error ||
+    requestData.error ||
+    actionData.error ||
+    calendarData.error,
+  )
+  useEffect(() => {
+    // A revoked dashboard read clears the token. Ask the existing account watcher
+    // to revoke the portal immediately instead of waiting for the next poll.
+    if (sectionFailed && !getToken())
+      window.dispatchEvent(new Event("nexus:account-updated"))
+  }, [sectionFailed])
+
   if (account.role !== "USER") return null
   const firstName = account.fullName?.trim().split(/\s+/)[0]
+  const activeProjects = (projectData.data ?? []).filter(
+    (item) => item.status === "IN_PROGRESS" || item.status === "ON_HOLD",
+  )
+  const projectTotals = preview ? sampleProjects : activeProjects
   const projects = preview
-    ? sampleProjects.map((item) => ({ ...item, id: item.name, href: null }))
-    : (projectData.data ?? [])
-        .filter(
-          (item) => item.status === "IN_PROGRESS" || item.status === "ON_HOLD",
-        )
-        .slice(0, 2)
-        .map((item) => ({
-          ...item,
-          service: item.request?.service.name,
-          team: [],
-          lead: null,
-          href: "/projects/" + encodeURIComponent(item.id),
-        }))
+    ? sampleProjects.map((item) => ({
+        ...item,
+        id: item.name,
+        href: null,
+        memberCount: item.team.length,
+        team: item.team.map(getInitials),
+      }))
+    : activeProjects.slice(0, 2).map((item) => ({
+        ...item,
+        service:
+          typeof item.request?.service?.name === "string"
+            ? item.request.service.name
+            : undefined,
+        taskCount:
+          Number.isSafeInteger(item.taskCount) && item.taskCount > 0
+            ? item.taskCount
+            : 0,
+        completedTasks:
+          Number.isSafeInteger(item.completedTasks) &&
+          item.completedTasks > 0 &&
+          Number.isSafeInteger(item.taskCount)
+            ? Math.min(item.completedTasks, Math.max(item.taskCount, 0))
+            : 0,
+        memberCount:
+          typeof item.memberCount === "number" &&
+          Number.isSafeInteger(item.memberCount) &&
+          item.memberCount >= 0
+            ? item.memberCount
+            : null,
+        team: Array.isArray(item.memberInitials)
+          ? item.memberInitials
+              .filter(
+                (initials) => typeof initials === "string" && initials.trim(),
+              )
+              .slice(0, 3)
+          : [],
+        lead: null,
+        href: "/projects/" + encodeURIComponent(item.id),
+      }))
   const requests = preview
     ? sampleRequests.map((item) => ({ ...item, id: item.reference }))
-    : (requestData.data?.requests ?? []).slice(0, 2).map((item) => ({
+    : (requestData.data?.rows ?? []).slice(0, 2).map((item) => ({
         id: item.id,
-        reference: item.referenceNumber,
-        service: item.title || item.service.name,
+        reference:
+          typeof item.referenceNumber === "string"
+            ? item.referenceNumber
+            : null,
+        service:
+          (typeof item.title === "string" && item.title) ||
+          (typeof item.service?.name === "string" && item.service.name) ||
+          "Service request",
         status: item.status,
-        date: item.createdAt,
+        date: validDashboardDate(item.createdAt) ? item.createdAt : null,
       }))
-  const actions: ClientOutstandingAction[] = preview
+  const pageActions: ClientOutstandingAction[] = preview
     ? sampleActions.map((item) => ({
         ...item,
         id: item.reference,
         requestId: item.reference,
       }))
-    : (actionData.data?.actions ?? []).slice(0, actionsExpanded ? undefined : 2)
+    : (actionData.data?.actions ?? [])
+  const orderedActions = [...pageActions].sort(
+    (a, b) => deadlineTime(a.deadline) - deadlineTime(b.deadline),
+  )
+  const actions = orderedActions.slice(
+    0,
+    preview || actionsExpanded ? undefined : 2,
+  )
   const actionTotal = preview ? actions.length : (actionData.data?.total ?? 0)
   const actionPages = Math.max(
-    actionPage,
+    1,
     Math.ceil(actionTotal / (actionData.data?.pageSize ?? 10)),
   )
+  const actionPageOutOfRange =
+    enabled &&
+    !actionData.loading &&
+    !actionData.error &&
+    actionPage > actionPages
+  if (actionPageOutOfRange) setActionPage(actionPages)
 
-  const seen = new Set<string>()
-  const updates = preview
-    ? sampleUpdates.map((item) => ({ ...item, id: item.title }))
-    : (inbox.result?.notifications ?? [])
-        .flatMap((item) => {
-          const kind = activityKinds.get(item.type)
-          if (!item.requestId || !kind || !item.summary) return []
-          if (seen.has(item.id)) return []
-          seen.add(item.id)
-          return [
-            {
-              id: item.id,
-              kind,
-              title: item.summary,
-              context: null,
-              date: item.createdAt,
-            },
-          ]
-        })
-        .slice(0, 3)
+  const recentRequests = requestData.data?.rows ?? []
+  const requestCount = preview ? sampleRequests.length : recentRequests.length
+  const topService = mostRequested(
+    preview
+      ? sampleRequests.map((request) => request.service)
+      : recentRequests.map((request) => request.service?.name),
+  )
+  const topSpecialist = mostRequested(
+    recentRequests.map(
+      (request) =>
+        (typeof request.preferredSpecialistName === "string" &&
+          request.preferredSpecialistName.trim()) ||
+        request.preferredSpecialist?.fullName,
+    ),
+  )
+  const requestSummary = preview
+    ? {
+        total: sampleRequests.length,
+        pending: sampleRequests.filter(
+          (request) => request.status === "SUBMITTED",
+        ).length,
+      }
+    : requestData.data?.summary
+  const preferenceState =
+    preview?.state ?? resourceState(requestData, requestCount > 0)
   const event = calendarData.data?.find(
     (item) => Date.parse(item.startsAt) > now,
   )
@@ -274,24 +464,35 @@ export function DashboardPage({
     : event
       ? {
           title: event.title,
-          project: event.project?.name ?? event.context,
-          location: event.location?.includes("://") ? "Online" : event.location,
+          project:
+            typeof event.project?.name === "string"
+              ? event.project.name
+              : typeof event.context === "string"
+                ? event.context
+                : null,
+          location:
+            typeof event.location !== "string"
+              ? null
+              : event.location.includes("://")
+                ? "Online"
+                : event.location,
         }
       : null
   const startsAt = preview?.startsAt ?? event?.startsAt
   const date = startsAt ? new Date(startsAt) : null
-  const month =
-    date &&
-    new Intl.DateTimeFormat("en-PH", {
-      month: "short",
-      timeZone: calendarTimeZone,
-    }).format(date)
-  const day =
-    date &&
-    new Intl.DateTimeFormat("en-PH", {
-      day: "numeric",
-      timeZone: calendarTimeZone,
-    }).format(date)
+  const today = new Date(now)
+  const weekday = new Intl.DateTimeFormat("en-PH", {
+    weekday: "short",
+    timeZone: calendarTimeZone,
+  }).format(today)
+  const month = new Intl.DateTimeFormat("en-PH", {
+    month: "short",
+    timeZone: calendarTimeZone,
+  }).format(today)
+  const day = new Intl.DateTimeFormat("en-PH", {
+    day: "numeric",
+    timeZone: calendarTimeZone,
+  }).format(today)
   const time = date && calendarTimeLabel.format(date)
   const projectState =
     preview?.state ?? resourceState(projectData, projects.length > 0)
@@ -300,415 +501,646 @@ export function DashboardPage({
   const calendarState =
     preview?.state ?? resourceState(calendarData, !!appointment)
   const actionState =
-    preview?.state ?? resourceState(actionData, actions.length > 0)
-  const updateState =
     preview?.state ??
     resourceState(
-      { loading: !inbox.result && !inbox.error, error: inbox.error },
-      updates.length > 0,
+      { ...actionData, loading: actionData.loading || actionPageOutOfRange },
+      actions.length > 0,
     )
+  const earliestDeadline = orderedActions[0]?.deadline
+  const deadlineDays = earliestDeadline
+    ? calendarDaysUntil(earliestDeadline, now)
+    : null
+  const consultationDays = startsAt ? calendarDaysUntil(startsAt, now) : null
+  let welcomeSummary = "Explore services to get started."
+  if (projectState === "loaded") {
+    const inProgress = projectTotals.filter(
+      (project) => project.status === "IN_PROGRESS",
+    ).length
+    welcomeSummary = `${projectTotals.length} active ${projectTotals.length === 1 ? "project" : "projects"}, ${inProgress} in progress.`
+  }
+  if (calendarState === "loaded" && consultationDays !== null) {
+    welcomeSummary =
+      consultationDays === 0
+        ? "Your next consultation is today."
+        : consultationDays === 1
+          ? "Your next consultation is tomorrow."
+          : `Your next consultation is in ${consultationDays} days.`
+  }
+  if (actionState === "loaded" && actionTotal > 0) {
+    welcomeSummary = `${actionTotal} ${actionTotal === 1 ? "item needs" : "items need"} your response.`
+    if (
+      earliestDeadline &&
+      deadlineDays !== null &&
+      actionsExpanded === false
+    ) {
+      welcomeSummary +=
+        deadlineDays < 0
+          ? " A response is overdue."
+          : ` A response is due ${requestDate(earliestDeadline)}.`
+    }
+  }
+  if (initialLoading) welcomeSummary = ""
   return (
     <main
-      className={cn(
-        contentClass,
-        "px-[clamp(16px,2.1vw,32px)] py-6 min-[1024px]:[@media(max-height:880px)]:py-3",
-      )}
+      className={cn(contentClass, "p-[clamp(20px,2.1vw,32px)]")}
       aria-label="Client dashboard"
     >
       <PageHeader
         tone="client"
         mobileActions="stack"
-        className="min-[1024px]:[@media(max-height:880px)]:pb-2"
+        titleSize="small"
         title={firstName ? `Welcome back, ${firstName}!` : "Welcome back!"}
         description={
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            Your projects and requests, in one place.{" "}
+            {welcomeSummary}
             {preview && <Pill tone="brand">Preview · Sample data</Pill>}
           </span>
         }
         actions={
-          <Button asChild variant="brandOutline" size="header">
-            <Link href="/services">Explore Services</Link>
-          </Button>
+          <>
+            <Button asChild variant="brandOutline" size="header">
+              <Link href="/services">
+                <Plus size={14} aria-hidden="true" /> New Request
+              </Link>
+            </Button>
+            <Button asChild variant="brand" size="header">
+              <Link href="/services">
+                Explore Services <ArrowRight size={16} aria-hidden="true" />
+              </Link>
+            </Button>
+          </>
         }
       />
 
-      <section
-        aria-labelledby="next-up"
-        className="mt-5 grid min-h-44 items-center gap-5 rounded-[13px] bg-[#203f8c] px-[clamp(18px,3vw,48px)] py-6 text-white min-[1024px]:[@media(max-height:880px)]:mt-3 min-[1024px]:[@media(max-height:880px)]:min-h-32 min-[1024px]:[@media(max-height:880px)]:py-3 md:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)_auto]"
-      >
-        <div>
-          <h2
-            id="next-up"
-            tabIndex={-1}
-            className="text-xs font-semibold tracking-widest uppercase"
-          >
-            Next Up
-          </h2>
-          {calendarState === "loaded" && appointment && startsAt ? (
-            <>
-              <p className="mt-2 [overflow-wrap:anywhere] text-[clamp(22px,2.4vw,32px)] leading-tight font-semibold tracking-tight">
-                {appointment.title}
-              </p>
-              <p className="mt-1 [overflow-wrap:anywhere] text-sm text-white/85">
-                {appointment.project}
-              </p>
-            </>
-          ) : calendarState === "loading" ? (
-            <div role="status" className="mt-3 grid gap-2">
-              <span className="sr-only">Loading appointment…</span>
-              <Skeleton className="h-7 w-3/4" />
-              <Skeleton className="h-4 w-1/2" />
+      {initialLoading ? (
+        <div role="status" className="mt-5 grid gap-4">
+          <span className="sr-only">Loading dashboard…</span>
+          <div aria-hidden="true" className="grid gap-4">
+            <Skeleton className="h-32 w-full rounded-2xl" />
+            <div className="grid gap-4 md:grid-cols-[2fr_1fr_1fr]">
+              <Skeleton className="h-28 w-full rounded-xl" />
+              <Skeleton className="h-28 w-full rounded-xl" />
+              <Skeleton className="h-28 w-full rounded-xl" />
             </div>
-          ) : (
-            <p
-              className="mt-2 text-xl font-semibold"
-              role={calendarState === "error" ? "alert" : undefined}
-            >
-              {calendarState === "empty"
-                ? "No upcoming appointments"
-                : "Could not load your schedule"}
-            </p>
-          )}
-        </div>
-        <div className="md:border-l md:border-white/25 md:pl-6">
-          {calendarState === "loaded" && appointment && startsAt && (
-            <p className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-              <span className="inline-flex items-center gap-2 whitespace-nowrap">
-                <CalendarDays size={18} aria-hidden="true" />
-                <time dateTime={startsAt}>{time} PHT</time>
-              </span>
-              <span className="min-w-0 [overflow-wrap:anywhere]">
-                {appointment.location ?? "Confirmed"}
-              </span>
-            </p>
-          )}
-          <Button asChild variant="brandOutline" size="header">
-            <Link href="/calendar">
-              View Calendar <ArrowRight size={15} aria-hidden="true" />
-            </Link>
-          </Button>
-          {calendarState === "error" && !preview && (
-            <Button
-              variant="brandOutline"
-              size="header"
-              className="ml-2"
-              onClick={() => {
-                document.getElementById("next-up")?.focus()
-                calendarData.retry()
-              }}
-            >
-              Try again
-            </Button>
-          )}
-        </div>
-        {calendarState === "loaded" && appointment && startsAt && (
-          <time
-            dateTime={startsAt}
-            aria-label={requestDate(startsAt)}
-            className="grid w-fit min-w-20 justify-items-center rounded-xl bg-white/15 px-4 py-3 md:min-w-24"
-          >
-            <span className="text-xs font-semibold uppercase">{month}</span>
-            <span className="text-4xl leading-tight font-semibold tabular-nums">
-              {day}
-            </span>
-          </time>
-        )}
-      </section>
-
-      <div className="mt-5 grid min-w-0 items-stretch gap-x-5 gap-y-5 min-[1024px]:[@media(max-height:880px)]:mt-3 min-[1024px]:[@media(max-height:880px)]:gap-y-3 min-[1024px]:grid-cols-[repeat(2,minmax(0,1fr))]">
-        <section
-          aria-labelledby="active-projects"
-          className="min-w-0 rounded-[13px] border border-border bg-card px-4 py-3 min-[1024px]:[@media(max-height:880px)]:py-2"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-x-3">
-            <h2 id="active-projects" tabIndex={-1} className={sectionHeading}>
-              Active Projects
-            </h2>
-            <ViewAll href="/projects" label="View all projects" />
           </div>
-          <SectionContent
-            headingId="active-projects"
-            state={projectState}
-            retry={preview ? undefined : projectData.retry}
-            empty="No active projects"
-          >
-            <ul className="divide-y divide-border">
-              {projects.map((project) => {
-                const percent = projectProgress(project)
-                return (
-                  <li
-                    key={project.id}
-                    className="py-3 min-[1024px]:[@media(max-height:880px)]:py-1.5"
+        </div>
+      ) : (
+        <>
+          <div className="@container mt-5">
+            <div className="grid gap-4 @2xl:grid-cols-[minmax(0,3fr)_minmax(9rem,1fr)]">
+              <section
+                aria-labelledby="next-up"
+                className="relative isolate grid min-h-32 min-w-0 items-center gap-4 overflow-hidden rounded-2xl bg-[#182f69] bg-linear-to-r from-[#0e172c] via-[#182f69] to-[#1246bd] px-[clamp(18px,3vw,36px)] py-5 text-white shadow-sm lg:grid-cols-[minmax(0,1fr)_auto]"
+              >
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
+                >
+                  <div className="absolute -right-28 -bottom-52 h-80 w-[34rem] -rotate-18 rounded-[50%] bg-blue-600/45" />
+                </div>
+                <div>
+                  <h2
+                    id="next-up"
+                    tabIndex={-1}
+                    className="text-xs font-semibold tracking-widest text-blue-200 uppercase"
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                        <h3 className={itemTitle}>
-                          {project.href ? (
-                            <Link
-                              href={project.href}
-                              className={cn("hover:underline", focusRing)}
-                            >
-                              {project.name}
-                            </Link>
-                          ) : (
-                            project.name
-                          )}
-                        </h3>
-                        <Pill tone={statusTone(project.status)}>
-                          {statusLabel(project.status)}
-                        </Pill>
+                    Next Up
+                  </h2>
+                  {calendarState === "loaded" && appointment && startsAt ? (
+                    <>
+                      <p className="mt-2 [overflow-wrap:anywhere] text-lg leading-tight font-semibold tracking-tight">
+                        {appointment.title}
+                      </p>
+                      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-white/90">
+                        <span className="inline-flex items-center gap-2">
+                          <CalendarDays size={16} aria-hidden="true" />
+                          {requestDate(startsAt)}
+                        </span>
+                        <time dateTime={startsAt}>{time} PHT</time>
+                        {consultationDays !== null && consultationDays >= 0 && (
+                          <span className="font-semibold text-blue-200">
+                            {consultationDays === 0
+                              ? "Today"
+                              : consultationDays === 1
+                                ? "Tomorrow"
+                                : "In " + consultationDays + " days"}
+                          </span>
+                        )}
+                        <span className="rounded-full bg-white/15 px-3 py-1 [overflow-wrap:anywhere]">
+                          {appointment.project}
+                        </span>
+                        <span className="[overflow-wrap:anywhere]">
+                          {appointment.location}
+                        </span>
                       </div>
-                      <ul
-                        aria-label="Preview project team"
-                        className="flex shrink-0 -space-x-2"
-                      >
-                        {project.team.map((member) => (
+                    </>
+                  ) : calendarState === "loading" ? (
+                    <div role="status" className="mt-3 grid gap-2">
+                      <span className="sr-only">Loading appointment…</span>
+                      <Skeleton className="h-7 w-3/4" />
+                      <Skeleton className="h-4 w-1/2" />
+                    </div>
+                  ) : (
+                    <p
+                      className="mt-2 text-xl font-semibold"
+                      role={calendarState === "error" ? "alert" : undefined}
+                    >
+                      {calendarState === "empty"
+                        ? "No upcoming appointments"
+                        : "Could not load your schedule"}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <Button asChild variant="brandOutline" size="header">
+                    <Link href="/calendar">
+                      View Calendar <ArrowRight size={15} aria-hidden="true" />
+                    </Link>
+                  </Button>
+                  {calendarState === "error" && !preview && (
+                    <Button
+                      variant="brandOutline"
+                      size="header"
+                      className="ml-2"
+                      onClick={() => {
+                        document.getElementById("next-up")?.focus()
+                        calendarData.retry()
+                      }}
+                    >
+                      Try again
+                    </Button>
+                  )}
+                </div>
+              </section>
+              <time
+                dateTime={manilaDay.format(today)}
+                aria-label={"Today: " + requestDate(today.toISOString())}
+                className="relative grid min-w-0 content-center gap-1 overflow-hidden rounded-2xl border border-primary/15 bg-linear-to-br from-card to-blue-100 px-5 py-4 text-[#122759] shadow-sm"
+              >
+                <CalendarDays
+                  size={20}
+                  className="absolute right-4 top-4 text-blue-700"
+                  aria-hidden="true"
+                />
+                <span className="text-xs font-semibold uppercase">
+                  {weekday} · {month}
+                </span>
+                <span className="text-3xl leading-tight font-semibold tabular-nums">
+                  {day}
+                </span>
+              </time>
+            </div>
+          </div>
+
+          <div className="@container mt-5 min-w-0">
+            <div className="grid min-w-0 items-start gap-4 @3xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)] @5xl:grid-cols-[minmax(0,2.3fr)_minmax(0,1.35fr)_minmax(12rem,1fr)]">
+              <div className="contents @3xl:col-start-2 @3xl:row-start-1 @3xl:grid @3xl:min-w-0 @3xl:gap-4 @5xl:contents">
+                <section
+                  aria-labelledby="client-input"
+                  className="order-1 min-w-0 @5xl:col-start-2 @5xl:row-start-1 rounded-[13px] border border-primary/15 bg-primary/5 bg-[radial-gradient(ellipse_at_bottom_right,rgba(47,91,255,0.07),transparent_65%)] p-4"
+                >
+                  <div className="mb-2 min-[1024px]:[@media(max-height:880px)]:mb-0 flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1">
+                    <h2
+                      id="client-input"
+                      tabIndex={-1}
+                      className={sectionHeading}
+                    >
+                      <FileText
+                        size={18}
+                        className="mr-2 inline-block size-7 rounded-md bg-blue-100 p-1.5 align-middle text-blue-700"
+                        aria-hidden="true"
+                      />
+                      Needs Your Input
+                    </h2>
+                    {actionState === "loaded" && (
+                      <Pill tone="brand">
+                        <strong className="text-xs tabular-nums">
+                          {actionTotal}
+                        </strong>{" "}
+                        {actionTotal === 1 ? "action" : "actions"}
+                      </Pill>
+                    )}
+                  </div>
+                  <div id="dashboard-client-action-list">
+                    <SectionContent
+                      headingId="client-input"
+                      state={actionState}
+                      retry={preview ? undefined : retryActions}
+                      empty={
+                        preview ? "You’re all caught up" : "No pending actions"
+                      }
+                    >
+                      <ul className="grid gap-2 py-2">
+                        {actions.map((action) => (
                           <li
-                            key={member}
-                            title={member}
-                            className="rounded-full ring-2 ring-card"
+                            key={action.id}
+                            className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-primary/10 last:border-b-0 py-3 min-[1024px]:[@media(max-height:880px)]:py-1.5"
                           >
-                            <span className="sr-only">{member}</span>
-                            <Avatar name={member} />
+                            <div className="min-w-0">
+                              <h3
+                                className={itemTitle}
+                                id={"dashboard-action-" + action.id}
+                              >
+                                {action.title}
+                              </h3>
+                              {action.deadline && (
+                                <Pill
+                                  tone={
+                                    calendarDaysUntil(action.deadline, now) < 0
+                                      ? "danger"
+                                      : calendarDaysUntil(
+                                            action.deadline,
+                                            now,
+                                          ) <= 3
+                                        ? "warning"
+                                        : "info"
+                                  }
+                                >
+                                  <time
+                                    dateTime={action.deadline}
+                                    title={requestDate(action.deadline)}
+                                  >
+                                    {deadlineLabel(
+                                      calendarDaysUntil(action.deadline, now),
+                                    )}
+                                  </time>
+                                </Pill>
+                              )}
+                              <p className={metadata}>
+                                {action.service}
+                                {action.reference && <> · {action.reference}</>}
+                              </p>
+                              <p className={metadata}>{action.reason}</p>
+                            </div>
+                            <Link
+                              href={action.destination ?? "/service-requests"}
+                              aria-describedby={"dashboard-action-" + action.id}
+                              className={textLink}
+                            >
+                              {action.destination
+                                ? "Open deliverable"
+                                : "View request"}{" "}
+                              <ChevronRight
+                                size={14}
+                                className="inline"
+                                aria-hidden="true"
+                              />
+                            </Link>
                           </li>
                         ))}
                       </ul>
-                    </div>
-                    <div className="mt-1 grid items-center gap-x-3 gap-y-2 min-[560px]:grid-cols-[minmax(0,1fr)_minmax(4rem,0.65fr)_auto]">
-                      <p className={metadata}>
-                        {project.service}
-                        {project.lead && <> · Led by {project.lead}</>}
-                      </p>
-                      <ProgressMeter
-                        value={percent}
-                        max={100}
-                        label={`${project.name} progress`}
-                        colorClass="bg-[#203f8c]"
-                      />
-                      <p className="flex justify-between gap-2 text-xs tabular-nums">
-                        <span className="text-muted-foreground">
-                          {project.completedTasks} of {project.taskCount} tasks
-                        </span>
-                        <strong>{percent}%</strong>
-                      </p>
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-          </SectionContent>
-        </section>
-
-        <section
-          aria-labelledby="client-input"
-          className="min-w-0 rounded-[13px] border border-border bg-[#e8eef9] px-4 py-3 min-[1024px]:[@media(max-height:880px)]:py-2"
-        >
-          <div className="mb-2 min-[1024px]:[@media(max-height:880px)]:mb-0 flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1">
-            <h2 id="client-input" tabIndex={-1} className={sectionHeading}>
-              Needs Your Input
-            </h2>
-            {actionState === "loaded" && (
-              <Pill tone="warning">
-                {actionTotal} {actionTotal === 1 ? "action" : "actions"}
-              </Pill>
-            )}
-          </div>
-          <div id="dashboard-client-action-list">
-            <SectionContent
-              headingId="client-input"
-              state={actionState}
-              retry={preview ? undefined : retryActions}
-              empty={preview ? "You’re all caught up" : "No pending actions"}
-            >
-              <ul className="divide-y divide-border">
-                {actions.map((action) => (
-                  <li
-                    key={action.id}
-                    className="flex flex-wrap items-center justify-between gap-x-3 py-3 min-[1024px]:[@media(max-height:880px)]:py-1.5"
-                  >
-                    <div className="min-w-0">
-                      <h3
-                        className={itemTitle}
-                        id={"dashboard-action-" + action.id}
-                      >
-                        {action.title}
-                      </h3>
-                      <p className={metadata}>
-                        {action.service}
-                        {action.reference && <> · {action.reference}</>}
-                      </p>
-                      <p className={metadata}>
-                        {action.reason}
-                        {action.deadline && (
-                          <>
-                            {" "}
-                            · Respond by{" "}
-                            <time dateTime={action.deadline}>
-                              {requestDate(action.deadline)}
-                            </time>
-                          </>
-                        )}
-                      </p>
-                    </div>
-                    <Link
-                      href={action.destination ?? "/service-requests"}
-                      aria-describedby={"dashboard-action-" + action.id}
-                      className={textLink}
-                    >
-                      {action.destination
-                        ? "Open deliverable"
-                        : "Find in Booked Requests"}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </SectionContent>
-          </div>
-          {!preview &&
-            (actionsExpanded ||
-              (actionState === "loaded" && actionTotal > 2)) && (
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-expanded={actionsExpanded}
-                  aria-controls="dashboard-client-action-list"
-                  onClick={() => {
-                    setActionsExpanded(!actionsExpanded)
-                    if (actionsExpanded) setActionPage(1)
-                  }}
-                >
-                  {actionsExpanded ? "Show fewer actions" : "Show all actions"}
-                </Button>
-                {actionsExpanded && actionPages > 1 && (
-                  <NumberedPagination
-                    page={actionPage}
-                    totalPages={actionPages}
-                    label="Outstanding action pages"
-                    onPageChange={(page) => {
-                      document.getElementById("client-input")?.focus()
-                      setActionPage(page)
-                    }}
-                    disabled={actionData.loading}
-                  />
-                )}
-              </div>
-            )}
-        </section>
-
-        <section
-          aria-labelledby="booked-requests"
-          className="min-w-0 self-start rounded-[13px] border border-border bg-card px-4 py-3 min-[1024px]:[@media(max-height:880px)]:py-2"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-x-3">
-            <h2 id="booked-requests" tabIndex={-1} className={sectionHeading}>
-              Booked Requests
-            </h2>
-            <ViewAll
-              href="/service-requests"
-              label="View all booked requests"
-            />
-          </div>
-          <SectionContent
-            headingId="booked-requests"
-            state={requestState}
-            retry={preview ? undefined : requestData.retry}
-            empty="No booked requests"
-          >
-            <ul className="divide-y divide-border">
-              {requests.map((request) => {
-                const status = serviceRequestStatuses[request.status]
-                return (
-                  <li
-                    key={request.id}
-                    className="flex flex-wrap items-center justify-between gap-x-3 py-3 min-[1024px]:[@media(max-height:880px)]:py-1.5"
-                  >
-                    <div className="min-w-0">
-                      <h3
-                        className={itemTitle}
-                        id={"dashboard-request-" + request.id}
-                      >
-                        {request.service}
-                      </h3>
-                      <p className={metadata}>
-                        {request.reference && <>{request.reference} · </>}
-                        <time dateTime={request.date}>
-                          {requestDate(request.date)}
-                        </time>
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-x-3">
-                      <Pill tone={status.tone}>{status.label}</Pill>
-                      <Link
-                        href="/service-requests"
-                        className={textLink}
-                        aria-describedby={"dashboard-request-" + request.id}
-                      >
-                        Find in Booked Requests
-                      </Link>
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-          </SectionContent>
-        </section>
-
-        <section
-          aria-labelledby="recent-updates"
-          className="min-w-0 rounded-[13px] border border-border bg-card px-4 py-3 min-[1024px]:[@media(max-height:880px)]:py-2"
-        >
-          <h2
-            id="recent-updates"
-            tabIndex={-1}
-            className={cn(
-              sectionHeading,
-              "mb-2 min-[1024px]:[@media(max-height:880px)]:mb-0 flex min-h-9 items-center",
-            )}
-          >
-            Recent Updates
-          </h2>
-          <SectionContent
-            headingId="recent-updates"
-            state={updateState}
-            retry={preview ? undefined : inbox.load}
-            empty="No recent updates"
-          >
-            <ul className="divide-y divide-border">
-              {updates.map((update) => {
-                const Icon = updateIcons[update.kind]
-                return (
-                  <li
-                    key={update.id}
-                    className="grid min-h-14 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 py-2 min-[1024px]:[@media(max-height:880px)]:min-h-11 min-[1024px]:[@media(max-height:880px)]:py-1"
-                  >
-                    <Icon
-                      size={16}
-                      className="text-[#203f8c]"
-                      aria-hidden="true"
-                    />
-                    <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-2">
-                      <div>
-                        <h3 className={itemTitle}>{update.title}</h3>
-                        {update.context && (
-                          <p className={metadata}>{update.context}</p>
+                    </SectionContent>
+                  </div>
+                  {!preview &&
+                    (actionsExpanded ||
+                      (actionState === "loaded" && actionTotal > 2)) && (
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-expanded={actionsExpanded}
+                          aria-controls="dashboard-client-action-list"
+                          onClick={() => {
+                            setActionsExpanded(!actionsExpanded)
+                            if (actionsExpanded) setActionPage(1)
+                          }}
+                        >
+                          {actionsExpanded
+                            ? "Show fewer actions"
+                            : "Show all actions"}
+                        </Button>
+                        {actionsExpanded && actionPages > 1 && (
+                          <NumberedPagination
+                            page={actionPage}
+                            totalPages={actionPages}
+                            label="Outstanding action pages"
+                            onPageChange={(page) => {
+                              document.getElementById("client-input")?.focus()
+                              setActionPage(page)
+                            }}
+                            disabled={actionData.loading}
+                          />
                         )}
                       </div>
-                      <time
-                        dateTime={update.date}
-                        className="text-xs text-muted-foreground"
-                      >
-                        {requestDate(update.date)}
-                      </time>
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-          </SectionContent>
-        </section>
-      </div>
+                    )}
+                </section>
+
+                <div className="contents @3xl:grid @3xl:gap-4 @5xl:col-start-3 @5xl:row-start-1">
+                  <section
+                    aria-labelledby="quick-actions"
+                    className="order-5 min-w-0 rounded-[13px] border border-border bg-card p-4"
+                  >
+                    <h2 id="quick-actions" className={sectionHeading}>
+                      Quick Actions
+                    </h2>
+                    <ul className="mt-3 grid gap-2">
+                      {[
+                        {
+                          href: "/services",
+                          label: "New Service Request",
+                          icon: Plus,
+                        },
+                        {
+                          href: "/service-requests",
+                          label: "View Booked Requests",
+                          icon: ListChecks,
+                        },
+                        {
+                          href: "/help",
+                          label: "Contact Support",
+                          icon: MessageCircle,
+                        },
+                      ].map(({ href, label, icon: Icon }) => (
+                        <li key={href} className="grid min-w-0">
+                          <Button asChild variant="outline" size="shortcut">
+                            <Link href={href} prefetch={false}>
+                              <Icon
+                                size={16}
+                                className="shrink-0"
+                                aria-hidden="true"
+                              />
+                              <span className="flex-1">{label}</span>
+                              <ChevronRight
+                                size={14}
+                                className="shrink-0 text-muted-foreground"
+                                aria-hidden="true"
+                              />
+                            </Link>
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                  <section
+                    aria-labelledby="most-requested"
+                    className="order-6 min-w-0 px-1 py-2"
+                  >
+                    <h2
+                      id="most-requested"
+                      tabIndex={-1}
+                      className={sectionHeading}
+                    >
+                      Your Most Requested
+                    </h2>
+                    {preferenceState === "loaded" && (
+                      <p className={metadata}>
+                        Based on your latest {requestCount}{" "}
+                        {requestCount === 1 ? "request" : "requests"}.
+                      </p>
+                    )}
+                    <SectionContent
+                      headingId="most-requested"
+                      state={
+                        preferenceState === "error" ? "empty" : preferenceState
+                      }
+                      empty={
+                        preferenceState === "error"
+                          ? "Request statistics unavailable. Retry in Booked Requests."
+                          : "No requests to summarize"
+                      }
+                    >
+                      <dl className="mt-2 divide-y divide-border">
+                        {[
+                          {
+                            label: "Service",
+                            entry: topService,
+                            empty: "No service recorded",
+                          },
+                          {
+                            label: "Specialist",
+                            entry: topSpecialist,
+                            empty: "No specialist requested",
+                          },
+                        ].map(({ label, entry, empty }) => (
+                          <div key={label} className="py-2">
+                            <dt className="text-xs text-muted-foreground">
+                              {label}
+                            </dt>
+                            <dd className="mt-0.5 flex flex-wrap items-center gap-2">
+                              <span className={itemTitle}>
+                                {entry?.name ?? empty}
+                              </span>
+                              {entry && (
+                                <Pill tone="brand">
+                                  {entry.count}{" "}
+                                  {entry.count === 1 ? "request" : "requests"}
+                                </Pill>
+                              )}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </SectionContent>
+                  </section>
+                </div>
+              </div>
+              <div className="contents @3xl:col-start-1 @3xl:row-start-1 @3xl:grid @3xl:min-w-0 @3xl:gap-4">
+                <section
+                  aria-labelledby="active-projects"
+                  className="order-3 min-w-0 rounded-[13px] border border-border bg-card @container/projects p-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-x-3">
+                    <h2
+                      id="active-projects"
+                      tabIndex={-1}
+                      className={sectionHeading}
+                    >
+                      Active Projects
+                    </h2>
+                    <ViewAll href="/projects" label="View all projects" />
+                  </div>
+                  <p className={metadata}>
+                    {projectTotals.length}{" "}
+                    {projectTotals.length === 1 ? "project" : "projects"} ·{" "}
+                    {
+                      projectTotals.filter(
+                        (project) => project.status === "ON_HOLD",
+                      ).length
+                    }{" "}
+                    on hold
+                  </p>
+                  <SectionContent
+                    headingId="active-projects"
+                    state={projectState}
+                    retry={preview ? undefined : projectData.retry}
+                    empty="No active projects"
+                  >
+                    <ul className="divide-y divide-border">
+                      {projects.map((project) => {
+                        const percent = projectProgress(project)
+                        return (
+                          <li
+                            key={project.id}
+                            className="py-3 min-[1024px]:[@media(max-height:880px)]:py-1.5"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                                <h3 className={itemTitle}>
+                                  {project.href ? (
+                                    <Link
+                                      href={project.href}
+                                      className={cn(
+                                        "hover:underline",
+                                        focusRing,
+                                      )}
+                                    >
+                                      {project.name}
+                                    </Link>
+                                  ) : (
+                                    project.name
+                                  )}
+                                </h3>
+                                <Pill tone={statusTone(project.status)}>
+                                  {statusLabel(project.status)}
+                                </Pill>
+                              </div>
+                            </div>
+                            <div className="mt-1 grid items-center gap-x-3 gap-y-2 @md/projects:grid-cols-[minmax(0,1fr)_minmax(4rem,0.65fr)_auto]">
+                              <p className={metadata}>
+                                {project.service}
+                                {project.lead && <> · Led by {project.lead}</>}
+                              </p>
+                              <ProgressMeter
+                                value={percent}
+                                max={100}
+                                label={`${project.name} progress`}
+                                colorClass="bg-[#203f8c]"
+                              />
+                              <p className="flex justify-between gap-2 text-xs tabular-nums">
+                                <span className="text-muted-foreground">
+                                  {project.completedTasks} of{" "}
+                                  {project.taskCount} tasks
+                                </span>
+                                <strong>{percent}%</strong>
+                              </p>
+                            </div>
+                            {project.memberCount !== null && (
+                              <div className="mt-2 flex items-center gap-3">
+                                <ul
+                                  aria-label="Project team initials"
+                                  className="flex shrink-0 -space-x-2"
+                                >
+                                  {project.team.map((member, index) => (
+                                    <li
+                                      key={index}
+                                      className="rounded-full ring-2 ring-card"
+                                    >
+                                      <span className="sr-only">{member}</span>
+                                      <Avatar
+                                        name={null}
+                                        initials={member}
+                                        size="sm"
+                                      />
+                                    </li>
+                                  ))}
+                                </ul>
+                                <span className="text-xs text-muted-foreground">
+                                  {project.memberCount === 0
+                                    ? "No team yet"
+                                    : project.memberCount === 1
+                                      ? "1 member"
+                                      : project.memberCount + " members"}
+                                </span>
+                              </div>
+                            )}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </SectionContent>
+                </section>
+
+                <section
+                  aria-labelledby="booked-requests"
+                  className="order-4 min-w-0 self-start rounded-[13px] border border-border bg-card p-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-x-3">
+                    <h2
+                      id="booked-requests"
+                      tabIndex={-1}
+                      className={sectionHeading}
+                    >
+                      Booked Requests
+                    </h2>
+                    <ViewAll
+                      href="/service-requests"
+                      label="View all booked requests"
+                    />
+                  </div>
+                  {requestState === "loaded" && requestSummary && (
+                    <p className={metadata}>
+                      {requestSummary.total}{" "}
+                      {requestSummary.total === 1 ? "request" : "requests"} ·{" "}
+                      {requestSummary.pending} pending
+                    </p>
+                  )}
+                  <SectionContent
+                    headingId="booked-requests"
+                    state={requestState}
+                    retry={preview ? undefined : requestData.retry}
+                    empty="No booked requests"
+                  >
+                    <ul className="divide-y divide-border">
+                      {requests.map((request) => {
+                        const status = Object.hasOwn(
+                          serviceRequestStatuses,
+                          request.status,
+                        )
+                          ? serviceRequestStatuses[request.status]
+                          : {
+                              tone: "neutral" as const,
+                              label: "Status unavailable",
+                            }
+                        return (
+                          <li
+                            key={request.id}
+                            className="flex flex-wrap items-center justify-between gap-x-3 py-3 min-[1024px]:[@media(max-height:880px)]:py-1.5"
+                          >
+                            <div className="min-w-0">
+                              <h3
+                                className={itemTitle}
+                                id={"dashboard-request-" + request.id}
+                              >
+                                {request.service}
+                              </h3>
+                              <p className={metadata}>
+                                {request.reference && (
+                                  <>
+                                    {request.reference}
+                                    {request.date && " · "}
+                                  </>
+                                )}
+                                {request.date && (
+                                  <time dateTime={request.date}>
+                                    {requestDate(request.date)}
+                                  </time>
+                                )}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-3">
+                              <Pill tone={status.tone}>{status.label}</Pill>
+                              <Link
+                                href="/service-requests"
+                                className={textLink}
+                                aria-describedby={
+                                  "dashboard-request-" + request.id
+                                }
+                              >
+                                View request{" "}
+                                <ChevronRight size={14} aria-hidden="true" />
+                              </Link>
+                            </div>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </SectionContent>
+                </section>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </main>
   )
 }

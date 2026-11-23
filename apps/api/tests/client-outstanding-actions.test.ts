@@ -299,5 +299,165 @@ test(
       total: number
     }
     assert.equal(afterReview.total, 13)
+    const currentQuoteRequestId = current.id
+    await t.test(
+      "financial and deliverable eligibility follows the current version",
+      async () => {
+        const financialResults = async () => {
+          const response = await read(0)
+          assert.equal(response.status, 200)
+          return (await response.json()) as {
+            total: number
+            actions: { title: string; reference: string | null }[]
+          }
+        }
+        const baseTotal = (await financialResults()).total
+        for (const [amount, mandatory, status, expected] of [
+          [0, true, "PENDING", 0],
+          [-10, true, "PENDING", 0],
+          [500, false, "PENDING", 0],
+          [500, true, "VERIFIED", 0],
+          [500, true, "SUBMITTED", 0],
+          [500, true, "PENDING", 1],
+        ] as const) {
+          await prisma.workflowPayment.update({
+            where: { requestId: financial.id },
+            data: { amount, mandatory, status },
+          })
+          assert.equal((await financialResults()).total, baseTotal + expected)
+        }
+        await prisma.workflowAgreement.update({
+          where: { requestId: financial.id },
+          data: { documentFileId: null },
+        })
+        assert.equal((await financialResults()).total, baseTotal)
+        await prisma.workflowAgreement.update({
+          where: { requestId: financial.id },
+          data: { status: "APPROVED" },
+        })
+        assert.equal((await financialResults()).total, baseTotal)
+        await prisma.requestWorkflow.update({
+          where: { requestId: financial.id },
+          data: { state: "ON_HOLD" },
+        })
+        assert.equal((await financialResults()).total, baseTotal - 1)
+
+        const nextFile = await prisma.workflowFile.create({
+          data: {
+            requestId: requirement.id,
+            uploaderId: head.id,
+            uploadId: "deliverable-v2",
+            name: "New launch.pdf",
+            mimeType: "application/pdf",
+            size: 1,
+            sha256: "test",
+            data: Buffer.from("y"),
+            clientVisible: false,
+          },
+        })
+        await prisma.projectMilestone.update({
+          where: { id: milestone.id },
+          data: { workflowFileId: nextFile.id },
+        })
+        assert.equal((await financialResults()).total, baseTotal - 1)
+        await prisma.workflowFile.update({
+          where: { id: nextFile.id },
+          data: { clientVisible: true },
+        })
+        assert.equal((await financialResults()).total, baseTotal)
+        await prisma.project.update({
+          where: { id: project.id },
+          data: { status: "CANCELLED" },
+        })
+        assert.equal((await financialResults()).total, baseTotal - 1)
+        await prisma.projectMilestone.update({
+          where: { id: milestone.id },
+          data: { workflowFileId: null },
+        })
+        assert.equal((await financialResults()).total, baseTotal - 1)
+      },
+    )
+
+    await t.test(
+      "session isolation, pagination boundaries, and workflow changes use current records",
+      async () => {
+        const secondSession = await issueSession(client)
+        const secondRead = () =>
+          fetch(base + path, {
+            headers: { authorization: "Bearer " + secondSession.token },
+          })
+        const snapshot = async (response: Response) => {
+          assert.equal(response.status, 200)
+          return (await response.json()) as {
+            total: number
+            actions: { id: string; reference: string }[]
+          }
+        }
+        const [a1, a2, b] = await Promise.all([
+          read(0).then(snapshot),
+          secondRead().then(snapshot),
+          read(1).then(snapshot),
+        ])
+        assert.deepEqual(a1, a2)
+        assert.ok(b.actions.every((item) => item.reference === "FOREIGN"))
+        assert.ok(a1.actions.every((item) => item.reference !== "FOREIGN"))
+        for (const invalid of ["-1", "100001", "1.5", "abc", "1&page=2"])
+          assert.equal((await read(0, path + "?page=" + invalid)).status, 400)
+        const large = await snapshot(await read(0, path + "?page=100000"))
+        assert.equal(large.total, a1.total)
+        assert.equal(large.actions.length, 0)
+        const pendingRows = await prisma.workflowRequirement.findMany({
+          where: { requestId: requirement.id, status: "REQUESTED" },
+          orderBy: { id: "asc" },
+        })
+        for (const target of [11, 10, 2, 1, 0]) {
+          const current = await snapshot(await read(0))
+          const countToComplete = current.total - target
+          const rows = await prisma.workflowRequirement.findMany({
+            where: { requestId: requirement.id, status: "REQUESTED" },
+            take: countToComplete,
+          })
+          await prisma.workflowRequirement.updateMany({
+            where: { id: { in: rows.map((row) => row.id) } },
+            data: { status: "COMPLETED" },
+          })
+          if (target === 0)
+            await prisma.workflowQuotation.updateMany({
+              where: { requestId: currentQuoteRequestId },
+              data: { validUntil: new Date() },
+            })
+          const result = await snapshot(await read(0))
+          assert.equal(result.total, target)
+          assert.equal(result.actions.length, Math.min(10, target))
+          const tail = await snapshot(await read(0, path + "?page=2"))
+          assert.equal(tail.actions.length, Math.max(0, target - 10))
+        }
+        assert.ok(pendingRows.length > 0)
+        await prisma.user.update({
+          where: { id: client.id },
+          data: { role: "STAFF" },
+        })
+        assert.equal((await secondRead()).status, 403)
+        await prisma.user.update({
+          where: { id: client.id },
+          data: { role: "USER" },
+        })
+        await prisma.session.updateMany({
+          where: { userId: client.id },
+          data: { expiresAt: new Date(0) },
+        })
+        assert.equal((await read(0)).status, 401)
+        const revoked = await issueSession(client)
+        await prisma.session.deleteMany({ where: { userId: client.id } })
+        assert.equal(
+          (
+            await fetch(base + path, {
+              headers: { authorization: "Bearer " + revoked.token },
+            })
+          ).status,
+          401,
+        )
+      },
+    )
   },
 )

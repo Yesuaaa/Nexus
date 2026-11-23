@@ -37,6 +37,8 @@ export const buttonVariants = cva(
       },
       size: {
         default: "h-9 px-4 text-sm",
+        shortcut:
+          "min-h-10 justify-start whitespace-normal px-2.5 py-1.5 text-left text-xs",
         /** Compact inline action. */
         sm: "h-8 px-3 text-xs",
         /** Side-panel and toolbar buttons. */

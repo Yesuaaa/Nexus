@@ -48,8 +48,30 @@ export function WorkflowNotificationProvider({
         "/api/request-workflows/notifications",
         { signal },
       )
+      if (
+        !Array.isArray(value?.notifications) ||
+        !Number.isSafeInteger(value.unreadCount) ||
+        value.unreadCount < 0
+      ) {
+        throw new Error("Unexpected notification data")
+      }
       if (!signal?.aborted && request === revision.current) {
-        setResult(value)
+        const ids = new Set<string>()
+        const notifications = value.notifications.filter((item) => {
+          if (
+            !item ||
+            typeof item.id !== "string" ||
+            typeof item.type !== "string" ||
+            typeof item.summary !== "string" ||
+            typeof item.createdAt !== "string" ||
+            !Number.isFinite(Date.parse(item.createdAt)) ||
+            ids.has(item.id)
+          )
+            return false
+          ids.add(item.id)
+          return true
+        })
+        setResult({ ...value, notifications })
         setError(false)
       }
     } catch {
