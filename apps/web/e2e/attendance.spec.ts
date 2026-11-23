@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from "node:child_process"
 import { randomUUID } from "node:crypto"
 import path from "node:path"
 import { defaultPreferences } from "../src/features/settings/api/settings-api"
+import type { AttendanceAuditEvent } from "../src/features/attendance/api/attendance-api"
 
 test.describe.configure({ mode: "serial" })
 type Fixture = {
@@ -1837,6 +1838,15 @@ test("attendance audit search stays in sync with pagination and keeps rows durin
 }) => {
   await signIn(page, "admin")
   const queries: string[] = []
+  let releaseInitial!: () => void
+  let notifyInitialRequest!: () => void
+  let initialRequestPending = true
+  const initialRequested = new Promise<void>((resolve) => {
+    notifyInitialRequest = resolve
+  })
+  const pendingInitialResponse = new Promise<void>((resolve) => {
+    releaseInitial = resolve
+  })
   let releaseSearch!: () => void
   let notifySearchStarted!: () => void
   let failRetry = true
@@ -1849,6 +1859,11 @@ test("attendance audit search stays in sync with pagination and keeps rows durin
   await page.route("**/api/attendance/audit?**", async (route) => {
     const url = new URL(route.request().url())
     queries.push(url.search)
+    if (initialRequestPending) {
+      initialRequestPending = false
+      notifyInitialRequest()
+      await pendingInitialResponse
+    }
     const search = url.searchParams.get("search") ?? ""
     if (search === "payroll") {
       notifySearchStarted()
@@ -1884,8 +1899,20 @@ test("attendance audit search stays in sync with pagination and keeps rows durin
       },
     })
   })
-  await page.goto("/attendance/audit")
+  const navigation = page.goto("/attendance/audit")
+  await initialRequested
   const table = page.getByRole("table", { name: "Attendance audit events" })
+  try {
+    // PG-005-F001-A006-T008: the initial request shows five skeleton rows.
+    await expect(table).toHaveAttribute("aria-busy", "true")
+    await expect(table.getByRole("status")).toContainText(
+      "Loading audit events",
+    )
+    await expect(table.getByRole("row")).toHaveCount(6)
+  } finally {
+    releaseInitial()
+  }
+  await navigation
   await expect(table.getByText("event-1", { exact: true })).toBeVisible()
   await page.getByRole("button", { name: "Page 2", exact: true }).click()
   await expect(table.getByText("event-11", { exact: true })).toBeVisible()
@@ -1920,7 +1947,10 @@ test("attendance audit search stays in sync with pagination and keeps rows durin
   await expect(table.getByText("payroll-match", { exact: true })).toBeVisible()
 })
 
-function auditEvent(id: string) {
+function auditEvent(
+  id: string,
+  overrides: Partial<AttendanceAuditEvent> = {},
+): AttendanceAuditEvent {
   return {
     id,
     entityType: "AttendanceWorkday",
@@ -1932,8 +1962,372 @@ function auditEvent(id: string) {
     employee: { fullName: id },
     before: null,
     after: null,
+    ...overrides,
   }
 }
+
+function auditPayload(
+  events: AttendanceAuditEvent[],
+  page: number,
+  total: number,
+) {
+  return {
+    asOf: "2026-11-15T00:00:00.000Z",
+    total,
+    page,
+    pageSize: 10,
+    events,
+    actionCounts: [],
+  }
+}
+
+test("[PG-005-F001-A002-T003] department filter resets pagination and reaches audit API", async ({
+  page,
+}) => {
+  await signIn(page, "admin")
+  const auditQueries: URL[] = []
+  await page.route("**/api/attendance/departments", (route) =>
+    route.fulfill({
+      json: {
+        departments: [
+          { id: "dept-engineering", name: "Engineering" },
+          { id: "dept-finance", name: "Finance" },
+        ],
+      },
+    }),
+  )
+  await page.route("**/api/attendance/audit?**", async (route) => {
+    const url = new URL(route.request().url())
+    auditQueries.push(url)
+    const pageNumber = Number(url.searchParams.get("page") ?? "1")
+    const departmentId = url.searchParams.get("departmentId")
+    if (departmentId === "dept-finance")
+      return route.fulfill({
+        json: auditPayload(
+          [
+            auditEvent("finance-event", {
+              employee: { fullName: "Finance Employee" },
+            }),
+          ],
+          pageNumber,
+          1,
+        ),
+      })
+    const events = Array.from({ length: 10 }, (_, index) =>
+      auditEvent("audit-event-" + ((pageNumber - 1) * 10 + index + 1)),
+    )
+    return route.fulfill({ json: auditPayload(events, pageNumber, 20) })
+  })
+
+  await page.goto("/attendance/audit")
+  const table = page.getByRole("table", { name: "Attendance audit events" })
+  await expect(table.getByText("audit-event-1", { exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Page 2", exact: true }).click()
+  await expect(table.getByText("audit-event-11", { exact: true })).toBeVisible()
+
+  await page.getByRole("combobox", { name: "Audit department" }).click()
+  await page.getByRole("option", { name: "Finance", exact: true }).click()
+  await expect(
+    table.getByText("Finance Employee", { exact: true }),
+  ).toBeVisible()
+  await expect
+    .poll(() => {
+      const latest = auditQueries.at(-1)
+      return latest
+        ? [
+            latest.searchParams.get("page"),
+            latest.searchParams.get("departmentId"),
+          ].join(":")
+        : ""
+    })
+    .toBe("1:dept-finance")
+})
+
+test("[PG-005-F001-A004-T005] date controls submit the UTC range and reset pagination", async ({
+  page,
+}) => {
+  await signIn(page, "admin")
+  const auditQueries: URL[] = []
+  await page.route("**/api/attendance/departments", (route) =>
+    route.fulfill({ json: { departments: [] } }),
+  )
+  await page.route("**/api/attendance/audit?**", async (route) => {
+    const url = new URL(route.request().url())
+    auditQueries.push(url)
+    const pageNumber = Number(url.searchParams.get("page") ?? "1")
+    return route.fulfill({
+      json: auditPayload(
+        [auditEvent("audit-page-" + pageNumber)],
+        pageNumber,
+        20,
+      ),
+    })
+  })
+
+  await page.goto("/attendance/audit")
+  const table = page.getByRole("table", { name: "Attendance audit events" })
+  await expect(table.getByText("audit-page-1", { exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Page 2", exact: true }).click()
+  await expect(table.getByText("audit-page-2", { exact: true })).toBeVisible()
+
+  const from = page.getByLabel("Attendance from date")
+  const through = page.getByLabel("Attendance through date")
+  await from.fill("2026-11-12")
+  await through.fill("2026-11-13")
+  await expect(through).toHaveAttribute("min", "2026-11-12")
+  await expect(from).toHaveAttribute("max", "2026-11-13")
+  await expect
+    .poll(() => {
+      const latest = auditQueries.at(-1)
+      return latest
+        ? [
+            latest.searchParams.get("from"),
+            latest.searchParams.get("to"),
+            latest.searchParams.get("page"),
+          ].join(":")
+        : ""
+    })
+    .toBe("2026-11-12:2026-11-13:1")
+  await expect(table.getByText("audit-page-1", { exact: true })).toBeVisible()
+  await expect(
+    page.getByText(/Dates filter the event timestamp in UTC/),
+  ).toBeVisible()
+})
+
+test("[PG-005-F001-A002-T009] department choices recover through their retry control", async ({
+  page,
+}) => {
+  await signIn(page, "admin")
+  let departmentRequests = 0
+  await page.route("**/api/attendance/departments", async (route) => {
+    departmentRequests += 1
+    if (departmentRequests === 1)
+      return route.fulfill({
+        status: 503,
+        json: { error: "Department choices unavailable." },
+      })
+    return route.fulfill({
+      json: { departments: [{ id: "dept-operations", name: "Operations" }] },
+    })
+  })
+  await page.route("**/api/attendance/audit?**", (route) =>
+    route.fulfill({ json: auditPayload([], 1, 0) }),
+  )
+
+  await page.goto("/attendance/audit")
+  const alert = page
+    .getByRole("alert")
+    .filter({ hasText: "Department choices unavailable." })
+  await expect(alert).toContainText("Department choices unavailable.")
+  await alert.getByRole("button", { name: "Retry", exact: true }).click()
+  await expect.poll(() => departmentRequests).toBe(2)
+  const department = page.getByRole("combobox", {
+    name: "Audit department",
+  })
+  await department.click()
+  await expect(
+    page.getByRole("option", { name: "Operations", exact: true }),
+  ).toBeVisible()
+})
+
+test.describe("PG-005 audit row summaries in explicit UTC", () => {
+  test.use({ timezoneId: "Pacific/Auckland" })
+
+  test("[PG-005-F001-A007-T011] row labels include UTC time and identity fallbacks", async ({
+    page,
+  }) => {
+    await signIn(page, "admin")
+    await page.route("**/api/attendance/departments", (route) =>
+      route.fulfill({ json: { departments: [] } }),
+    )
+    await page.route("**/api/attendance/audit?**", (route) =>
+      route.fulfill({
+        json: auditPayload(
+          [
+            auditEvent("named-event", {
+              createdAt: "2026-11-13T23:30:00.000Z",
+              actor: { fullName: "Audit Actor" },
+              employee: { fullName: "Audit Employee" },
+            }),
+            auditEvent("missing-identity", {
+              actorId: "missing-actor",
+              actor: { fullName: "  " },
+              employee: null,
+            }),
+            auditEvent("policy-event", {
+              entityType: "AttendancePolicy",
+              action: "INSERT",
+              actorId: null,
+              actor: null,
+              employee: null,
+            }),
+            auditEvent("unknown-event", {
+              entityType: "UnknownRecordType",
+              action: "CUSTOM_ACTION",
+              actorId: null,
+              actor: null,
+              employee: null,
+            }),
+          ],
+          1,
+          4,
+        ),
+      }),
+    )
+
+    await page.goto("/attendance/audit")
+    const table = page.getByRole("table", {
+      name: "Attendance audit events",
+    })
+    await expect(
+      table.getByText("Nov 13, 2026, 11:30 PM", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      table.getByText("Nov 14, 2026, 12:30 PM", { exact: true }),
+    ).toHaveCount(0)
+    await expect(table.getByText("Audit Actor", { exact: true })).toBeVisible()
+    await expect(
+      table.getByText("Audit Employee", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      table.getByText("Name unavailable", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      table.getByText("No actor recorded", { exact: true }),
+    ).toHaveCount(2)
+    await expect(
+      table.getByText("Not applicable (policy change)", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      table.getByText("Employee unavailable", { exact: true }),
+    ).toHaveCount(2)
+    await expect(
+      table.getByText("Created an attendance policy", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      table.getByText("Custom action an unknown record type", {
+        exact: true,
+      }),
+    ).toBeVisible()
+  })
+})
+
+test("[PG-005-F001-A008-T012] detail panel renders allowlisted snapshots read-only", async ({
+  page,
+}) => {
+  await signIn(page, "admin")
+  await page.route("**/api/attendance/departments", (route) =>
+    route.fulfill({ json: { departments: [] } }),
+  )
+  await page.route("**/api/attendance/audit?**", (route) =>
+    route.fulfill({
+      json: auditPayload(
+        [
+          auditEvent("event-details", {
+            entityType: "AttendanceAdjustment",
+            action: "UPDATE",
+            reason: "Approved overtime",
+            before: {
+              status: "PENDING",
+              reviewNote: "Old review note",
+              proposedStartedAt: "2026-11-13T22:00:00.000Z",
+            },
+            after: {
+              type: "OVERTIME",
+              status: "APPROVED",
+              overtimeMinutes: 45,
+              startedAt: "2026-11-13T23:30:00.000Z",
+              reviewNote: "Approved note",
+              isWorkingDay: true,
+              privateMetadata: "PRIVATE-UNLISTED-SNAPSHOT",
+              createdAt: null,
+            },
+          }),
+          auditEvent("array-snapshot", {
+            entityType: "AttendanceWorkday",
+            before: null,
+            after: ["unsupported", "snapshot"],
+          }),
+        ],
+        1,
+        2,
+      ),
+    }),
+  )
+
+  await page.goto("/attendance/audit")
+  await page
+    .getByRole("button", { name: "View audit event event-details" })
+    .click()
+  const details = page.getByRole("dialog", { name: "Audit event details" })
+  await expect(details).toBeVisible()
+  await expect(
+    details.getByText("Approved overtime", { exact: true }),
+  ).toBeVisible()
+  await expect(details.getByText("Overtime", { exact: true })).toBeVisible()
+  await expect(details.getByText("Approved", { exact: true })).toBeVisible()
+  await expect(details.getByText("45 minutes", { exact: true })).toBeVisible()
+  await expect(
+    details.getByText("Nov 13, 2026, 11:30 PM", { exact: true }),
+  ).toBeVisible()
+  await expect(
+    details.getByRole("heading", { name: "Previous values", exact: true }),
+  ).toBeVisible()
+  await expect(
+    details.getByText("Old review note", { exact: true }),
+  ).toBeVisible()
+  await expect(details).not.toContainText("PRIVATE-UNLISTED-SNAPSHOT")
+  await expect(details).not.toContainText("isWorkingDay")
+  await expect(
+    details.getByRole("button", {
+      name: /^(Edit|Save|Delete|Approve|Reject)$/i,
+    }),
+  ).toHaveCount(0)
+
+  await details.getByRole("button", { name: "Done", exact: true }).click()
+  await expect(details).toHaveCount(0)
+  await page
+    .getByRole("button", { name: "View audit event array-snapshot" })
+    .click()
+  const emptyDetails = page.getByRole("dialog", {
+    name: "Audit event details",
+  })
+  await expect(
+    emptyDetails.getByText("No additional event details were recorded."),
+  ).toBeVisible()
+  await expect(
+    emptyDetails.getByRole("heading", { name: "Previous values" }),
+  ).toHaveCount(0)
+})
+
+test("[PG-005-F001-A009-T013] keyboard opens and dismisses event details at 390px", async ({
+  page,
+}) => {
+  await signIn(page, "admin")
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.route("**/api/attendance/departments", (route) =>
+    route.fulfill({ json: { departments: [] } }),
+  )
+  await page.route("**/api/attendance/audit?**", (route) =>
+    route.fulfill({
+      json: auditPayload([auditEvent("keyboard-event")], 1, 1),
+    }),
+  )
+
+  await page.goto("/attendance/audit")
+  const trigger = page.getByRole("button", {
+    name: "View audit event keyboard-event",
+  })
+  await expect(trigger).toBeVisible()
+  await trigger.focus()
+  await trigger.press("Enter")
+  const details = page.getByRole("dialog", { name: "Audit event details" })
+  await expect(details).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(details).toHaveCount(0)
+  await expect(trigger).toBeFocused()
+  await assertNoPageOverflow(page)
+})
 
 for (const width of [1280, 390])
   test(`attendance policy skeletons match the responsive grid and retain rows during refresh at ${width}px`, async ({

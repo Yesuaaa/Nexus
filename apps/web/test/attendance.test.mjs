@@ -101,9 +101,27 @@ test("attendance navigation grants self-service independently of employee manage
     assert.equal(canAccessRoute(head, path), true)
     assert.equal(canAccessRoute(admin, path), true)
   }
+  // PG-005-F001-A001-T002: access also requires an active actor and grant.
+  const privilegedWithoutRead = [
+    { ...staff, role: "ADMIN" },
+    { ...staff, role: "SUPERADMIN" },
+  ]
+  const inactiveHead = { ...head, isActive: false }
+  const inactiveAdmin = { ...admin, isActive: false }
+  for (const actor of [
+    { ...staff, role: "USER" },
+    inactiveHead,
+    inactiveAdmin,
+    ...privilegedWithoutRead,
+  ]) {
+    for (const path of ["/attendance/audit", "/attendance/time-logs/audit"])
+      assert.equal(canAccessRoute(actor, path), false, path)
+  }
+  const superadmin = { ...admin, role: "SUPERADMIN" }
+  for (const path of ["/attendance/audit", "/attendance/time-logs/audit"])
+    assert.equal(canAccessRoute(superadmin, path), true, path)
   assert.equal(canAccessRoute(head, "/attendance/settings"), false)
   assert.equal(canAccessRoute(admin, "/attendance/settings"), true)
-  const superadmin = { ...admin, role: "SUPERADMIN" }
   for (const group of attendanceNavigation)
     for (const link of group.links)
       assert.equal(

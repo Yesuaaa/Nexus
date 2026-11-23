@@ -643,6 +643,66 @@ test(
         )
         assert.equal(missing.status, 200)
         assert.equal(((await missing.json()) as { total: number }).total, 0)
+
+        // PG-005-F001-A010-T017: UTC interval, stable tie order, and projection.
+        const boundaryEvent = (id: string, createdAt: string) => ({
+          id,
+          entityType: "AttendanceWorkSession",
+          entityId: id,
+          employeeId: staff.employee.id,
+          actorId: admin.user.id,
+          action: "BOUNDARY_CHECK",
+          reason: "BoundaryMarker",
+          actionId: randomUUID(),
+          createdAt: new Date(createdAt),
+          operationId: randomUUID(),
+          correlationId: randomUUID(),
+          actorRoleAtTime: "ADMIN" as const,
+        })
+        await prisma.attendanceAudit.createMany({
+          data: [
+            boundaryEvent("boundary-start", "2026-11-13T00:00:00.000Z"),
+            boundaryEvent("boundary-tie-a", "2026-11-13T12:00:00.000Z"),
+            boundaryEvent("boundary-tie-z", "2026-11-13T12:00:00.000Z"),
+            boundaryEvent("boundary-end", "2026-11-13T23:59:59.999Z"),
+            boundaryEvent("boundary-outside", "2026-11-14T00:00:00.000Z"),
+          ],
+        })
+        const boundaryResponse = await request(
+          head,
+          "/audit?from=2026-11-13&to=2026-11-13&search=BoundaryMarker",
+        )
+        assert.equal(boundaryResponse.status, 200)
+        const boundaryResult = (await boundaryResponse.json()) as {
+          total: number
+          events: {
+            id: string
+            operationId?: unknown
+            correlationId?: unknown
+            actorRoleAtTime?: unknown
+            actor: Record<string, unknown> | null
+            employee: Record<string, unknown> | null
+          }[]
+        }
+        assert.equal(boundaryResult.total, 4)
+        assert.deepEqual(
+          boundaryResult.events.map((event) => event.id),
+          [
+            "boundary-end",
+            "boundary-tie-z",
+            "boundary-tie-a",
+            "boundary-start",
+          ],
+        )
+        const projected = boundaryResult.events.find(
+          (event) => event.id === "boundary-tie-z",
+        )
+        assert.ok(projected)
+        assert.equal("operationId" in projected, false)
+        assert.equal("correlationId" in projected, false)
+        assert.equal("actorRoleAtTime" in projected, false)
+        assert.deepEqual(Object.keys(projected.actor ?? {}), ["fullName"])
+        assert.deepEqual(Object.keys(projected.employee ?? {}), ["fullName"])
       },
     )
 
@@ -1188,6 +1248,118 @@ test(
         )
       },
     )
+  },
+)
+
+test(
+  "[PG-005-F001-A003-T015] audit endpoint denies anonymous and USER callers",
+  { timeout: 120000 },
+  async (t) => {
+    const { prisma, base } = await startPgliteApp(t)
+    const user = await prisma.user.create({
+      data: {
+        email: "pg005-audit-user@test.local",
+        fullName: "PG005 audit user",
+        role: "USER",
+        passwordHash: "test-only",
+      },
+    })
+    const token = (await issueSession(user)).token
+    const anonymous = await fetch(base + "/attendance/audit")
+    assert.equal(anonymous.status, 401)
+    const forbidden = await fetch(base + "/attendance/audit", {
+      headers: { Authorization: "Bearer " + token },
+    })
+    assert.equal(forbidden.status, 403)
+    for (const response of [anonymous, forbidden]) {
+      const body = (await response.json()) as Record<string, unknown>
+      assert.equal("events" in body, false)
+    }
+  },
+)
+
+test(
+  "[PG-005-F001-A010-T016] audit endpoint validates query values and boundaries",
+  { timeout: 120000 },
+  async (t) => {
+    const { prisma, base } = await startPgliteApp(t)
+    const headUser = await prisma.user.create({
+      data: {
+        email: "pg005-audit-head@test.local",
+        fullName: "PG005 audit head",
+        role: "STAFF",
+        passwordHash: "test-only",
+      },
+    })
+    await prisma.department.create({
+      data: { name: "PG005 audit department", headId: headUser.id },
+    })
+    const adminUser = await prisma.user.create({
+      data: {
+        email: "pg005-audit-admin@test.local",
+        fullName: "PG005 audit admin",
+        role: "ADMIN",
+        passwordHash: "test-only",
+      },
+    })
+    const headToken = (await issueSession(headUser)).token
+    const adminToken = (await issueSession(adminUser)).token
+    const request = (token: string, path: string) =>
+      fetch(base + "/attendance" + path, {
+        headers: { Authorization: "Bearer " + token },
+      })
+    const range = "from=2026-11-13&to=2026-11-13"
+    const invalidQueries: [string, string][] = [
+      ["search-over-100", range + "&search=" + "x".repeat(101)],
+      ["repeated-search", range + "&search=one&search=two"],
+      ["impossible-date", "from=2026-02-30&to=2026-03-01"],
+      ["wrong-date-format", "from=2026/11/13&to=2026-11-13"],
+      ["reversed-range", "from=2026-11-14&to=2026-11-13"],
+      ["range-over-366-days", "from=2026-01-01&to=2027-01-02"],
+      ["page-zero", range + "&page=0"],
+      ["page-over-limit", range + "&page=100001"],
+      ["malformed-department-id", range + "&departmentId=!"],
+      ["unsupported-query-key", range + "&unsupported=1"],
+    ]
+    for (const [caseName, query] of invalidQueries) {
+      const response = await request(headToken, "/audit?" + query)
+      assert.equal(response.status, 400, caseName)
+    }
+
+    const maximumSearch = await request(
+      headToken,
+      "/audit?" + range + "&search=" + "x".repeat(100),
+    )
+    assert.equal(maximumSearch.status, 200, "100-character search is accepted")
+    const whitespaceSearch = await request(
+      headToken,
+      "/audit?" + range + "&search=%20%20",
+    )
+    assert.equal(whitespaceSearch.status, 200, "whitespace search trims empty")
+    const maximumRange = await request(
+      headToken,
+      "/audit?from=2026-01-01&to=2027-01-01",
+    )
+    assert.equal(maximumRange.status, 200, "366 inclusive dates are accepted")
+    const maximumPage = await request(
+      headToken,
+      "/audit?" + range + "&page=100000",
+    )
+    assert.equal(maximumPage.status, 200, "page 100000 is accepted")
+    assert.equal(((await maximumPage.json()) as { page: number }).page, 100000)
+
+    const missingDepartment = await prisma.department.create({
+      data: { name: "PG005 department to remove" },
+    })
+    await prisma.department.delete({ where: { id: missingDepartment.id } })
+    const missing = await request(
+      adminToken,
+      "/audit?" +
+        range +
+        "&departmentId=" +
+        encodeURIComponent(missingDepartment.id),
+    )
+    assert.equal(missing.status, 404)
   },
 )
 
