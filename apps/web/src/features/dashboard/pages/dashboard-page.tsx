@@ -22,10 +22,12 @@ import {
   ArrowRight,
   CalendarDays,
   ChevronRight,
-  FileText,
+  ClipboardList,
+  CirclePlus,
+  Headphones,
   ListChecks,
-  MessageCircle,
   Plus,
+  Zap,
 } from "lucide-react"
 import { PageHeader } from "@/components/layout/page-header"
 import { contentClass, focusRing } from "@/components/layout/styles"
@@ -86,7 +88,13 @@ const textLink = cn(
   "inline-flex min-h-9 items-center gap-1.5 rounded-sm text-xs font-semibold text-[#203f8c] hover:underline focus-visible:underline",
   focusRing,
 )
-const sectionHeading = "text-sm leading-snug font-semibold"
+const sectionHeading =
+  "flex items-center gap-3 text-sm leading-snug font-semibold"
+const dashboardCard =
+  "min-w-0 rounded-2xl border border-primary/8 bg-card/90 p-5 shadow-[0_3px_16px_rgb(32_63_140_/_4%)]"
+const dashboardCardHeader =
+  "-mx-5 -mt-5 mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-t-[15px] border-b border-primary/10 bg-primary/[0.035] px-5 py-2.5 [&_a]:order-last [&_a]:ml-auto"
+const sectionIcon = "size-[19px] shrink-0 text-[#3159bb]"
 const itemTitle =
   "min-w-0 [overflow-wrap:anywhere] text-[13px] leading-snug font-semibold"
 const metadata =
@@ -229,6 +237,7 @@ export function DashboardPage({
     [account.id],
     { enabled },
   )
+  const [actionsVisible, setActionsVisible] = useState(false)
   const [actionsExpanded, setActionsExpanded] = useState(false)
   const [actionPage, setActionPage] = useState(1)
   const actionData = useAsyncResource(
@@ -549,6 +558,7 @@ export function DashboardPage({
         tone="client"
         mobileActions="stack"
         titleSize="small"
+        className="[&_h1]:text-[23px]"
         title={firstName ? `Welcome back, ${firstName}!` : "Welcome back!"}
         description={
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -587,57 +597,90 @@ export function DashboardPage({
       ) : (
         <>
           <div className="@container mt-5 min-w-0">
-            <div className="grid items-start gap-4 @2xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+            <div className="grid items-start gap-5 @2xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
               <section
                 aria-labelledby="client-input"
-                className="min-w-0 overflow-hidden rounded-xl border border-primary/15 bg-card"
+                className="min-w-0 overflow-hidden rounded-2xl border border-primary/10 bg-card shadow-[0_4px_18px_rgb(32_63_140_/_7%)]"
               >
                 <div
                   className={cn(
-                    "flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3",
-                    actionState === "loaded" &&
-                      actionTotal > 0 &&
-                      "bg-[#203f8c] text-white",
+                    "relative isolate flex min-h-[108px] flex-wrap items-center gap-4 overflow-hidden px-5 py-5",
+                    actionState === "loading" ||
+                      (actionState === "loaded" && actionTotal > 0)
+                      ? "bg-linear-to-r from-[#172e6b] via-[#203f8c] to-[#2854cb] text-white before:pointer-events-none before:absolute before:-right-16 before:-bottom-40 before:-z-10 before:h-64 before:w-80 before:rounded-[50%] before:bg-[#3974ff]/30 after:pointer-events-none after:absolute after:-top-24 after:-left-10 after:-z-10 after:size-56 after:rounded-full after:bg-white/4"
+                      : "bg-primary/5",
                   )}
                 >
-                  <h2
-                    id="client-input"
-                    tabIndex={-1}
-                    className="flex min-w-0 items-center gap-2 text-base font-semibold"
+                  <span
+                    aria-hidden="true"
+                    className="grid size-12 shrink-0 place-items-center rounded-xl bg-white/10 ring-1 ring-inset ring-white/10"
                   >
-                    <FileText
-                      size={18}
-                      className="shrink-0"
+                    <ClipboardList size={27} strokeWidth={1.7} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <h2
+                      id="client-input"
+                      tabIndex={-1}
+                      className="text-lg leading-snug font-semibold tracking-tight"
+                    >
+                      Needs Your Input
+                    </h2>
+                    {actionState === "loading" && (
+                      <div role="status" className="mt-2">
+                        <span className="sr-only">Loading pending actions</span>
+                        <Skeleton className="h-3 w-32 bg-white/20" />
+                      </div>
+                    )}
+                    {actionState === "loaded" && (
+                      <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs leading-relaxed">
+                        <span>
+                          {actionTotal}{" "}
+                          {actionTotal === 1 ? "action" : "actions"}
+                        </span>
+                        {deadlineDays !== null && (
+                          <>
+                            <span aria-hidden="true">{"\u00b7"}</span>
+                            <span>{deadlineLabel(deadlineDays)}</span>
+                          </>
+                        )}
+                      </p>
+                    )}
+                  </div>
+                  {actionState === "loading" && (
+                    <Skeleton
                       aria-hidden="true"
+                      className="h-[34px] w-[120px] shrink-0 rounded-lg bg-white/20"
                     />
-                    Needs Your Input
-                  </h2>
-                  {actionState === "loaded" && (
-                    <Pill tone="brand">
-                      <strong className="text-xs tabular-nums">
-                        {actionTotal}
-                      </strong>{" "}
-                      {actionTotal === 1 ? "action" : "actions"}
-                    </Pill>
                   )}
                   {actionState === "loaded" && actionTotal > 0 && (
                     <Button
                       variant="brandOutline"
                       size="header"
-                      className="ml-auto"
+                      className="shrink-0 border-white/60 bg-white text-[#203f8c] shadow-sm hover:bg-white/90 focus-visible:ring-white"
                       aria-controls="dashboard-client-action-list"
-                      onClick={() =>
-                        document
-                          .getElementById("dashboard-client-action-list")
-                          ?.focus()
-                      }
+                      aria-expanded={actionsVisible}
+                      onClick={() => {
+                        setActionsVisible(!actionsVisible)
+                        if (!actionsVisible) {
+                          requestAnimationFrame(() =>
+                            document
+                              .getElementById("dashboard-client-action-list")
+                              ?.focus(),
+                          )
+                        }
+                      }}
                     >
-                      Review Now <ChevronRight size={14} aria-hidden="true" />
+                      {actionsVisible ? "Hide Details" : "Review Now"}
+                      <ArrowRight size={14} aria-hidden="true" />
                     </Button>
                   )}
                 </div>
                 <div
                   id="dashboard-client-action-list"
+                  hidden={
+                    actionState === "loading" ||
+                    (actionState === "loaded" && !actionsVisible)
+                  }
                   tabIndex={-1}
                   className="px-4"
                 >
@@ -709,6 +752,7 @@ export function DashboardPage({
                   </SectionContent>
                 </div>
                 {!preview &&
+                  actionsVisible &&
                   (actionsExpanded ||
                     (actionState === "loaded" && actionTotal > 2)) && (
                     <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-3">
@@ -743,9 +787,14 @@ export function DashboardPage({
               </section>
               <section
                 aria-labelledby="next-up"
-                className="grid min-w-0 content-start gap-3 rounded-xl border border-primary/10 bg-primary/5 p-4"
+                className="relative grid min-h-[108px] min-w-0 content-center gap-3 rounded-2xl border border-primary/8 bg-linear-to-br from-[#f8faff] via-[#f0f3ff] to-[#e9edff] py-5 pr-5 pl-14 shadow-[0_3px_16px_rgb(32_63_140_/_4%)] @xl:grid-cols-[minmax(0,1fr)_auto] @xl:items-center"
               >
-                <div>
+                <CalendarDays
+                  size={21}
+                  className="absolute top-6 left-5 text-[#3159bb]"
+                  aria-hidden="true"
+                />
+                <div className="min-w-0">
                   <h2
                     id="next-up"
                     tabIndex={-1}
@@ -758,11 +807,8 @@ export function DashboardPage({
                       <p className="mt-1 [overflow-wrap:anywhere] text-sm leading-tight font-semibold tracking-tight">
                         {appointment.title}
                       </p>
-                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                        <span className="inline-flex items-center gap-2">
-                          <CalendarDays size={16} aria-hidden="true" />
-                          {requestDate(startsAt)}
-                        </span>
+                      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                        <span>{requestDate(startsAt)}</span>
                         <time dateTime={startsAt}>{time} PHT</time>
                         {appointment.location && (
                           <span className="[overflow-wrap:anywhere]">
@@ -798,13 +844,15 @@ export function DashboardPage({
                   )}
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <time
-                    dateTime={manilaDay.format(today)}
-                    className="text-xs text-muted-foreground"
-                  >
+                  <time dateTime={manilaDay.format(today)} className="sr-only">
                     Today · {weekday}, {month} {day}
                   </time>
-                  <Button asChild variant="brandOutline" size="header">
+                  <Button
+                    asChild
+                    variant="brandOutline"
+                    size="header"
+                    className="border-white/60 bg-white text-[#203f8c] shadow-sm hover:bg-white/90"
+                  >
                     <Link href="/calendar">
                       View Calendar <ArrowRight size={15} aria-hidden="true" />
                     </Link>
@@ -825,32 +873,34 @@ export function DashboardPage({
                 </div>
               </section>
             </div>
-            <div className="mt-4 grid items-start gap-4 @2xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-              <div className="grid min-w-0 gap-4">
+            <div className="mt-5 grid items-start gap-5 @2xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+              <div className="grid min-w-0 gap-5">
                 <section
                   aria-labelledby="active-projects"
-                  className="min-w-0 rounded-xl border border-border bg-card @container/projects p-4"
+                  className={cn(dashboardCard, "@container/projects")}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-x-3">
-                    <h2
-                      id="active-projects"
-                      tabIndex={-1}
-                      className={sectionHeading}
-                    >
-                      Active Projects
-                    </h2>
-                    <ViewAll href="/projects" label="View all projects" />
+                  <div className={dashboardCardHeader}>
+                    <div className="contents">
+                      <h2
+                        id="active-projects"
+                        tabIndex={-1}
+                        className={sectionHeading}
+                      >
+                        Active Projects
+                      </h2>
+                      <ViewAll href="/projects" label="View all projects" />
+                    </div>
+                    <p className={cn(metadata, "mt-0 text-[11px]")}>
+                      {projectTotals.length}{" "}
+                      {projectTotals.length === 1 ? "project" : "projects"} ·{" "}
+                      {
+                        projectTotals.filter(
+                          (project) => project.status === "ON_HOLD",
+                        ).length
+                      }{" "}
+                      on hold
+                    </p>
                   </div>
-                  <p className={metadata}>
-                    {projectTotals.length}{" "}
-                    {projectTotals.length === 1 ? "project" : "projects"} ·{" "}
-                    {
-                      projectTotals.filter(
-                        (project) => project.status === "ON_HOLD",
-                      ).length
-                    }{" "}
-                    on hold
-                  </p>
                   <SectionContent
                     headingId="active-projects"
                     state={projectState}
@@ -943,28 +993,30 @@ export function DashboardPage({
                 </section>
                 <section
                   aria-labelledby="booked-requests"
-                  className="min-w-0 self-start rounded-xl border border-border bg-card p-4"
+                  className={cn(dashboardCard, "self-start")}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-x-3">
-                    <h2
-                      id="booked-requests"
-                      tabIndex={-1}
-                      className={sectionHeading}
-                    >
-                      Booked Requests
-                    </h2>
-                    <ViewAll
-                      href="/service-requests"
-                      label="View all booked requests"
-                    />
+                  <div className={dashboardCardHeader}>
+                    <div className="contents">
+                      <h2
+                        id="booked-requests"
+                        tabIndex={-1}
+                        className={sectionHeading}
+                      >
+                        Booked Requests
+                      </h2>
+                      <ViewAll
+                        href="/service-requests"
+                        label="View all booked requests"
+                      />
+                    </div>
+                    {requestState === "loaded" && requestSummary && (
+                      <p className={cn(metadata, "mt-0 text-[11px]")}>
+                        {requestSummary.total}{" "}
+                        {requestSummary.total === 1 ? "request" : "requests"} ·{" "}
+                        {requestSummary.pending} pending
+                      </p>
+                    )}
                   </div>
-                  {requestState === "loaded" && requestSummary && (
-                    <p className={metadata}>
-                      {requestSummary.total}{" "}
-                      {requestSummary.total === 1 ? "request" : "requests"} ·{" "}
-                      {requestSummary.pending} pending
-                    </p>
-                  )}
                   <SectionContent
                     headingId="booked-requests"
                     state={requestState}
@@ -1017,8 +1069,8 @@ export function DashboardPage({
                                   "dashboard-request-" + request.id
                                 }
                               >
-                                View request{" "}
-                                <ChevronRight size={14} aria-hidden="true" />
+                                <span className="sr-only">View request</span>
+                                <ChevronRight size={16} aria-hidden="true" />
                               </Link>
                             </div>
                           </li>
@@ -1028,12 +1080,13 @@ export function DashboardPage({
                   </SectionContent>
                 </section>
               </div>
-              <div className="grid min-w-0 gap-4">
+              <div className="grid min-w-0 gap-5">
                 <section
                   aria-labelledby="quick-actions"
-                  className="@container/shortcuts min-w-0 rounded-xl border border-border bg-card p-4"
+                  className={cn(dashboardCard, "@container/shortcuts")}
                 >
                   <h2 id="quick-actions" className={sectionHeading}>
+                    <Zap className={sectionIcon} aria-hidden="true" />
                     Quick Actions
                   </h2>
                   <ul className="mt-3 grid gap-2 @min-[18rem]/shortcuts:grid-cols-3">
@@ -1041,7 +1094,7 @@ export function DashboardPage({
                       {
                         href: "/services",
                         label: "New Service Request",
-                        icon: Plus,
+                        icon: CirclePlus,
                       },
                       {
                         href: "/service-requests",
@@ -1051,18 +1104,26 @@ export function DashboardPage({
                       {
                         href: "/help",
                         label: "Contact Support",
-                        icon: MessageCircle,
+                        icon: Headphones,
                       },
                     ].map(({ href, label, icon: Icon }) => (
                       <li key={href} className="grid min-w-0">
-                        <Button asChild variant="outline" size="shortcutTile">
+                        <Button
+                          asChild
+                          variant="outline"
+                          size="shortcutTile"
+                          className="rounded-xl border-primary/8 bg-transparent py-3 shadow-[0_2px_6px_rgb(32_63_140_/_3%)] hover:border-primary/20 hover:bg-primary/5 @min-[18rem]/shortcuts:min-h-[96px]"
+                        >
                           <Link href={href} prefetch={false}>
                             <Icon
-                              size={16}
-                              className="shrink-0 text-primary"
+                              size={24}
+                              strokeWidth={1.8}
+                              className="shrink-0 text-[#3159bb]"
                               aria-hidden="true"
                             />
-                            <span>{label}</span>
+                            <span className="max-w-24 leading-snug">
+                              {label}
+                            </span>
                           </Link>
                         </Button>
                       </li>
@@ -1071,21 +1132,23 @@ export function DashboardPage({
                 </section>
                 <section
                   aria-labelledby="most-requested"
-                  className="min-w-0 px-1 py-2"
+                  className={dashboardCard}
                 >
-                  <h2
-                    id="most-requested"
-                    tabIndex={-1}
-                    className={sectionHeading}
-                  >
-                    Your Most Requested
-                  </h2>
-                  {preferenceState === "loaded" && (
-                    <p className={metadata}>
-                      Based on your latest {requestCount}{" "}
-                      {requestCount === 1 ? "request" : "requests"}.
-                    </p>
-                  )}
+                  <div className={dashboardCardHeader}>
+                    <h2
+                      id="most-requested"
+                      tabIndex={-1}
+                      className={sectionHeading}
+                    >
+                      Your Most Requested
+                    </h2>
+                    {preferenceState === "loaded" && (
+                      <p className={cn(metadata, "mt-0 text-[11px]")}>
+                        Based on your latest {requestCount}{" "}
+                        {requestCount === 1 ? "request" : "requests"}.
+                      </p>
+                    )}
+                  </div>
                   <SectionContent
                     headingId="most-requested"
                     state={
@@ -1097,7 +1160,7 @@ export function DashboardPage({
                         : "No requests to summarize"
                     }
                   >
-                    <dl className="mt-2 divide-y divide-border">
+                    <dl className="mt-3 grid gap-1">
                       {[
                         {
                           label: "Service",
