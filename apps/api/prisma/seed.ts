@@ -5,7 +5,12 @@ import {
   validPassword,
 } from "../src/features/auth/auth.password.js"
 import { normalizedEmail } from "../src/shared/validation.js"
+import {
+  isStrongPassword,
+  PASSWORD_POLICY_MESSAGE,
+} from "../src/shared/password-policy.js"
 import { getPrisma } from "../src/lib/db.js"
+import { assertDevSeedTarget, seedDevAccounts } from "./dev-accounts.js"
 
 async function seedSuperadmin(
   prisma: NonNullable<ReturnType<typeof getPrisma>>,
@@ -290,11 +295,22 @@ async function seedServices(prisma: NonNullable<ReturnType<typeof getPrisma>>) {
 }
 
 async function main() {
+  const devAccountsOnly = process.argv.includes("--dev-accounts")
+  if (devAccountsOnly) assertDevSeedTarget(process.env)
   const prisma = getPrisma()
   if (!prisma) throw new Error("Set DATABASE_URL before seeding")
   const servicesOnly = process.argv.includes("--services-only")
 
   try {
+    if (devAccountsOnly) {
+      const password = process.env.DEV_SEED_PASSWORD
+      if (!isStrongPassword(password)) {
+        throw new Error(`Set DEV_SEED_PASSWORD. ${PASSWORD_POLICY_MESSAGE}`)
+      }
+      await seedDevAccounts(prisma, password)
+      console.log("Development accounts ready: SUPERADMIN, ADMIN, STAFF, USER")
+      return
+    }
     if (!servicesOnly) {
       await seedSuperadmin(prisma)
       await seedAdmin(prisma)

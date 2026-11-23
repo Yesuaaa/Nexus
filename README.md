@@ -5,7 +5,7 @@ A pnpm workspace with an independent web frontend, API, and mobile app:
 | App           | Stack                                                      | Default address       |
 | ------------- | ---------------------------------------------------------- | --------------------- |
 | `apps/web`    | Next.js App Router, TypeScript, Tailwind CSS v4, shadcn/ui | http://localhost:5173 |
-| `apps/api`    | Express, TypeScript, Prisma, Supabase PostgreSQL           | http://localhost:3001 |
+| `apps/api`    | Express, TypeScript, Prisma, PostgreSQL                    | http://localhost:3001 |
 | `apps/mobile` | Kotlin Multiplatform (KMP), Compose Multiplatform (CMP)    | Android & iOS         |
 
 The browser calls the API over HTTP. Prisma and database credentials exist only in `apps/api`.
@@ -16,29 +16,32 @@ Feature development records and their dates live in [docs/features](docs/feature
 
 - Node.js 22.12+ or 24+
 - pnpm
-- A Supabase project for the database check and migrations
+- Docker Compose for the local PostgreSQL service
 
 ## Run locally
 
 ```sh
 pnpm install
+copy docker.env.example .env
 copy apps/api/.env.example apps/api/.env
+```
+
+On macOS or Linux, use `cp` instead of `copy`. Generate a local `JWT_SECRET` using the command in `apps/api/.env.example` and set it in both files. Set `DEV_SEED_PASSWORD` in `apps/api/.env` to a strong local password if you want the four starter accounts.
+
+```sh
+docker compose up -d --wait db
+pnpm --filter @nexus/api exec prisma migrate deploy
+pnpm --filter @nexus/api db:seed:dev
 pnpm dev
 ```
 
-On macOS or Linux, use `cp` instead of `copy`. Open http://localhost:5173. Next.js forwards `/api` to the existing API on port 3001 in development and production. Port 5173 is retained to preserve the backend's existing default origin. `/api/health` checks process liveness, `/api/db-check` checks PostgreSQL connectivity, and `/api/ready` also verifies the required schema and migration history. Optional frontend settings are documented in `apps/web/.env.example`; use `apps/web/.env.local` for local overrides.
+The optional seed creates `superadmin@nexus.test`, `admin@nexus.test`, `staff@nexus.test`, and `client@nexus.test` with the shared local password. It can fill missing starter accounts and preserves existing credentials. It accepts only the local `nexus_dev` database in development mode and refuses a database with other accounts.
 
-In Supabase, open **Connect** and copy the **Transaction pooler** URL into `DATABASE_URL` and the **Direct connection** URL into `DIRECT_URL` in `apps/api/.env`. Add `pgbouncer=true` to the transaction pooler URL if it is absent. For migrations from an IPv4-only network, use the **Session pooler** URL for `DIRECT_URL`. Keep these URLs out of web environment variables.
+Open http://localhost:5173. Next.js forwards `/api` to the API on port 3001. `/api/health` checks process liveness, `/api/db-check` checks PostgreSQL connectivity, and `/api/ready` also verifies the required schema and migration history. Optional frontend settings are documented in `apps/web/.env.example`.
 
-Service catalog images use Supabase Storage. Set `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `SUPABASE_SERVICE_IMAGES_BUCKET` in the API environment. On the first image upload, the API creates or reconciles the bucket as public with a 2 MB limit and JPG, PNG, and WebP MIME restrictions. The secret key is used only by the authenticated Express API and must never be exposed through a `NEXT_PUBLIC_` variable. The database stores only each image's object path; public URLs are derived when service responses are returned.
+Service and profile images use Supabase Storage. For local image uploads, set `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `SUPABASE_SERVICE_IMAGES_BUCKET` in the API environment. Use a development bucket and keep the key server-side. Request chat refreshes periodically with local PostgreSQL because the database does not publish Supabase Realtime broadcasts.
 
 For verified TLS, download the database CA certificate from Supabase **Database Settings → SSL Configuration**. Set `sslmode=verify-full` and `sslrootcert=<URL-encoded absolute path to the certificate>` on both URLs. For example, a certificate saved as `C:\certs\supabase-ca.crt` uses `sslrootcert=C%3A%2Fcerts%2Fsupabase-ca.crt`. The `pg` driver currently treats `sslmode=require` as `verify-full` and emits a warning; changing only the mode does not fix an untrusted certificate. If your organization installs its CA in the Windows certificate store, Node 24 can also use it when launched with `NODE_USE_SYSTEM_CA=1`.
-
-After reviewing the target Supabase project and schema, apply the committed migrations:
-
-```sh
-pnpm --filter @nexus/api exec prisma migrate deploy
-```
 
 The `ExampleItem` model in `apps/api/prisma/schema.prisma` is a placeholder for your own data model.
 
@@ -81,25 +84,24 @@ Admins can change Staff and User accounts between those two roles. Superadmins c
 
 ## Docker
 
-The default Docker Compose setup runs Next.js and the API in development mode. It watches the mounted source files, so frontend edits appear without rebuilding. Next.js forwards `/api` requests to the API container. PostgreSQL stays on Supabase.
+The default Docker Compose setup runs Next.js, the API, and a local PostgreSQL 16 service. The API waits for PostgreSQL to accept connections and applies pending migrations before starting. The database persists in a named volume and is published to `127.0.0.1:5433` for host-run Prisma commands. The same local setup applies on every Git branch.
 
 ```sh
-copy docker.env.example .env
 docker compose up --build -d
 ```
 
-On macOS or Linux, use `cp` instead of `copy`. Open http://localhost:5173. The API is also available at http://localhost:3001. Fill in `DATABASE_URL` in the root `.env` for Supabase access and use `sslmode=verify-full`. The API image trusts the bundled Supabase 2021 root CA in `certs/supabase-root-2021.crt`. Download an updated CA from Supabase Database Settings if Supabase rotates it. The development health check uses liveness and works without `DATABASE_URL`. Do not commit `.env`.
+Use the root `.env` and `apps/api/.env` setup above. The API container uses `db:5432` on the Compose network. Seed the local accounts from the host with `pnpm --filter @nexus/api db:seed:dev`. Open http://localhost:5173. The API is also available at http://localhost:3001.
 
 ```sh
 docker compose ps
 docker compose down
 ```
 
-Change `WEB_PORT` or `API_PORT` in `.env` to use other host ports. If you change the browser origin, update `WEB_ORIGIN`. Source edits reload automatically; dependency changes require `docker compose up --build -d`. The web image includes the shared module registry from `apps/api/src/features/modules/module-registry.json`; development mounts that file read-only so registration edits also reload. After Dockerfile or mount changes, recreate the web service with `docker compose up --build -d --no-deps web`. Run Prisma migrations using `pnpm db:migrate --name <name>` from the host with `apps/api/.env` configured.
+Change `WEB_PORT`, `API_PORT`, or `POSTGRES_PORT` in `.env` to use other host ports. If you change `POSTGRES_PORT`, update both database URLs in `apps/api/.env`. If you change the browser origin, update `WEB_ORIGIN`. Source edits reload automatically. Rebuild after dependency changes with `docker compose up --build -d`. Create new migrations from the host with `pnpm db:migrate --name <name>`.
 
 ### Production release with Docker Compose
 
-Use `compose.prod.yaml` on the deployment host. Set `JWT_SECRET`, `PROD_WEB_ORIGIN` to the public site origin, and `DATABASE_URL` to the writable runtime database in the `public` schema. Set `DIRECT_URL` to a direct or session-pooled connection with migration privileges on the same database. You may omit `DIRECT_URL` when the runtime URL itself is a direct connection with migration privileges. Apply verified TLS settings on both connections. Keep the URLs in the server-side secret store.
+When releasing from `main`, use `compose.prod.yaml` on the deployment host and supply production credentials from its secret store. A push to `main` runs CI. Set `JWT_SECRET`, `PROD_WEB_ORIGIN` to the public site origin, and `DATABASE_URL` to the writable runtime database in the `public` schema. For Supabase, use the transaction pooler with `pgbouncer=true` for `DATABASE_URL` and a direct or session-pooled connection with migration privileges for `DIRECT_URL`. You may omit `DIRECT_URL` when the runtime URL itself is a direct connection with migration privileges. Apply verified TLS settings on both connections. The API image includes the Supabase 2021 root CA. See the [Prisma guide](docs/prismaGuide.md) for connection settings.
 
 The runtime role needs its application grants and `SELECT` on `public._prisma_migrations`. If this is the first release with separate roles, arrange those grants before startup. If the migration job creates the ledger and its postflight reports missing access, verify the completed migration state, grant `SELECT` on the ledger to the runtime role, and rerun the job while ingress is paused.
 

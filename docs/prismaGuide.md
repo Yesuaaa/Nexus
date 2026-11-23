@@ -33,16 +33,16 @@ Copy-Item apps/api/.env.example apps/api/.env
 
 On macOS or Linux, use `cp apps/api/.env.example apps/api/.env` for the copy step.
 
-Fill in the connection strings using [`apps/api/.env.example`](../apps/api/.env.example):
+The values in [`apps/api/.env.example`](../apps/api/.env.example) match the local database started by `docker compose up -d --wait db`.
 
-| Variable       | Used by                            | Connection                                                              |
-| -------------- | ---------------------------------- | ----------------------------------------------------------------------- |
-| `DATABASE_URL` | API runtime and seed script        | Supabase transaction pooler; use the URL options from the template      |
-| `DIRECT_URL`   | Prisma CLI, migrations, and Studio | Supabase direct connection, or session pooler for networks without IPv6 |
+| Variable       | Used by                            | Connection                                                                |
+| -------------- | ---------------------------------- | ------------------------------------------------------------------------- |
+| `DATABASE_URL` | API runtime and seed script        | `127.0.0.1:5433/nexus_dev` on the host, or `db:5432/nexus_dev` in Compose |
+| `DIRECT_URL`   | Prisma CLI, migrations, and Studio | Same local connection as `DATABASE_URL`                                   |
 
 Both URLs should point to the same project and database. `prisma.config.ts` loads `apps/api/.env` when invoked through the filtered commands below. Shell environment variables take precedence over values loaded by dotenv. The API's `getPrisma()` uses `DATABASE_URL`, falling back to `DIRECT_URL` if it is unset.
 
-Keep database credentials in the API environment. Never put them in a frontend `NEXT_PUBLIC_` variable or commit `.env` files. Follow the template's `sslmode` and CA certificate settings; certificate paths must be absolute and URL-encoded in the connection URL.
+Keep database credentials in the API environment. For a production Supabase release from `main`, set `DATABASE_URL` to the transaction pooler with `pgbouncer=true` and `DIRECT_URL` to the direct connection or session pooler. Obtain the URLs from **Connect** in the Supabase dashboard. Use `sslmode=verify-full` with the trusted database CA. When supplying `sslrootcert` in a URL, use an absolute URL-encoded path. The [production release instructions](../README.md#production-release-with-docker-compose) describe how the deployment supplies these values.
 
 Apply the repository's existing migrations and generate the client:
 
@@ -131,7 +131,7 @@ The account deactivation feature adds `User.isActive` in `20261026090000_account
 
 Service Management adds the `Service` table in `20261026120000_add_services`. The `20261026170000_allow_multiple_service_departments` migration converts its original single-department foreign key into a many-to-many relationship and preserves every existing assignment. Each service requires at least one valid department; the API prevents deleting a department while any service still uses it. Service deactivation keeps the row and all department relationships intact.
 
-Docker Compose supplies the runtime `DATABASE_URL` from the root `.env`. Host Prisma commands use `apps/api/.env`; these environments are separate. The production API image does not contain the Prisma CLI, so run migrations from the host or a release job with dependencies installed.
+Development Compose sets both database URLs to its local `db` service and applies pending migrations at API startup. Host Prisma commands use `apps/api/.env`. Production Compose gets its URLs from the deployment environment and uses a separate migration job.
 
 ## Seeding accounts and departments
 

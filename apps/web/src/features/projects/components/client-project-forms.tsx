@@ -261,11 +261,13 @@ export function RequestProjectDialog({
 export function RequestDeliverableRevisionDialog({
   open,
   busy,
+  error,
   onOpenChange,
   onSubmit,
 }: {
   open: boolean
   busy: boolean
+  error: string
   onOpenChange: (open: boolean) => void
   onSubmit: (note: string) => void
 }) {
@@ -306,6 +308,7 @@ export function RequestDeliverableRevisionDialog({
               {note.length}/2,000
             </span>
           </label>
+          {error && <Alert variant="text">{error}</Alert>}
           <DialogFooter className="gap-2 sm:gap-2">
             <Button
               type="button"

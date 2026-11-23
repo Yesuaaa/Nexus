@@ -68,8 +68,8 @@ export function ClientProjectsPage() {
     (total, project) => total + project.deliverableCount,
     0,
   )
+  const normalized = query.trim().toLocaleLowerCase()
   const visibleProjects = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase()
     return projects
       .filter((project) => {
         const matchesFilter =
@@ -92,9 +92,9 @@ export function ClientProjectsPage() {
           new Date(first.updatedAt).getTime()
         return sort === "NEWEST" ? updatedDifference : -updatedDifference
       })
-  }, [filter, projects, query, sort])
+  }, [filter, projects, normalized, sort])
   const table = useLocalTable(visibleProjects, {
-    view: [filter, sort, query],
+    view: [filter, sort, normalized],
     loading,
     search: query,
   })

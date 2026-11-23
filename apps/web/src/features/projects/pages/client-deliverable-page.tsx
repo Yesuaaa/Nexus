@@ -4,7 +4,7 @@ import { useDatePreferences } from "@/features/settings/providers/preferences-pr
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ArrowLeft, Check, Download, FileText, RotateCcw } from "lucide-react"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { pillToneClass, type PillTone } from "@/components/ui/pill"
@@ -46,6 +46,7 @@ export function ClientDeliverablePage({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [reviewError, setReviewError] = useState("")
   const [busy, setBusy] = useState(false)
   const [approveOpen, setApproveOpen] = useState(false)
   const [revisionOpen, setRevisionOpen] = useState(false)
@@ -127,6 +128,7 @@ export function ClientDeliverablePage({
   ) {
     if (busy) return
     setBusy(true)
+    setReviewError("")
     try {
       const updated = await reviewClientDeliverable(
         projectId,
@@ -144,9 +146,12 @@ export function ClientDeliverablePage({
             : "Revision request sent",
       })
     } catch (reason) {
+      const title = "Couldn't save your response"
+      const description = errorMessage(reason, "Please try again.")
+      setReviewError(`${title}. ${description}`)
       sileo.error({
-        title: "Couldn't save your response",
-        description: errorMessage(reason, "Please try again."),
+        title,
+        description,
       })
     } finally {
       setBusy(false)
@@ -351,15 +356,23 @@ export function ClientDeliverablePage({
             pendingLabel="Saving…"
             cancelLabel="Go back"
             pending={busy}
+            error={reviewError}
             destructive={false}
-            onClose={() => setApproveOpen(false)}
+            onClose={() => {
+              setReviewError("")
+              setApproveOpen(false)
+            }}
             onConfirm={() => void submitReview("APPROVED")}
           />
           <RequestDeliverableRevisionDialog
             key={revisionOpen ? "revision-open" : "revision-closed"}
             open={revisionOpen}
             busy={busy}
-            onOpenChange={setRevisionOpen}
+            error={reviewError}
+            onOpenChange={(open) => {
+              if (!open) setReviewError("")
+              setRevisionOpen(open)
+            }}
             onSubmit={(note) => void submitReview("REVISION_REQUESTED", note)}
           />
         </>

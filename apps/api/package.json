@@ -11,6 +11,7 @@
     "start": "node dist/index.js",
     "db:generate": "prisma generate",
     "db:seed": "prisma generate && prisma db seed",
+    "db:seed:dev": "prisma generate && tsx prisma/seed.ts --dev-accounts",
     "db:seed:services": "prisma generate && tsx prisma/seed.ts --services-only",
     "db:seed:attendance-adjustments": "prisma generate && tsx prisma/seed-attendance-adjustments.ts",
     "db:seed:attendance-requests": "prisma generate && tsx prisma/seed-attendance-requests.ts",
