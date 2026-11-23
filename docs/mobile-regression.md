@@ -44,31 +44,27 @@ On Windows use `.\gradlew.bat` instead of `./gradlew`.
 
 ## Coverage map
 
-| Area                 | Automated checks                                                                                                                                                                                                                    |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Authentication       | Registration validation, login validation and errors, duplicate submissions, client role restriction, restore, offline retry, logout, token clearing, refresh, account switching                                                    |
-| Routing              | Deep-link allowlist and consumption, session boundaries, saved tab isolation, retry preserving drafts, repeated tab selection, protected back-stack removal                                                                         |
-| Networking           | Bearer injection, refresh behavior, encoded query parameters, cancellation routing, workflow version/action IDs, JSON error messages, HTML failures, malformed success payloads, no retry of rejected writes                        |
-| Services and booking | Active catalog, packages, specialist selection, required fields and length limits, draft preservation, hidden pricing, frozen submission and idempotent retry                                                                       |
-| Request history      | Search debounce and limits, filters, sorting, pagination boundaries, prior results retained on errors, detail retry, stale result cancellation, cancellation locking and idempotency                                                |
-| Rendered Android UI  | Empty login validation, catalog search/reset, cancellation confirmation/dismissal, compact profile scrolling and fallback fields, profile back/logout, logout disabled state, landscape tab actions, loading buttons                |
-| Backend/API          | Native auth payloads, missing/invalid bearer rejection, active service/details/specialists, booking validation and persistence, idempotent replay, ownership isolation, history totals/KPIs, cancellation, refresh/logout isolation |
-| Platform storage     | Existing Android secure-storage instrumentation checks; shared session/token tests                                                                                                                                                  |
+| Area                 | Automated checks                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Authentication       | Registration validation, login validation and errors, duplicate submissions, client role restriction, restore, offline retry, logout, token clearing, refresh, account switching                                                                                                                                                                                                                                                                                    |
+| Routing              | Deep-link allowlist and consumption, session boundaries, saved tab isolation, retry preserving drafts, repeated tab selection, protected back-stack removal                                                                                                                                                                                                                                                                                                         |
+| Networking           | Bearer injection, refresh behavior, encoded query parameters, cancellation routing, workflow version/action IDs, JSON error messages, HTML failures, malformed success payloads, no retry of rejected writes                                                                                                                                                                                                                                                        |
+| Services and booking | Active catalog, packages, catalog pagination, draft service-switch confirmation, specialist selection and rich profile sheet (socials + portfolio), required fields and length limits, draft preservation, hidden pricing, frozen submission and idempotent retry                                                                                                                                                                                                   |
+| Request history      | Search debounce and limits, filters, sorting, pagination boundaries, prior results retained on errors, detail retry, stale result cancellation, cancellation locking and idempotency                                                                                                                                                                                                                                                                                |
+| Rendered Android UI  | Empty login validation, catalog search/reset, pagination, draft switch guard, Step 4 specialist profile sheet, cancellation confirmation/dismissal, Project Overview tabs (Overview/Deliverables/Notes/Team) and deliverable details, quotation breakdown/approval/activation cards, Xendit sandbox checkout and verified banner, compact profile scrolling and fallback fields, profile back/logout, logout disabled state, landscape tab actions, loading buttons |
+| Backend/API          | Native auth payloads, missing/invalid bearer rejection, active service/details/specialists, booking validation and persistence, idempotent replay, ownership isolation, history totals/KPIs, cancellation, refresh/logout isolation                                                                                                                                                                                                                                 |
+| Platform storage     | Existing Android secure-storage instrumentation checks; shared session/token tests                                                                                                                                                                                                                                                                                                                                                                                  |
 
 The new native cases are in `MobileRegressionTest.kt`, `MobileUiRegressionTest.kt`,
-`BookingRepositoryTest.kt`, and `SessionNavigationTest.kt`. Existing auth,
+`BookingRepositoryTest.kt`, `CommunicationTest.kt`, `BillingUiTest.kt`, and `SessionNavigationTest.kt`. Existing auth,
 registration, session, booking, deep-link, and repository suites run alongside
 them. The API spec also runs as part of the normal API test command.
 
-## Boundaries and unfinished functionality
+## Boundaries and verification scope
 
-- The dashboard currently renders a heading. Notifications have no implemented
-  tap action. Attendance, payroll, and task management are not implemented mobile
-  screens in this checkout.
-- Chat/project endpoint constants and legacy `Screen` route declarations do not
-  establish navigable UI; the active route graph is `AppNavHost`.
-- UI tests exercise actual Compose semantics and actions. They are not screenshot
-  comparisons or exhaustive accessibility, keyboard, device-size, or OS coverage.
+- Automated Compose UI tests execute in `androidDeviceTest` (`MobileUiRegressionTest.kt`,
+  `BillingUiTest.kt`, `SessionNavigationTest.kt`, `SecureSettingsTest.kt`) against
+  Ktor `MockEngine` / fake gateways rather than screenshot diffs.
 - MockEngine tests and PGlite HTTP tests are separate layers. They do not prove
   device-to-server TLS, Wi-Fi, ADB forwarding, or production connectivity.
 - Android execution does not validate iOS Keychain, Swift launch integration, or
