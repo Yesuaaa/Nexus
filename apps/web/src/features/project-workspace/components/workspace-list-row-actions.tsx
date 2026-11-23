@@ -1,5 +1,7 @@
 "use client"
 
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
+
 import { FormInput } from "@/components/ui/form-input"
 
 import Link from "next/link"
@@ -125,6 +127,7 @@ export function WorkspaceListRowActions({
         aria-label={`View ${workspace.name}`}
       >
         <Eye size={16} strokeWidth={1.7} aria-hidden="true" />
+        <HoverTooltip>View project details</HoverTooltip>
       </Link>
     )
 

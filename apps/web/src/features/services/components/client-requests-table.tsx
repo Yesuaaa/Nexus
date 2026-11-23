@@ -1,3 +1,4 @@
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { ClientRowTable } from "@/components/ui/client-row-table"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import Link from "next/link"
@@ -118,6 +119,7 @@ function RequestActions({
       >
         <Eye size={15} aria-hidden="true" />
         {!compact && "View request"}
+        {compact && <HoverTooltip>View request</HoverTooltip>}
       </Button>
       {chatAvailable ? (
         <Button asChild variant="outline" className={buttonClass}>
