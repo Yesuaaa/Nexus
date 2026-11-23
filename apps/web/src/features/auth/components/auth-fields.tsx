@@ -27,12 +27,22 @@ export function FieldError({
   )
 }
 
-export function Brand() {
+export function Brand({
+  className = "mx-auto",
+  white = false,
+}: {
+  className?: string
+  white?: boolean
+}) {
   return (
     <img
-      className="mx-auto -mb-1 block h-[75px] w-[134px] object-contain"
-      src="/auth/converyn-logo-w-text.svg"
-      alt="EXP"
+      className={`${className} -mb-1 block h-[75px] w-[134px] object-contain`}
+      src={
+        white
+          ? "/auth/converyn-logo-w-text-white.svg"
+          : "/auth/converyn-logo-w-text.svg"
+      }
+      alt="Converyn"
       width={134}
       height={134}
       fetchPriority="high"

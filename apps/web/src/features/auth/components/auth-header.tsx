@@ -2,6 +2,7 @@ import { Dropdown, type DropdownOption } from "@/components/ui/dropdown"
 import type { AuthCopy } from "../content/auth-copy"
 import { focusOutline } from "../styles/auth-styles"
 import type { AuthLanguage } from "../model/types"
+import { Brand } from "./auth-fields"
 
 const languageOptions: DropdownOption<AuthLanguage>[] = [
   { value: "en", label: "English" },
@@ -33,14 +34,23 @@ export function AuthHeader({
   copy,
   language,
   onLanguageChange,
+  workforce = false,
 }: {
   copy: AuthCopy
   language: AuthLanguage
   onLanguageChange: (language: AuthLanguage) => void
+  workforce?: boolean
 }) {
   return (
     <header className="flex h-[73px] items-center px-8 text-[13px] max-[850px]:px-6">
-      <div className="mx-auto flex w-full max-w-[400px] justify-end">
+      <div
+        className={
+          workforce
+            ? "flex w-full items-center justify-between"
+            : "mx-auto flex w-full max-w-[400px] justify-end"
+        }
+      >
+        {workforce && <Brand className="" />}
         <LanguagePicker
           language={language}
           copy={copy}
