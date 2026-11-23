@@ -121,6 +121,13 @@ async function signIn(page: Page, actor: string) {
     sessionStorage.setItem("nexus.auth.refreshToken", session.refreshToken)
   }, fixture.actors[actor])
 }
+async function setSession(page: Page, actor: string) {
+  await page.evaluate((session) => {
+    sessionStorage.clear()
+    sessionStorage.setItem("nexus.auth.token", session.token)
+    sessionStorage.setItem("nexus.auth.refreshToken", session.refreshToken)
+  }, fixture.actors[actor])
+}
 async function createApprovedCorrection(
   startedAt: string,
   endedAt: string,
@@ -1395,6 +1402,31 @@ test("loaded attendance screens follow the Department Management design", async 
   }
 })
 
+test("[PG-007-F001-A001-T002] overview route admits STAFF and ADMIN and redirects denied roles", async ({
+  page,
+}) => {
+  await page.goto("/login")
+  const cases = [
+    { actor: "staff", pathname: "/attendance/overview", allowed: true },
+    { actor: "admin", pathname: "/attendance/overview", allowed: true },
+    { actor: "client", pathname: "/dashboard", allowed: false },
+    { actor: "superadmin", pathname: "/module", allowed: false },
+  ]
+  for (const scenario of cases) {
+    await setSession(page, scenario.actor)
+    await page.goto("/attendance/overview")
+    await expect
+      .poll(() => new URL(page.url()).pathname)
+      .toBe(scenario.pathname)
+    const heading = page.getByRole("heading", {
+      name: "Attendance Overview",
+      exact: true,
+    })
+    if (scenario.allowed) await expect(heading).toBeVisible()
+    else await expect(heading).toHaveCount(0)
+  }
+})
+
 for (const viewport of [
   { width: 390, height: 844 },
   { width: 820, height: 1180 },
@@ -1445,10 +1477,20 @@ for (const viewport of [
     ).toHaveCount(0)
     const refreshed = page.waitForResponse(
       (response) =>
-        new URL(response.url()).pathname === "/api/attendance/me/overview",
+        new URL(response.url()).pathname === "/api/attendance/me/overview" &&
+        response.request().method() === "GET",
     )
     await main.getByRole("button", { name: "Refresh", exact: true }).click()
-    expect((await refreshed).status()).toBe(200)
+    // PG-007-F001-A004-T007 additive assertions; preserve the layout checks.
+    const refreshResponse = await refreshed
+    expect(refreshResponse.status()).toBe(200)
+    const refreshUrl = new URL(refreshResponse.url())
+    expect(refreshUrl.searchParams.get("from")).toBe(
+      await main.getByLabel("Attendance from date").inputValue(),
+    )
+    expect(refreshUrl.searchParams.get("to")).toBe(
+      await main.getByLabel("Attendance through date").inputValue(),
+    )
     await expect(overview).toHaveAttribute("aria-busy", "false")
     await assertNoPageOverflow(page)
     await page.screenshot({
@@ -1457,6 +1499,134 @@ for (const viewport of [
     })
   })
 }
+
+test("[PG-007-F001-A013-T020] PGlite attendance renders through the real personal overview path", async ({
+  page,
+}) => {
+  test.setTimeout(90000)
+  const actor = fixture.actors["pg007-overview"]
+  const headers = { authorization: `Bearer ${actor.token}` }
+  const historyPath = "/api/attendance/me/history?from=2026-11-20&to=2026-11-20"
+  async function readFixtureHistory() {
+    const response = await fetch(`${api}${historyPath}`, { headers })
+    expect(response.status, await response.clone().text()).toBe(200)
+    return (await response.json()) as AttendanceHistory
+  }
+
+  try {
+    const empty = await readFixtureHistory()
+    expect(empty.workdays).toHaveLength(0)
+
+    await clock("2026-11-20T09:00:00+08:00")
+    const started = await fetch(`${api}/api/attendance/me/clock-in`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: "{}",
+    })
+    expect(started.status, await started.clone().text()).toBe(201)
+    const state = (await started.json()) as AttendanceState
+    const sessionId = state.workday?.activeSessionId
+    expect(sessionId).toBeTruthy()
+    if (!sessionId) throw new Error("Clock-in did not create an active session")
+
+    await clock("2026-11-20T10:00:00+08:00")
+    const closed = await fetch(`${api}/api/attendance/me/clock-out`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({ sessionId }),
+    })
+    expect(closed.status, await closed.clone().text()).toBe(200)
+
+    const beforeOverview = await readFixtureHistory()
+    expect(beforeOverview.workdays).toHaveLength(1)
+    const beforeDay = beforeOverview.workdays[0]
+    if (!beforeDay) throw new Error("Expected the isolated workday")
+    expect(beforeDay.workDate.slice(0, 10)).toBe("2026-11-20")
+    expect(beforeDay.sessions).toHaveLength(1)
+    const beforeSession = beforeDay.sessions[0]
+    if (!beforeSession) throw new Error("Expected the isolated work session")
+    expect(beforeSession.endedAt).toBeTruthy()
+    const beforeDayIds = beforeOverview.workdays.map((day) => day.id)
+    const beforeSessionIds = beforeOverview.workdays.flatMap((day) =>
+      day.sessions.map((session) => session.id),
+    )
+
+    await page.clock.install({ time: new Date("2026-11-23T04:30:00.000Z") })
+    await signIn(page, "pg007-overview")
+    const overviewResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url())
+      return (
+        url.pathname === "/api/attendance/me/overview" &&
+        response.request().method() === "GET"
+      )
+    })
+    await page.goto("/attendance/overview")
+    const response = await overviewResponse
+    expect(response.status()).toBe(200)
+    const overviewUrl = new URL(response.url())
+    expect(overviewUrl.searchParams.get("from")).toBe("2026-10-24")
+    expect(overviewUrl.searchParams.get("to")).toBe("2026-11-24")
+
+    const figures = page.getByLabel("Attendance figures")
+    await expect(figures).toHaveAttribute("aria-busy", "false")
+    const figureValue = (label: string) =>
+      figures
+        .getByText(label, { exact: true })
+        .locator("xpath=following-sibling::dd[1]")
+        .locator("span")
+        .first()
+    await expect(figureValue("Attendance days")).toHaveText("1")
+    await expect(figureValue("Check-ins")).toHaveText("1")
+    await expect(figureValue("Check-outs")).toHaveText("1")
+    await expect(
+      page.getByText("100% completed", { exact: true }),
+    ).toBeVisible()
+    await expect(figureValue("Still clocked in")).toHaveText("0")
+    await expect(
+      page
+        .getByText("Sessions per day", { exact: true })
+        .locator("xpath=following-sibling::dd[1]"),
+    ).toHaveText("1.0")
+    const statusTable = page.getByRole("table").filter({
+      has: page.getByRole("columnheader", {
+        name: "Share",
+        exact: true,
+      }),
+    })
+    await expect(
+      statusTable.getByRole("img", {
+        name: "Clocked out: 1 sessions",
+        exact: true,
+      }),
+    ).toBeVisible()
+    const activityTable = page.getByRole("table").filter({
+      has: page.getByRole("columnheader", {
+        name: "Timestamp (UTC)",
+        exact: true,
+      }),
+    })
+    const activityRows = activityTable.locator("tbody tr")
+    await expect(activityRows).toHaveCount(2)
+    await expect(activityRows.nth(0)).toContainText(
+      "Clocked out – Attendance PG-007 overview",
+    )
+    await expect(activityRows.nth(0)).toContainText("Nov 20, 2026, 2:00 AM")
+    await expect(activityRows.nth(1)).toContainText(
+      "Clocked in – Attendance PG-007 overview",
+    )
+    await expect(activityRows.nth(1)).toContainText("Nov 20, 2026, 1:00 AM")
+
+    const afterOverview = await readFixtureHistory()
+    expect(afterOverview.workdays.map((day) => day.id)).toEqual(beforeDayIds)
+    expect(
+      afterOverview.workdays.flatMap((day) =>
+        day.sessions.map((session) => session.id),
+      ),
+    ).toEqual(beforeSessionIds)
+  } finally {
+    await clock("2026-11-13T20:00:00+08:00")
+  }
+})
 
 for (const viewport of [
   { width: 390, height: 844 },

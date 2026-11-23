@@ -100,6 +100,33 @@ test("attendance browser API fixture", { timeout: 1800000 }, async (t) => {
         data: { headId: user.id },
       })
   }
+  const overviewUser = await prisma.user.create({
+    data: {
+      email: "pg007-overview@attendance-browser.test",
+      fullName: "Attendance PG-007 overview",
+      passwordHash: "test-only",
+      role: "STAFF",
+    },
+  })
+  const overviewEmployee = await prisma.employee.create({
+    data: {
+      employeeId: "BROWSER-pg007-overview",
+      fullName: "Attendance PG-007 overview",
+      userId: overviewUser.id,
+    },
+  })
+  await prisma.attendancePolicyAssignment.create({
+    data: {
+      employeeId: overviewEmployee.id,
+      policyId: policy.id,
+      effectiveFrom: new Date("2026-01-01"),
+    },
+  })
+  actors["pg007-overview"] = {
+    ...(await issueSession(overviewUser)),
+    employeeId: overviewEmployee.id,
+    userId: overviewUser.id,
+  }
   const reportingDepartment = await prisma.department.create({
     data: { name: "WC06 reporting" },
   })

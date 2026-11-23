@@ -11,12 +11,22 @@ import {
   attendanceDate,
   deviceDateTime,
   deviceDateTimeOccurrences,
+  defaultRange,
 } from "../src/features/attendance/model/attendance.ts"
 import {
   canAccessPersonalAttendance,
   Permissions,
 } from "../src/features/auth/model/permissions.ts"
 import { formatDateTime } from "../src/lib/format.ts"
+
+test("[PG-007-F001-A002-T003] default overview range uses UTC date serialization", (t) => {
+  t.mock.timers.enable({
+    apis: ["Date"],
+    now: new Date("2026-11-23T04:30:00.000Z"),
+  })
+
+  assert.deepEqual(defaultRange(), { from: "2026-10-24", to: "2026-11-24" })
+})
 
 test("correction times resolve device-zone gaps, folds, and ordinary intervals", (t) => {
   const originalZone = process.env.TZ
