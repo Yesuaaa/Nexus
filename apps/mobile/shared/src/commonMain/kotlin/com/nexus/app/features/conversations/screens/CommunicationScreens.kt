@@ -32,6 +32,8 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import com.nexus.app.core.theme.NexusColors
 import com.nexus.app.features.conversations.viewmodel.ConversationsViewModel
 import com.nexus.app.features.notifications.viewmodel.NotificationsViewModel
+import com.nexus.app.features.notifications.model.projectId
+import com.nexus.app.features.notifications.model.routingKey
 import org.koin.compose.viewmodel.koinViewModel
 import com.nexus.app.features.conversations.model.ConversationBooking
 import com.nexus.app.features.conversations.model.conversationTimeline
@@ -47,6 +49,7 @@ import kotlinx.coroutines.isActive
 @Composable
 fun NotificationsScreen(
     onRequest: (String) -> Unit,
+    onProject: (String) -> Unit = {},
     viewModel: NotificationsViewModel = koinViewModel(),
     conversationsViewModel: ConversationsViewModel = koinViewModel()
 ) {
@@ -54,7 +57,7 @@ fun NotificationsScreen(
     val conversations by conversationsViewModel.state.collectAsState()
     val bookings = conversations.page.conversations.flatMap { it.bookings }.associateBy { it.id }
     val groups = remember(state.feed.notifications) {
-        state.feed.notifications.groupBy { it.requestId }.values
+        state.feed.notifications.groupBy { it.routingKey }.values
             .map { it.sortedByDescending { notice -> notice.createdAt } }
             .sortedByDescending { it.first().createdAt }
     }
@@ -79,16 +82,20 @@ fun NotificationsScreen(
             state.error?.let { Text(it, color = NexusColors.ErrorRed, modifier = Modifier.padding(vertical = 12.dp)) }
         }
         if (!state.loading && groups.isEmpty()) item { Text("You're all caught up.", Modifier.padding(16.dp)) }
-        items(groups, key = { it.first().requestId }) { updates ->
+        items(groups, key = { it.first().routingKey }) { updates ->
             val latest = updates.first()
+            val groupKey = latest.routingKey
             val unread = updates.any { it.readAt == null }
-            val booking = bookings[latest.requestId]
+            val booking = latest.requestId?.let(bookings::get)
             Surface(color = if (unread) Color(0xFFDFE6F2) else Color.White, shape = RoundedCornerShape(8.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, if (unread) Color(0xFFA7B5CF) else NexusColors.Border)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Column(Modifier.fillMaxWidth().clickable { viewModel.openGroup(updates, onRequest) },
+                    Column(Modifier.fillMaxWidth().clickable {
+                        viewModel.openGroup(updates, onProject = onProject, onRequest = onRequest)
+                    },
                         verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(booking?.title?.takeIf { it.isNotBlank() } ?: booking?.serviceName?.takeIf { it.isNotBlank() }
+                        Text(if (latest.projectId != null) "Project updates" else
+                            booking?.title?.takeIf { it.isNotBlank() } ?: booking?.serviceName?.takeIf { it.isNotBlank() }
                             ?: "Service updates", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = NexusColors.PrimaryBlue)
                         booking?.referenceNumber?.let { Text(it, fontSize = 11.sp, color = NexusColors.TextSecondary) }
                         Text(latest.summary, fontSize = 14.sp,
@@ -97,13 +104,15 @@ fun NotificationsScreen(
                         Text(displayTime(latest.createdAt), fontSize = 12.sp, color = NexusColors.TextSecondary)
                     }
                     if (updates.size > 1) {
-                        TextButton(onClick = { expanded = if (expanded == latest.requestId) null else latest.requestId },
+                        TextButton(onClick = { expanded = if (expanded == groupKey) null else groupKey },
                             contentPadding = PaddingValues(0.dp)) {
-                            Text(if (expanded == latest.requestId) "Hide updates" else "${updates.size} updates - View all", fontSize = 12.sp)
+                            Text(if (expanded == groupKey) "Hide updates" else "${updates.size} updates - View all", fontSize = 12.sp)
                         }
-                        if (expanded == latest.requestId) updates.drop(1).forEach { notification ->
+                        if (expanded == groupKey) updates.drop(1).forEach { notification ->
                             HorizontalDivider(color = NexusColors.Border)
-                            Column(Modifier.fillMaxWidth().clickable { viewModel.open(notification, onRequest) }.padding(vertical = 6.dp)) {
+                            Column(Modifier.fillMaxWidth().clickable {
+                                viewModel.open(notification, onProject = onProject, onRequest = onRequest)
+                            }.padding(vertical = 6.dp)) {
                                 Text(notification.summary, fontSize = 13.sp,
                                     fontWeight = if (notification.readAt == null) FontWeight.SemiBold else FontWeight.Normal)
                                 Text(displayTime(notification.createdAt), fontSize = 11.sp, color = NexusColors.TextSecondary)

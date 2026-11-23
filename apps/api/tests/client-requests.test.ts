@@ -23,6 +23,9 @@ test("request lifecycle migration preserves legacy records and supports already 
     )
     await db.exec(sql)
     await db.exec(sql)
+    await db.exec(
+      await readMigration("20261117120000_align_project_request_statuses"),
+    )
     await db.exec("INSERT INTO requests (id) VALUES (5)")
     const result = await db.query<{ status: string }>(
       "SELECT status::text FROM requests ORDER BY id",
@@ -67,6 +70,9 @@ test("combined inbox and client lifecycle migrations preserve status history and
     await db.exec(reconciliation)
     await db.exec(
       await readMigration("20261030220000_align_service_request_statuses"),
+    )
+    await db.exec(
+      await readMigration("20261117120000_align_project_request_statuses"),
     )
     await db.exec(
       `INSERT INTO "ServiceRequest" (id) VALUES (5); INSERT INTO "ServiceRequestHistory" (id) VALUES (5);`,
@@ -641,7 +647,7 @@ test(
           assert.equal(history.total, status === "SUBMITTED" ? 2 : 1)
           assert.ok(history.requests.every((row) => row.status === status))
           assert.deepEqual(history.summary, {
-            total: 7,
+            total: 9,
             pending: 2,
             inProgress: 3,
             completed: 1,

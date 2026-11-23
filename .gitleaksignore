@@ -1,3 +1,7 @@
 # Non-secret UUID used as a request deduplication key in an offline test fixture.
-# Ignore only this historical finding; new findings remain subject to scanning.
+# Historical findings are scoped to exact fingerprints.
 ba51e389f5576d73dbee28dc76f8df2b39072c7e:apps/api/src/client-requests.test.ts:generic-api-key:205
+
+# Non-secret idempotency keys used by the payroll simulator's offline tests.
+69c99158869d54cf98b7c9969496f8e932324b1b:apps/api/tests/features/payroll/phase5.test.ts:generic-api-key:389
+69c99158869d54cf98b7c9969496f8e932324b1b:apps/api/tests/features/payroll/phase5.test.ts:generic-api-key:448

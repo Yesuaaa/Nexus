@@ -72,6 +72,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import org.koin.compose.viewmodel.koinViewModel
 import com.nexus.app.features.notifications.viewmodel.NotificationsViewModel
+import com.nexus.app.features.notifications.model.routingKey
 
 import com.nexus.app.features.projects.screens.*
 
@@ -330,7 +331,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                     scrolled = appBarState.contentOffset < -1f,
                     chatUnread = conversationsState.page.unreadCount,
                     onAccountMenuChange = { accountMenuOpen = it },
-                    notificationUnread = notificationState.feed.notifications.filter { it.readAt == null }.map { it.requestId }.distinct().size,
+                    notificationUnread = notificationState.feed.notifications.filter { it.readAt == null }.map { it.routingKey }.distinct().size,
                     accountActionsEnabled = !loggingOut
                 )
             }
@@ -396,7 +397,14 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                             onNavigateToLogin = { navController.popBackStack() }
                         )
                     }
-                    composable(Routes.NOTIFICATIONS) { NotificationsScreen(onRequest = { navController.navigate("workflow/$it") }, viewModel = notificationViewModel, conversationsViewModel = conversationsViewModel) }
+                    composable(Routes.NOTIFICATIONS) {
+                        NotificationsScreen(
+                            onRequest = { navController.navigate("workflow/$it") },
+                            onProject = { navController.navigate("projects/$it/overview") },
+                            viewModel = notificationViewModel,
+                            conversationsViewModel = conversationsViewModel,
+                        )
+                    }
                     composable(Routes.MESSAGES) {
                         MessagesScreen(
                             onConversation = { navController.navigate("chat/$it") },

@@ -16,7 +16,7 @@ data class BookedRequestDto(
     val service: RequestService,
     val preferredSpecialist: Specialist? = null
 ) {
-    val canCancel get() = status !in setOf("CANCELLED", "CLOSED")
+    val canCancel get() = status !in setOf("CANCELLED", "CLOSED", "CONCLUDED", "ACTIVATED")
     fun price() = priceLabel(pricingModel, quotedPrice, currency, billingInterval)
 }
 
