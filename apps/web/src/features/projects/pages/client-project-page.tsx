@@ -1,5 +1,7 @@
 "use client"
 
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
+
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import Link from "next/link"
 import { useState } from "react"
@@ -566,6 +568,7 @@ export function ClientProjectPage({
                       aria-label={`View ${deliverable.title}`}
                     >
                       <Eye size={16} aria-hidden="true" />
+                      <HoverTooltip>View deliverable</HoverTooltip>
                     </Link>
                   </li>
                 )

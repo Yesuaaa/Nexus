@@ -1,4 +1,6 @@
 "use client"
+
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { useEffect, useState } from "react"
 import { Eye } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -315,9 +317,9 @@ export function AttendanceAuditPage() {
                     className="size-8 p-0"
                     onClick={() => setSelected(event)}
                     aria-label={"View audit event " + event.id}
-                    title="View audit event"
                   >
                     <Eye size={16} aria-hidden="true" />
+                    <HoverTooltip>View audit event</HoverTooltip>
                   </Button>
                 </ResponsiveDataTableCell>
               </ResponsiveDataTableRow>

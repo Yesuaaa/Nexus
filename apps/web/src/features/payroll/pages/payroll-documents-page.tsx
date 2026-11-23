@@ -161,6 +161,8 @@ type Request = {
   }[]
 }
 
+const requestFilterTriggerClass = "w-[240px]"
+
 const requestTypes = [
   { value: "MISSING_PAYSLIP", label: "Missing payslip" },
   { value: "PAYSLIP_CORRECTION", label: "Payslip correction" },
@@ -909,9 +911,7 @@ function ApprovedRunDetailsSidebar({
                                 onClick={() => setSelectedEmployeeId(item.id)}
                               >
                                 <Eye size={14} aria-hidden="true" />
-                                <HoverTooltip side="top-end">
-                                  Review payslip
-                                </HoverTooltip>
+                                <HoverTooltip>Review payslip</HoverTooltip>
                               </Button>
                             </div>
                           </TableCell>
@@ -1610,9 +1610,7 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
                     }}
                   >
                     <Eye size={14} aria-hidden="true" />
-                    <HoverTooltip side="top-end">
-                      View approved run details
-                    </HoverTooltip>
+                    <HoverTooltip>View approved run details</HoverTooltip>
                   </Button>
                 </div>
               </TableCell>
@@ -1649,6 +1647,7 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
             <FilterSelect
               fitOptions
               label="Publication status"
+              triggerClassName="w-[160px]"
               value={publication}
               onChange={(value) => {
                 setPublication(value)
@@ -1697,7 +1696,7 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
                     Reference: "w-[18%]",
                     "Net pay": "w-[13%]",
                     Publication: "w-[16%]",
-                    Details: "w-[8%]",
+                    Details: "w-20",
                   }
             }
             tableClassName={staff ? undefined : "table-fixed min-w-[680px]"}
@@ -1835,9 +1834,7 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
                         onClick={() => setSlip(row)}
                       >
                         <Eye size={14} aria-hidden="true" />
-                        <HoverTooltip side="top-end">
-                          View payslip details
-                        </HoverTooltip>
+                        <HoverTooltip>View payslip details</HoverTooltip>
                       </Button>
                     </div>
                   )}
@@ -1883,6 +1880,7 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
           <FilterSelect
             fitOptions
             label={staff ? "Concern status" : "Request status"}
+            triggerClassName={requestFilterTriggerClass}
             value={requestStatus}
             onChange={(value) => {
               setRequestStatus(value)
@@ -1893,6 +1891,7 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
           <FilterSelect
             fitOptions
             label={staff ? "Concern type" : "Request type"}
+            triggerClassName={requestFilterTriggerClass}
             value={requestType}
             onChange={(value) => {
               setRequestType(value)

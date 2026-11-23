@@ -76,7 +76,7 @@ const DropdownMenuContent = React.forwardRef<
         "z-[130] max-h-[var(--radix-dropdown-menu-content-available-height)] min-w-[8rem] max-w-[calc(100vw-16px)] overflow-y-auto overflow-x-hidden rounded-md border bg-background p-1 text-foreground shadow-md",
         "origin-[var(--radix-dropdown-menu-content-transform-origin)]",
         variant === "compact" &&
-          "w-[var(--radix-dropdown-menu-trigger-width)] rounded-lg border-[#e1e4ea]",
+          "w-[var(--radix-dropdown-menu-trigger-width)] min-w-0 rounded-lg border-[#e1e4ea]",
         className,
       )}
       {...props}
