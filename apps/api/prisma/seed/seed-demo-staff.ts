@@ -4,10 +4,10 @@
 // so they appear in the UI but cannot be signed into.
 import "dotenv/config"
 import { randomBytes } from "node:crypto"
-import { EmploymentType, Role } from "../src/generated/prisma/client.js"
-import { hashPassword } from "../src/features/auth/auth.password.js"
-import { createEmployee } from "../src/features/employees/employees.service.js"
-import { getPrisma } from "../src/lib/db.js"
+import { EmploymentType, Role } from "../../src/generated/prisma/client.js"
+import { hashPassword } from "../../src/features/auth/auth.password.js"
+import { createEmployee } from "../../src/features/employees/employees.service.js"
+import { getPrisma } from "../../src/lib/db.js"
 
 const DEPARTMENT = "Administration"
 

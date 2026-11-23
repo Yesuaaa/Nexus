@@ -1,15 +1,15 @@
 import "dotenv/config"
-import { Role } from "../src/generated/prisma/client.js"
+import { Role, type Prisma } from "../../src/generated/prisma/client.js"
 import {
   hashPassword,
   validPassword,
-} from "../src/features/auth/auth.password.js"
-import { normalizedEmail } from "../src/shared/validation.js"
+} from "../../src/features/auth/auth.password.js"
+import { normalizedEmail } from "../../src/shared/validation.js"
 import {
   isStrongPassword,
   PASSWORD_POLICY_MESSAGE,
-} from "../src/shared/password-policy.js"
-import { getPrisma } from "../src/lib/db.js"
+} from "../../src/shared/password-policy.js"
+import { getPrisma } from "../../src/lib/db.js"
 import { assertDevSeedTarget, seedDevAccounts } from "./dev-accounts.js"
 
 async function seedSuperadmin(
@@ -211,6 +211,39 @@ const DEFAULT_SERVICES = [
   },
 ] as const
 
+const ADDITIONAL_SERVICES = [
+  {
+    name: "Marketing Analytics & Reporting",
+    description:
+      "Set up campaign measurement, build performance dashboards, and identify opportunities based on the results.",
+    departmentName: "Marketing",
+  },
+  {
+    name: "Landing Page Optimization",
+    description:
+      "Improve how visitors use landing pages through a review of page speed, accessibility, and conversion paths.",
+    departmentName: "Information Technology",
+  },
+  {
+    name: "Technical SEO Audit",
+    description:
+      "Review crawlability, indexing, and site structure and deliver a prioritized list of fixes.",
+    departmentName: "SEO",
+  },
+  {
+    name: "Customer Onboarding",
+    description:
+      "Build welcome materials and a handoff process that guide new customers through their first steps.",
+    departmentName: "Customer Success",
+  },
+  {
+    name: "Brand Identity Design",
+    description:
+      "Develop a visual identity with a logo, color palette, typography, and usage guidelines.",
+    departmentName: "Advertising",
+  },
+] as const
+
 function defaultServiceIconKey(name: string) {
   const normalizedName = name.toLocaleLowerCase()
   const rules = [
@@ -240,9 +273,10 @@ function defaultServiceIconKey(name: string) {
 }
 
 async function seedDepartments(
-  prisma: NonNullable<ReturnType<typeof getPrisma>>,
+  prisma: Prisma.TransactionClient,
+  departments: readonly (typeof DEFAULT_DEPARTMENTS)[number][],
 ) {
-  for (const dept of DEFAULT_DEPARTMENTS) {
+  for (const dept of departments) {
     await prisma.department.upsert({
       where: { name: dept.name },
       update: { code: dept.code, description: dept.description },
@@ -253,12 +287,18 @@ async function seedDepartments(
       },
     })
   }
-  console.log("Seeded default company departments")
 }
 
-async function seedServices(prisma: NonNullable<ReturnType<typeof getPrisma>>) {
+async function seedServices(
+  prisma: Prisma.TransactionClient,
+  services: readonly {
+    name: string
+    description: string
+    departmentName: string
+  }[],
+) {
   const departmentNames = [
-    ...new Set(DEFAULT_SERVICES.map((service) => service.departmentName)),
+    ...new Set(services.map((service) => service.departmentName)),
   ]
   const departments = await prisma.department.findMany({
     where: { name: { in: departmentNames } },
@@ -268,7 +308,7 @@ async function seedServices(prisma: NonNullable<ReturnType<typeof getPrisma>>) {
     departments.map((department) => [department.name, department.id]),
   )
 
-  for (const service of DEFAULT_SERVICES) {
+  for (const service of services) {
     const departmentId = departmentIds.get(service.departmentName)
     if (!departmentId) {
       throw new Error(
@@ -291,7 +331,6 @@ async function seedServices(prisma: NonNullable<ReturnType<typeof getPrisma>>) {
       },
     })
   }
-  console.log(`Seeded ${DEFAULT_SERVICES.length} company services`)
 }
 
 async function main() {
@@ -299,7 +338,9 @@ async function main() {
   if (devAccountsOnly) assertDevSeedTarget(process.env)
   const prisma = getPrisma()
   if (!prisma) throw new Error("Set DATABASE_URL before seeding")
-  const servicesOnly = process.argv.includes("--services-only")
+  const additionalServicesOnly = process.argv.includes("--additional-services")
+  const servicesOnly =
+    additionalServicesOnly || process.argv.includes("--services-only")
 
   try {
     if (devAccountsOnly) {
@@ -315,8 +356,25 @@ async function main() {
       await seedSuperadmin(prisma)
       await seedAdmin(prisma)
     }
-    await seedDepartments(prisma)
-    await seedServices(prisma)
+    const services = additionalServicesOnly
+      ? ADDITIONAL_SERVICES
+      : DEFAULT_SERVICES
+    const departments = additionalServicesOnly
+      ? DEFAULT_DEPARTMENTS.filter((department) =>
+          services.some(
+            (service) => service.departmentName === department.name,
+          ),
+        )
+      : DEFAULT_DEPARTMENTS
+
+    await prisma.$transaction(
+      async (tx) => {
+        await seedDepartments(tx, departments)
+        await seedServices(tx, services)
+      },
+      { timeout: 30_000 },
+    )
+    console.log(`Seeded ${services.length} company services`)
   } finally {
     await prisma.$disconnect()
   }

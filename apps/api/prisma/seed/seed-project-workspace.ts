@@ -1,7 +1,7 @@
 import "dotenv/config"
-import { getPrisma } from "../src/lib/db.js"
-import { makeWorkPlan } from "../src/features/project-workspace/templates.js"
-import type { Prisma } from "../src/generated/prisma/client.js"
+import { getPrisma } from "../../src/lib/db.js"
+import { makeWorkPlan } from "../../src/features/project-workspace/templates.js"
+import type { Prisma } from "../../src/generated/prisma/client.js"
 
 const prisma = getPrisma()
 if (!prisma) throw new Error("Database configuration is required")

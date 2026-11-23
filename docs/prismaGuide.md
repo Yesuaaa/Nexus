@@ -15,7 +15,7 @@ This guide covers the Prisma 7 setup in Nexus. Run all commands from the reposit
 | [`apps/api/prisma/schema.prisma`](../apps/api/prisma/schema.prisma) | Models, relations, enums, and client generator                            |
 | [`apps/api/prisma/migrations`](../apps/api/prisma/migrations)       | Versioned SQL migrations; commit these with schema changes                |
 | [`apps/api/prisma.config.ts`](../apps/api/prisma.config.ts)         | CLI connection URL, schema path, migrations path, and seed command        |
-| [`apps/api/prisma/seed.ts`](../apps/api/prisma/seed.ts)             | Bootstrap accounts and default departments                                |
+| [`apps/api/prisma/seed/seed.ts`](../apps/api/prisma/seed/seed.ts)   | Bootstrap accounts, departments, and services                             |
 | [`apps/api/src/lib/db.ts`](../apps/api/src/lib/db.ts)               | Shared Prisma Client and PostgreSQL connection pool                       |
 | `apps/api/src/generated/prisma`                                     | Generated client; ignored by Git and regenerated locally or during builds |
 | `apps/api/.env`                                                     | Local API credentials; ignored by Git                                     |
@@ -78,6 +78,12 @@ To seed only the prerequisite departments and services without processing accoun
 
 ```sh
 pnpm --filter @nexus/api db:seed:services
+```
+
+To seed the five additional services and their departments, run the separate catalog command.
+
+```sh
+pnpm --filter @nexus/api db:seed:services:additional
 ```
 
 ## Changing the schema

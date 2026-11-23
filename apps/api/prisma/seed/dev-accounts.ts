@@ -1,5 +1,5 @@
-import { Role, type PrismaClient } from "../src/generated/prisma/client.js"
-import { hashPassword } from "../src/features/auth/auth.password.js"
+import { Role, type PrismaClient } from "../../src/generated/prisma/client.js"
+import { hashPassword } from "../../src/features/auth/auth.password.js"
 
 const accounts = [
   {

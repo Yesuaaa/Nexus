@@ -57,7 +57,7 @@ Browser regression checks use isolated API mocks or real Express/PGlite fixtures
 
 API tests and the real Attendance browser fixture compile through the existing TypeScript configuration and run with native Node, avoiding `tsx` startup restrictions. `pnpm test:api` runs all offline backend tests; `pnpm --filter @nexus/api test tests/request-workflow.test.ts` selects a suite. See [test regression recovery](docs/features/testing-regression-recovery.md) for the runner, fixture routing and resolved historical failures.
 
-The API follows the same feature layout under `apps/api/src/features`: auth owns credentials, sessions, and login limits; users owns account administration and role rules; health owns service checks. `app.ts` mounts the routes and handles HTTP errors, `index.ts` starts the server, and `lib/db.ts` provides Prisma access. `apps/api/prisma/seed.ts` is the Prisma seed entry point. Run `pnpm --filter @nexus/api test` for backend checks.
+The API follows the same feature layout under `apps/api/src/features`: auth owns credentials, sessions, and login limits; users owns account administration and role rules; health owns service checks. `app.ts` mounts the routes and handles HTTP errors, `index.ts` starts the server, and `lib/db.ts` provides Prisma access. `apps/api/prisma/seed/seed.ts` is the Prisma seed entry point. Run `pnpm --filter @nexus/api test` for backend checks.
 
 ## Backend authentication
 

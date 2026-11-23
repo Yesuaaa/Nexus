@@ -34,6 +34,7 @@ import {
   canCreateProjectWorkspace,
 } from "@/features/auth/model/permissions"
 import {
+  findRoutePolicy,
   getNavigationLabel,
   getNavigationPolicies,
   isNavigationActive,
@@ -132,14 +133,22 @@ function SidebarNavigationLink({
   if (!navigation) return null
   const label = labelOverride ?? getNavigationLabel(policy, account)
   const active = isNavigationActive(policy, pathname)
+  const href =
+    typeof navigation.href === "function"
+      ? navigation.href(account)
+      : navigation.href
+  const currentPolicy = findRoutePolicy(pathname)
+  const transitionTypes =
+    policy.moduleId === "service-operations" &&
+    currentPolicy?.moduleId === "service-operations" &&
+    href !== pathname
+      ? [href.endsWith("/overview") ? "nav-back" : "nav-forward"]
+      : undefined
 
   return (
     <Link
-      href={
-        typeof navigation.href === "function"
-          ? navigation.href(account)
-          : navigation.href
-      }
+      href={href}
+      transitionTypes={transitionTypes}
       aria-current={active ? "page" : undefined}
       className={cn(
         navLinkClass,
@@ -316,7 +325,12 @@ function groupTransition(
   pathname: string,
 ): string[] | undefined {
   const inGroup = group.links.some((link) => isGroupLinkActive(link, pathname))
-  if (!inGroup || href === pathname) return undefined
+  const currentPolicy = findRoutePolicy(pathname)
+  const isServiceOperationsGroup =
+    (group.label === "Services" || group.label === "Request") &&
+    currentPolicy?.moduleId === "service-operations"
+  if ((!inGroup && !isServiceOperationsGroup) || href === pathname)
+    return undefined
   return [href.endsWith("/overview") ? "nav-back" : "nav-forward"]
 }
 
@@ -732,37 +746,34 @@ export function Sidebar({
         >
           <div
             className={cn(
-              "flex min-w-0 flex-1 flex-col items-start overflow-hidden whitespace-nowrap",
-              collapsed && "hidden max-[767px]:flex",
+              "flex min-w-0 flex-1 items-center justify-between gap-2 overflow-hidden whitespace-nowrap",
+              collapsed && "flex-none",
             )}
-            aria-label="EXP Digital Solutions Inc."
+            aria-label="Converyn"
           >
             <img
-              className="block w-[64px] flex-none"
-              src="/auth/exp-logo.svg"
-              alt="EXP"
+              className={cn(
+                "block h-[56px] w-[112px] flex-none object-contain",
+                collapsed && "hidden max-[767px]:block",
+              )}
+              src="/auth/converyn-logo-w-text.svg"
+              alt="Converyn"
             />
-            <span
-              data-portal-access-label
-              className="mt-1 text-[9px] leading-none font-semibold tracking-[0.16em] text-[#46618d]"
+            <button
+              type="button"
+              className={cn(
+                iconButtonClass,
+                "group relative size-8 max-[767px]:hidden",
+              )}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-expanded={!collapsed}
+              aria-controls="app-sidebar"
+              onClick={onToggleCollapse}
             >
-              {accessLabels[account.role]}
-            </span>
+              <PanelIcon className="size-[18px]" />
+              {collapsed && <CollapsedTooltip>Expand sidebar</CollapsedTooltip>}
+            </button>
           </div>
-          <button
-            type="button"
-            className={cn(
-              iconButtonClass,
-              "group relative size-8 max-[767px]:hidden",
-            )}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-expanded={!collapsed}
-            aria-controls="app-sidebar"
-            onClick={onToggleCollapse}
-          >
-            <PanelIcon className="size-[18px]" />
-            {collapsed && <CollapsedTooltip>Expand sidebar</CollapsedTooltip>}
-          </button>
           <button
             type="button"
             className={cn(iconButtonClass, "hidden size-8 max-[767px]:grid")}
@@ -782,6 +793,12 @@ export function Sidebar({
           )}
           aria-label="Main menu"
         >
+          <p
+            data-portal-access-label
+            className={cn(sectionLabelClass, "-mt-2 pt-0 max-[767px]:pt-0")}
+          >
+            {accessLabels[account.role]}
+          </p>
           {dashboardPolicy && (
             <SidebarNavigationLink
               policy={dashboardPolicy}

@@ -30,11 +30,11 @@ export function FieldError({
 export function Brand() {
   return (
     <img
-      className="mx-auto -mb-1 block h-[69px] w-[134px] object-contain"
-      src="/auth/exp-logo.svg"
+      className="mx-auto -mb-1 block h-[75px] w-[134px] object-contain"
+      src="/auth/converyn-logo-w-text.svg"
       alt="EXP"
       width={134}
-      height={69}
+      height={134}
       fetchPriority="high"
     />
   )

@@ -1,6 +1,6 @@
 import "dotenv/config"
-import type { Prisma } from "../src/generated/prisma/client.js"
-import { getPrisma } from "../src/lib/db.js"
+import type { Prisma } from "../../src/generated/prisma/client.js"
+import { getPrisma } from "../../src/lib/db.js"
 
 const month = process.argv[2] ?? "2026-11"
 const reportOnly = process.argv[3] === "--report"
