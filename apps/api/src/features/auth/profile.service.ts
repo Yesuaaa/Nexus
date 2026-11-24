@@ -112,7 +112,7 @@ function url(value: unknown, label: string, required = false) {
   const clean = text(value, label, 2048, required)
   if (!clean) return ""
   const safe = safeHttpsUrl(clean)
-  if (safe) return safe
+  if (safe && safe.length <= 2048) return safe
   throw new AuthError(400, `${label} must be an HTTPS URL`)
 }
 function list(value: unknown, label: string, limit: number): unknown[] {

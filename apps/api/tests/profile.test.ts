@@ -1,5 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
+import sharp from "sharp"
+import { ServiceImageStorageError } from "../src/features/services/service-image-storage.js"
 import { issueSession } from "../src/features/auth/auth.service.js"
 import { hashPassword } from "../src/features/auth/auth.password.js"
 import type { getProfile } from "../src/features/auth/profile.service.js"
@@ -14,12 +16,24 @@ test(
   { timeout: 90000 },
   async (t) => {
     let imageUploads = 0
+    const removed: string[] = []
+    let beforeStore: (() => Promise<void>) | undefined
     const { prisma, origin } = await startPgliteApp(t, {
       imageStorage: {
         upload: async (_dataUrl, directory = "services") =>
           `${directory}/${++imageUploads}.png`,
+        uploadWebp: async (data, directory = "services") => {
+          const metadata = await sharp(data).metadata()
+          assert.equal(metadata.format, "webp")
+          assert.equal(metadata.width, 1024)
+          assert.equal(metadata.height, 512)
+          await beforeStore?.()
+          return `${directory}/${++imageUploads}.webp`
+        },
         publicUrl: (path) => `https://images.example.com/${path}`,
-        remove: async () => {},
+        remove: async (path) => {
+          removed.push(path)
+        },
       },
     })
     const base = `${origin}/api/auth`
@@ -86,8 +100,17 @@ test(
         .fullName,
       "Updated STAFF",
     )
+    const source = sharp({
+      create: {
+        width: 1536,
+        height: 768,
+        channels: 4,
+        background: "transparent",
+      },
+    })
     const pngData =
-      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lY4AAAAASUVORK5CYII="
+      "data:image/png;base64," +
+      (await source.clone().png().toBuffer()).toString("base64")
     for (const actor of actors) {
       for (const kind of ["avatar", "banner"] as const) {
         const result = await request(actor.token, "/profile/images", "POST", {
@@ -103,12 +126,73 @@ test(
           body.url,
           new RegExp(`/profiles/${actor.user.id}/${kind}/`),
         )
+        assert.ok(body.url.endsWith(kind === "avatar" ? ".webp" : ".png"))
         assert.equal(
           kind === "avatar" ? body.profile.imageUrl : body.profile.bannerUrl,
           body.url,
         )
       }
     }
+    const dir = `profiles/${staff.user.id}/avatar`
+    for (const format of ["jpeg", "webp"] as const) {
+      const old = await prisma.user.findUniqueOrThrow({
+        where: { id: staff.user.id },
+      })
+      const dataUrl = `data:image/${format};base64,${(await source.clone().toFormat(format).toBuffer()).toString("base64")}`
+      const saved = await request(staff.token, "/profile/images", "POST", {
+        kind: "avatar",
+        dataUrl,
+      })
+      assert.equal(saved.status, 201, await saved.clone().text())
+      assert.equal(removed.at(-1), old.profileImagePath)
+    }
+    const uploadAvatar = () =>
+      request(staff.token, "/profile/images", "POST", {
+        kind: "avatar",
+        dataUrl: pngData,
+      })
+    const previous = await prisma.user.findUniqueOrThrow({
+      where: { id: staff.user.id },
+    })
+    const uploadsBeforeInvalidAvatar = imageUploads
+    for (const dataUrl of [
+      "data:image/png;base64,aW52YWxpZA==",
+      pngData.replace("image/png", "image/jpeg"),
+      pngData.replace("image/png", "image/gif"),
+      "data:image/png;base64," +
+        Buffer.alloc(2 * 1024 * 1024 + 1).toString("base64"),
+    ]) {
+      const rejected = await request(staff.token, "/profile/images", "POST", {
+        kind: "avatar",
+        dataUrl,
+      })
+      assert.equal(rejected.status, 400, await rejected.clone().text())
+    }
+    assert.equal(imageUploads, uploadsBeforeInvalidAvatar)
+    beforeStore = async () => {
+      throw new ServiceImageStorageError("Storage unavailable")
+    }
+    assert.equal((await uploadAvatar()).status, 503)
+    assert.equal(
+      (await prisma.user.findUniqueOrThrow({ where: { id: staff.user.id } }))
+        .profileImagePath,
+      previous.profileImagePath,
+    )
+    // Another upload wins between validation and commit.
+    beforeStore = async () => {
+      await prisma.user.update({
+        where: { id: staff.user.id },
+        data: { profileImagePath: dir + "/winner.webp" },
+      })
+    }
+    assert.equal((await uploadAvatar()).status, 409)
+    assert.equal(removed.at(-1), `${dir}/${imageUploads}.webp`)
+    assert.equal(
+      (await prisma.user.findUniqueOrThrow({ where: { id: staff.user.id } }))
+        .profileImagePath,
+      dir + "/winner.webp",
+    )
+    beforeStore = undefined
     const managementBase = base.replace(/\/auth$/, "")
     const accountListResponse = await fetch(`${managementBase}/users`, {
       headers: { authorization: `Bearer ${actors[3]!.token}` },

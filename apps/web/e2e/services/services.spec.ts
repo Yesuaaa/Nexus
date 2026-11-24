@@ -73,6 +73,44 @@ test.describe("Service management", () => {
     expect(panelBounds?.width).toBeLessThan(620)
   })
 
+  test("service image picker accepts JPEG, PNG, and WebP files", async ({
+    page,
+  }) => {
+    await restoreSession(page, "ADMIN")
+    await page.goto("/services")
+    await page
+      .getByRole("button", { name: "Create Service", exact: true })
+      .click()
+    const dialog = page.getByRole("dialog")
+    const input = dialog.locator("#service-image")
+    await expect(input).toHaveAttribute(
+      "accept",
+      "image/jpeg,image/png,image/webp",
+    )
+    const image = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lY4AAAAASUVORK5CYII=",
+      "base64",
+    )
+    for (const [extension, mimeType] of [
+      ["jpg", "image/jpeg"],
+      ["png", "image/png"],
+      ["webp", "image/webp"],
+    ] as const) {
+      await input.setInputFiles({
+        name: `service.${extension}`,
+        mimeType,
+        buffer: image,
+      })
+      await expect(
+        dialog.getByRole("button", { name: "Remove image", exact: true }),
+      ).toBeVisible()
+      await expect(dialog.getByRole("alert")).toHaveCount(0)
+      await dialog
+        .getByRole("button", { name: "Remove image", exact: true })
+        .click()
+    }
+  })
+
   test("service search shows aligned skeleton rows before its empty result", async ({
     page,
   }) => {
