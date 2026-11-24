@@ -1978,9 +1978,99 @@ test(
         )
         assert.equal(cancellation.status, 200, await cancellation.text())
         await expectOrganizationDetail(cancelled.request.id, "CANCELLED")
+
+        // PG-013-F001-A008-T002: compare the organization summary projection
+        // with all persisted status/type groups visible to Superadmin.
+        const persistedLeave = await prisma.leaveRequest.findMany({
+          select: { status: true, type: true },
+        })
+        const expectedGroups = new Map<
+          string,
+          { status: string; type: string; count: number }
+        >()
+        for (const row of persistedLeave) {
+          const key = `${row.status}:${row.type}`
+          const group = expectedGroups.get(key)
+          expectedGroups.set(key, {
+            status: row.status,
+            type: row.type,
+            count: (group?.count ?? 0) + 1,
+          })
+        }
+        const overview = await api(reader, "/leave/overview?scope=team")
+        assert.equal(overview.status, 200, await overview.clone().text())
+        const { groups } = (await overview.json()) as {
+          groups: { status: string; type: string; count: number }[]
+        }
+        assert.ok(
+          groups.every(
+            (group) =>
+              JSON.stringify(Object.keys(group).sort()) ===
+              JSON.stringify(["count", "status", "type"]),
+          ),
+        )
+        const sortGroups = (
+          values: { status: string; type: string; count: number }[],
+        ) =>
+          values.sort((left, right) =>
+            `${left.status}:${left.type}`.localeCompare(
+              `${right.status}:${right.type}`,
+            ),
+          )
+        assert.deepEqual(
+          sortGroups(groups),
+          sortGroups([...expectedGroups.values()]),
+        )
+
         await expectLeaveReadDenied(
           await api(reader, `/leave/requests/${randomUUID()}`),
         )
+
+        // PG-013-F001-A015-T002: cover query allowlists, authentication,
+        // supported roles, and the Staff team-scope boundary.
+        const unsupported = await account("overview-user", "USER")
+        const anonymousOverview = await fetch(
+          `${base}/leave/overview?scope=team`,
+        )
+        const missingScope = await api(superadmin, "/leave/overview")
+        const invalidScope = await api(
+          superadmin,
+          "/leave/overview?scope=invalid",
+        )
+        const unknownQuery = await api(
+          superadmin,
+          "/leave/overview?scope=team&unexpected=true",
+        )
+        assert.equal(anonymousOverview.status, 401)
+        assert.equal(missingScope.status, 400)
+        assert.equal(invalidScope.status, 400)
+        assert.equal(unknownQuery.status, 400)
+        const unsupportedRole = await api(
+          unsupported,
+          "/leave/overview?scope=mine",
+        )
+        const nonHeadTeam = await api(employee, "/leave/overview?scope=team")
+        assert.equal(unsupportedRole.status, 403)
+        assert.equal(nonHeadTeam.status, 403)
+        for (const denied of [
+          anonymousOverview,
+          unsupportedRole,
+          nonHeadTeam,
+        ]) {
+          const body = (await denied.json()) as Record<string, unknown>
+          assert.equal("groups" in body, false)
+        }
+        for (const [actor, scope] of [
+          [employee, "mine"],
+          [head, "team"],
+          [admin, "team"],
+          [superadmin, "team"],
+        ] as const) {
+          assert.equal(
+            (await api(actor, `/leave/overview?scope=${scope}`)).status,
+            200,
+          )
+        }
       },
     )
 

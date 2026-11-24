@@ -1285,17 +1285,75 @@ test(
           (await request(admin, "/adjustments?status=invalid")).status,
           400,
         )
+        const summaryUser = await account("summary-user", "USER")
+        const anonymous = await fetch(
+          base + "/attendance/adjustments/overview?scope=mine",
+        )
+        assert.equal(anonymous.status, 401)
+        const unsupportedRole = await request(
+          summaryUser,
+          "/adjustments/overview?scope=mine",
+        )
+        assert.equal(unsupportedRole.status, 403)
+        const unknownQuery = await request(
+          other,
+          "/adjustments/overview?scope=mine&unexpected=true",
+        )
+        assert.equal(unknownQuery.status, 400)
+        const deniedBody = (await unsupportedRole.json()) as Record<
+          string,
+          unknown
+        >
+        assert.equal("groups" in deniedBody, false)
+        const anonymousBody = (await anonymous.json()) as Record<
+          string,
+          unknown
+        >
+        assert.equal("groups" in anonymousBody, false)
+
         const result = await request(other, "/adjustments/overview?scope=mine")
         assert.equal(result.status, 200)
         const summary = (await result.json()) as {
-          groups: { type: string; status: string; count: number }[]
+          groups: {
+            type: string
+            status: string
+            count: number
+            overtimeMinutes: number
+            awaitingHrPending: number
+          }[]
         }
-        assert.equal(
-          summary.groups.find(
-            (g) => g.type === "CORRECTION" && g.status === "PENDING",
-          )?.count,
-          27,
+        const pendingCorrection = summary.groups.find(
+          (group) => group.type === "CORRECTION" && group.status === "PENDING",
         )
+        assert.ok(pendingCorrection)
+        assert.deepEqual(Object.keys(pendingCorrection).sort(), [
+          "awaitingHrPending",
+          "count",
+          "overtimeMinutes",
+          "status",
+          "type",
+        ])
+        assert.deepEqual(
+          {
+            type: pendingCorrection.type,
+            status: pendingCorrection.status,
+            count: pendingCorrection.count,
+            overtimeMinutes: pendingCorrection.overtimeMinutes,
+            awaitingHrPending: pendingCorrection.awaitingHrPending,
+          },
+          {
+            type: "CORRECTION",
+            status: "PENDING",
+            count: 27,
+            overtimeMinutes: 0,
+            awaitingHrPending: 27,
+          },
+        )
+        // PG-013-F001-A014-T002: omission defaults to the personal scope.
+        const omittedScope = await request(other, "/adjustments/overview")
+        assert.equal(omittedScope.status, 200)
+        assert.deepEqual(await omittedScope.json(), summary)
+
         await prisma.department.update({
           where: { id: department.id },
           data: { headId: head.user.id },

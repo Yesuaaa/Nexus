@@ -6613,7 +6613,8 @@ test.describe("WC-06-F01 Requests Overview", () => {
   }) => {
     await signIn(page, "head")
     await page.goto(requestsOverviewPage)
-    await expectOverviewTotals(page, await overviewTotals("head", "team"))
+    const teamTotals = await overviewTotals("head", "team")
+    await expectOverviewTotals(page, teamTotals)
     const ui = overviewSections(page)
     const mine = await holdOverview(page, "leave", "mine")
     try {
@@ -6655,6 +6656,16 @@ test.describe("WC-06-F01 Requests Overview", () => {
       )
       expect(restored.status).toBe(200)
     }
+
+    // PG-013-F001-A011-T006: retry the real team reads after restoring Head.
+    const recoveredResponses = [
+      overviewResponse(page, "adjustments", "team"),
+      overviewResponse(page, "leave", "team"),
+    ]
+    await page.getByRole("button", { name: "Retry", exact: true }).click()
+    const recovered = await Promise.all(recoveredResponses)
+    expect(recovered.map((response) => response.status())).toEqual([200, 200])
+    await expectOverviewTotals(page, teamTotals)
   })
 
   test("hides successful sibling counts after a real 401 response", async ({
@@ -6784,6 +6795,177 @@ test.describe("WC-06-F01 Requests Overview", () => {
       }
     })
   }
+
+  test("[PG-013-F001-A002-T001] summary links navigate to their canonical queues", async ({
+    page,
+  }) => {
+    await signIn(page, "head")
+    await page.goto(requestsOverviewPage)
+    const destinations = [
+      {
+        section: overviewSections(page).overtime,
+        link: "View requests",
+        path: "/attendance/requests/overtime",
+        heading: "Overtime",
+      },
+      {
+        section: overviewSections(page).corrections,
+        link: "View requests",
+        path: "/attendance/requests/corrections",
+        heading: "Attendance Corrections",
+      },
+      {
+        section: overviewSections(page).leave,
+        link: "View leave requests",
+        path: "/attendance/requests/leave",
+        heading: "Leave Requests",
+      },
+    ] as const
+    for (const destination of destinations) {
+      await destination.section
+        .getByRole("link", { name: destination.link, exact: true })
+        .click()
+      await expect(page).toHaveURL(new RegExp(destination.path + "$"))
+      await expect(
+        page.getByRole("heading", {
+          level: 1,
+          name: destination.heading,
+          exact: true,
+        }),
+      ).toBeVisible()
+      if (destination !== destinations.at(-1))
+        await page.goto(requestsOverviewPage)
+    }
+  })
+
+  test("[PG-013-F001-A012-T002] ignores pending response after overview unmount and revisit", async ({
+    page,
+  }) => {
+    const oldTotals = await overviewTotals("head", "team")
+    const currentTotals = await overviewTotals("pg007-overview", "mine")
+    expect(oldTotals.total).toBeGreaterThan(currentTotals.total)
+    const pageErrors: string[] = []
+    page.on("pageerror", (error) => pageErrors.push(error.message))
+    const pending = await holdOverview(page, "leave", "team")
+    let revisited: Page | undefined
+    try {
+      await signIn(page, "head")
+      await page.goto(requestsOverviewPage)
+      await pending.started
+      await expectCombinedUnavailable(page, true)
+      await page.goto("/attendance/overview")
+      await expect(
+        page.getByRole("heading", {
+          level: 1,
+          name: "Attendance Overview",
+          exact: true,
+        }),
+      ).toBeVisible()
+      revisited = await page.context().newPage()
+      await routeAttendanceApi(revisited)
+      revisited.on("pageerror", (error) => pageErrors.push(error.message))
+      await signIn(revisited, "pg007-overview")
+      await revisited.goto(requestsOverviewPage)
+      await expectOverviewTotals(revisited, currentTotals)
+      await expect(
+        overviewSections(revisited).status.getByText(
+          "No requests in this scope.",
+        ),
+      ).toBeVisible()
+      pending.release()
+      await pending.finished
+      await expectOverviewTotals(revisited, currentTotals)
+      await expect(
+        overviewSections(revisited).status.getByText(
+          "No requests in this scope.",
+        ),
+      ).toBeVisible()
+      expect(await overviewTotals("pg007-overview", "mine")).toEqual(
+        currentTotals,
+      )
+      expect(currentTotals.total).not.toBe(oldTotals.total)
+      expect(pageErrors).toEqual([])
+    } finally {
+      pending.release()
+      await revisited?.close()
+    }
+  })
+
+  test("[PG-013-F001-A016-T001] scope toggle supports keyboard navigation and activation", async ({
+    page,
+  }) => {
+    await signIn(page, "head")
+    await page.goto(requestsOverviewPage)
+    await expectOverviewTotals(page, await overviewTotals("head", "team"))
+    const scope = overviewSections(page).scope
+    const department = scope.getByRole("button", {
+      name: "Department requests",
+      exact: true,
+    })
+    const mine = scope.getByRole("button", {
+      name: "My requests",
+      exact: true,
+    })
+    await expect(scope).toHaveAccessibleName("Request summary view")
+    await expect(department).toHaveAttribute("aria-pressed", "true")
+    await department.focus()
+    await page.keyboard.press("Tab")
+    await expect(mine).toBeFocused()
+    await page.keyboard.press("Space")
+    await expect(mine).toHaveAttribute("aria-pressed", "true")
+    await expect(department).toHaveAttribute("aria-pressed", "false")
+    await expectOverviewTotals(page, await overviewTotals("head", "mine"))
+    await department.focus()
+    await page.keyboard.press("Enter")
+    await expect(department).toHaveAttribute("aria-pressed", "true")
+    await expect(mine).toHaveAttribute("aria-pressed", "false")
+    await expectOverviewTotals(page, await overviewTotals("head", "team"))
+  })
+
+  test("[PG-013-F001-A017-T001] overview remains reachable without horizontal overflow at supported widths", async ({
+    page,
+  }) => {
+    await signIn(page, "head")
+    await page.goto(requestsOverviewPage)
+    await expectOverviewTotals(page, await overviewTotals("head", "team"))
+    for (const width of [390, 820, 1440]) {
+      await page.setViewportSize({ width, height: 900 })
+      const ui = overviewSections(page)
+      for (const section of [
+        ui.figures,
+        ui.status,
+        ui.attention,
+        ui.leave,
+        ui.corrections,
+        ui.overtime,
+        ui.scope,
+      ])
+        await expect(section).toBeVisible()
+      await expect(
+        ui.overtime.getByRole("link", { name: "View requests", exact: true }),
+      ).toBeVisible()
+      await expect(
+        ui.corrections.getByRole("link", {
+          name: "View requests",
+          exact: true,
+        }),
+      ).toBeVisible()
+      await expect(
+        ui.leave.getByRole("link", {
+          name: "View leave requests",
+          exact: true,
+        }),
+      ).toBeVisible()
+      const dimensions = await page.evaluate(() => ({
+        clientWidth: document.documentElement.clientWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+      }))
+      expect(
+        dimensions.scrollWidth,
+        "document width at " + width + " CSS pixels",
+      ).toBeLessThanOrEqual(dimensions.clientWidth)
+    }
+  })
 })
 
 test("WC-06-F03 accounts for terminal Leave and groups matching review stages", async ({
@@ -6981,6 +7163,7 @@ test("WC-06-F03 accounts for terminal Leave and groups matching review stages", 
   const mine = ui.scope.getByRole("button", { name: "My requests" })
   const team = ui.scope.getByRole("button", { name: "Department requests" })
   async function expectEmpty() {
+    // PG-013-F001-A010-T002: preserve each section-specific empty state.
     await expect(ui.status.getByText("0 total", { exact: true })).toBeVisible()
     await expect(
       ui.status.getByText("No requests in this scope."),
@@ -6989,6 +7172,16 @@ test("WC-06-F03 accounts for terminal Leave and groups matching review stages", 
     await expect(
       ui.attention.getByText("0 awaiting", { exact: true }),
     ).toBeVisible()
+    for (const section of [ui.corrections, ui.overtime]) {
+      await expect(
+        section.getByText("No requests in this scope.", { exact: true }),
+      ).toBeVisible()
+      await expect(section.getByRole("table")).toHaveCount(0)
+    }
+    await expect(
+      ui.leave.getByText("No leave requests in this scope.", { exact: true }),
+    ).toBeVisible()
+    await expect(ui.leave.getByRole("table")).toHaveCount(0)
   }
   await mine.click()
   await expectEmpty()
@@ -7068,6 +7261,53 @@ test("WC-06-F03 accounts for terminal Leave and groups matching review stages", 
   expect(writes).toEqual([])
   expect(await snapshot()).toEqual(before)
   await clock("2026-11-13T20:00:00+08:00")
+
+  // PG-013-F001-A006-T002: one Leave request populates only Pending.
+  const sparseRequest = await leaveFixtureCall(
+    "pg013-sparse-head",
+    "/leave/requests",
+    {
+      requestKey: randomUUID(),
+      type: "ANNUAL",
+      reason: "PG013 one-record status boundary",
+      startDate: "2026-12-18",
+      endDate: "2026-12-18",
+    },
+  )
+  expect(sparseRequest.status, await sparseRequest.clone().text()).toBe(201)
+  await signIn(page, "pg013-sparse-head")
+  await page.goto(requestsOverviewPage)
+  const sparseTotals = await overviewTotals("pg013-sparse-head", "team")
+  expect(sparseTotals).toEqual({
+    total: 1,
+    leave: 1,
+    corrections: 0,
+    overtime: 0,
+    pending: 1,
+    awaiting: 1,
+  })
+  await expectOverviewTotals(page, sparseTotals)
+  const sparseRows = await tableRows(overviewSections(page).status)
+  expect(sparseRows).toEqual([
+    ["Pending", "1", "100%"],
+    ["Verified", "0", "0%"],
+    ["Approved", "0", "0%"],
+    ["Rejected", "0", "0%"],
+    ["Cancelled", "0", "0%"],
+    ["Reversed", "0", "0%"],
+  ])
+  expect(sparseRows.some(([, count]) => /NaN|Infinity/.test(count))).toBe(false)
+  for (const [status, count] of sparseRows) {
+    const bar = overviewSections(page).status.getByRole("img", {
+      name: status + ": " + count + " requests",
+      exact: true,
+    })
+    await expect(bar).toHaveCount(1)
+    await expect(bar.locator(":scope > span")).toHaveAttribute(
+      "style",
+      "width: " + (Number(count) === 1 ? "100%" : "0%") + ";",
+    )
+  }
 })
 
 test("stale leave refresh clears details when Head access is revoked", async ({
