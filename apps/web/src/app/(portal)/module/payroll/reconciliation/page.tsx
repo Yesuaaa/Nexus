@@ -1,4 +1,6 @@
 "use client"
+
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { FormTextarea } from "@/components/ui/form-input"
 
@@ -156,6 +158,7 @@ function Details({ name, onClick }: { name: string; onClick: () => void }) {
       onClick={onClick}
     >
       <Eye size={15} aria-hidden="true" />
+      <HoverTooltip>View reconciliation details</HoverTooltip>
     </Button>
   )
 }

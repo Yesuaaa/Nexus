@@ -3,6 +3,8 @@ import { PrismaPg } from "@prisma/adapter-pg"
 import { PrismaClient } from "../generated/prisma/client.js"
 import { databasePoolConfig } from "./postgres-connection.js"
 
+export { databasePoolConfig }
+
 let client: PrismaClient | undefined
 
 export function getPrisma() {

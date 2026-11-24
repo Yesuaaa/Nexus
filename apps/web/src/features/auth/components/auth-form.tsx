@@ -11,7 +11,7 @@ import {
 } from "../api/auth-api"
 import type { AuthCopy } from "../content/auth-copy"
 import { requestErrorMessage } from "../api/auth-errors"
-import { Brand, PasswordField, TextField } from "./auth-fields"
+import { PasswordField, TextField } from "./auth-fields"
 import { focusOutline } from "../styles/auth-styles"
 import {
   fieldIds,
@@ -132,27 +132,43 @@ export function AuthContent({
     <div
       className={
         portal === "workforce"
-          ? "w-full max-w-[440px]"
+          ? "w-full max-w-[480px]"
           : "flex min-h-0 flex-1 justify-center overflow-y-auto px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-[850px]:overflow-visible max-[850px]:px-6"
       }
     >
       <div
         className={
           portal === "workforce"
-            ? "auth-form-enter w-full rounded-xl border border-border bg-card px-8 py-10 max-[420px]:px-6"
+            ? "auth-form-enter w-full rounded-2xl border border-[#dce4ee] bg-card px-14 pt-18 pb-16 shadow-[0_12px_40px_rgba(24,48,78,0.06)] max-[420px]:px-8"
             : `auth-form-enter my-auto w-full max-w-[400px] min-w-0 max-[850px]:pt-8 max-[850px]:pb-14 ${mode === "register" ? "py-0" : "py-12"}`
         }
       >
         <div className="text-center">
-          <Brand />
-          <h2 className="inline-block bg-[linear-gradient(90deg,#172735_0%,#246ea0_55%,#1cc5d0_100%)] bg-clip-text text-[25px] leading-[1.25] font-bold tracking-[-0.03em] text-transparent">
+          {portal === "workforce" && (
+            <p className="mb-1 text-[10px] leading-4 font-semibold tracking-[0.12em] text-[#8a94a6] uppercase">
+              {copy.workforceLoginEyebrow}
+            </p>
+          )}
+          <h2
+            className={
+              portal === "workforce"
+                ? "text-[25px] leading-[1.1] font-bold tracking-[-0.03em] text-foreground"
+                : "text-[25px] leading-[1.25] font-bold tracking-[-0.03em] text-foreground"
+            }
+          >
             {mode === "register"
               ? copy.registerTitle
               : portal === "workforce"
                 ? copy.workforceLoginTitle
                 : copy.loginTitle}
           </h2>
-          <p className="mt-0 text-sm leading-[1.4] text-[#5b709e]">
+          <p
+            className={
+              portal === "workforce"
+                ? "mt-1 text-sm leading-[1.25] text-[#5b709e]"
+                : "mt-2 text-sm leading-[1.4] text-[#5b709e]"
+            }
+          >
             {mode === "register"
               ? copy.registerSubtitle
               : portal === "workforce"
@@ -163,7 +179,7 @@ export function AuthContent({
 
         <Form
           ref={formRef}
-          className={`grid gap-2 ${mode === "register" ? "mt-7" : "mt-9"}`}
+          className={`grid gap-2 ${portal === "workforce" ? "mt-12" : mode === "register" ? "mt-7" : "mt-9"}`}
           noValidate
           onSubmit={(event) => void handleSubmit(event)}
         >
@@ -262,7 +278,8 @@ export function AuthContent({
             </div>
           )}
           <Button
-            className={`grid h-[46px] w-full place-items-center rounded-md border-0 bg-[#253f8c] text-sm font-bold text-white transition-[background,transform] duration-150 hover:bg-[#1a3276] hover:enabled:-translate-y-px disabled:cursor-wait disabled:opacity-70 motion-reduce:transition-none ${focusOutline} ${mode === "register" ? "mt-2" : ""}`}
+            variant={portal === "workforce" ? "brand" : "default"}
+            className={`grid h-[46px] w-full place-items-center rounded-md border-0 text-sm font-bold text-white transition-[background,transform] duration-150 hover:enabled:-translate-y-px disabled:cursor-wait disabled:opacity-70 motion-reduce:transition-none ${portal === "workforce" ? "mt-2" : "bg-[#253f8c] hover:bg-[#1a3276]"} ${focusOutline} ${mode === "register" ? "mt-2" : ""}`}
             type="submit"
             disabled={pending}
           >
@@ -275,6 +292,12 @@ export function AuthContent({
                 : copy.createAccountButton}
           </Button>
         </Form>
+
+        {portal === "workforce" && mode === "login" && (
+          <p className="mt-6 border-t border-[#e7edf4] pt-6 text-center text-xs text-[#8a9dbb]">
+            Converyn Workforce Authentication
+          </p>
+        )}
 
         {portal === "client" && (
           <div className="mt-6 space-y-2 text-center text-sm leading-[1.4] text-[#52688d]">

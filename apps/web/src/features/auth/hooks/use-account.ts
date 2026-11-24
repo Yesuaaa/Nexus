@@ -9,7 +9,7 @@ import {
 import { watchVisibleRefresh } from "@/lib/visible-refresh"
 import { loginPathForRole } from "../model/auth-portal"
 import type { Account } from "../model/types"
-export function useAccount(onReady?: (succeeded: boolean) => void) {
+export function useAccount() {
   const router = useRouter()
   const [account, setAccount] = useState<Account | null>(null)
   const [error, setError] = useState("")
@@ -24,7 +24,6 @@ export function useAccount(onReady?: (succeeded: boolean) => void) {
       revoked = true
       clearToken()
       setAccount(null)
-      onReady?.(false)
       router.replace(loginPath)
     }
     const refresh = async () => {
@@ -46,7 +45,6 @@ export function useAccount(onReady?: (succeeded: boolean) => void) {
           setError("")
           if (!loaded) {
             loaded = true
-            onReady?.(true)
           }
         }
       } catch (reason) {
@@ -60,7 +58,6 @@ export function useAccount(onReady?: (succeeded: boolean) => void) {
           setError(
             "We couldn’t load your account. Please refresh to try again.",
           )
-          onReady?.(false)
         }
       } finally {
         inFlight = false
@@ -75,6 +72,6 @@ export function useAccount(onReady?: (succeeded: boolean) => void) {
       stop()
       window.removeEventListener("nexus:account-updated", accountUpdated)
     }
-  }, [router, onReady])
+  }, [router])
   return { account, error }
 }

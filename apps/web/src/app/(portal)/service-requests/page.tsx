@@ -1,3 +1,4 @@
+import { ModuleTransition } from "@/components/layout/module-transition"
 import { ClientServiceRequestsPage } from "@/features/services/pages/client-service-requests-page"
 
 export default async function Page({
@@ -7,5 +8,9 @@ export default async function Page({
 }) {
   const { request } = await searchParams
   const requestId = typeof request === "string" ? request : undefined
-  return <ClientServiceRequestsPage key={requestId} requestId={requestId} />
+  return (
+    <ModuleTransition>
+      <ClientServiceRequestsPage key={requestId} requestId={requestId} />
+    </ModuleTransition>
+  )
 }

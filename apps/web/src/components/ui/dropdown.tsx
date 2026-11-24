@@ -98,10 +98,10 @@ export function Dropdown<T extends string>({
       menu.style.lineHeight = cs.lineHeight
       menu.style.letterSpacing = cs.letterSpacing
       menu.style.color = cs.color
-      menu.style.minWidth = `${Math.min(trigger.offsetWidth, viewportWidth - margin * 2)}px`
-      menu.style.maxWidth = `${Math.min(Math.max(280, trigger.offsetWidth), viewportWidth - margin * 2)}px`
-
       const t = trigger.getBoundingClientRect()
+      menu.style.width = `${Math.min(t.width, viewportWidth - margin * 2)}px`
+      menu.style.minWidth = "0"
+      menu.style.maxWidth = `${viewportWidth - margin * 2}px`
       const menuWidth = menu.offsetWidth
       const menuHeight =
         menu.scrollHeight + menu.offsetHeight - menu.clientHeight
@@ -211,7 +211,9 @@ export function Dropdown<T extends string>({
           }
         }}
       >
-        <span>{options[selectedIndex]?.label}</span>
+        <span className="min-w-0 break-words">
+          {options[selectedIndex]?.label}
+        </span>
         <svg
           className="flex-none fill-none stroke-[#526686] stroke-[1.5] [stroke-linecap:round] [stroke-linejoin:round]"
           viewBox="0 0 12 12"
@@ -227,7 +229,7 @@ export function Dropdown<T extends string>({
           <div
             ref={menuRef}
             className={cn(
-              "fixed z-[130] w-max max-w-[min(280px,calc(100vw-40px))] overflow-y-auto overscroll-contain",
+              "fixed z-[130] min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain",
               dropdownMenuClass,
               menuClassName,
             )}
@@ -257,7 +259,9 @@ export function Dropdown<T extends string>({
                 className={dropdownItemClass}
                 onClick={() => choose(option.value)}
               >
-                <span>{option.label}</span>
+                <span className="min-w-0 whitespace-normal break-words">
+                  {option.label}
+                </span>
                 {option.value === value && <CheckIcon />}
               </button>
             ))}

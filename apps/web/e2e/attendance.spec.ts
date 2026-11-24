@@ -3,6 +3,12 @@ import { spawn, type ChildProcess } from "node:child_process"
 import { randomUUID } from "node:crypto"
 import path from "node:path"
 import { defaultPreferences } from "../src/features/settings/api/settings-api"
+import type {
+  AttendanceAuditEvent,
+  AttendanceHistory,
+  AttendanceState,
+  AttendanceWorkday,
+} from "../src/features/attendance/api/attendance-api"
 
 test.describe.configure({ mode: "serial" })
 type Fixture = {
@@ -115,6 +121,13 @@ async function signIn(page: Page, actor: string) {
     sessionStorage.setItem("nexus.auth.refreshToken", session.refreshToken)
   }, fixture.actors[actor])
 }
+async function setSession(page: Page, actor: string) {
+  await page.evaluate((session) => {
+    sessionStorage.clear()
+    sessionStorage.setItem("nexus.auth.token", session.token)
+    sessionStorage.setItem("nexus.auth.refreshToken", session.refreshToken)
+  }, fixture.actors[actor])
+}
 async function createApprovedCorrection(
   startedAt: string,
   endedAt: string,
@@ -219,6 +232,19 @@ test("real employee clocks overnight and never receives Employee Management", as
   await clock("2026-11-14T04:00:00+08:00")
   await page.getByRole("button", { name: "Refresh", exact: true }).click()
   await expect(page.getByLabel("Elapsed work")).toHaveText(/08:00:0/)
+  // PG-006-F001-A003-T007 adds visible workday/progress assertions to this
+  // existing persistence-backed clocking flow.
+  await expect(page.getByText("Clocked in", { exact: true })).toBeVisible()
+  const daily = page.getByRole("region", { name: "Daily required hours" })
+  await expect(
+    daily.getByRole("progressbar", {
+      name: "Daily required-hours progress",
+    }),
+  ).toHaveAttribute("aria-valuenow", "100")
+  await expect(daily).toContainText("8.00")
+  await expect(daily).toContainText("8 hours")
+  await expect(daily.getByText("Daily requirement complete")).toBeVisible()
+  await expect(daily.getByText("Browser flexible policy")).toBeVisible()
   await confirm(page, "Clock out")
   await expect(
     page
@@ -239,8 +265,172 @@ test("real employee clocks overnight and never receives Employee Management", as
   await expect(
     page.getByText("Overnight", { exact: true }).first(),
   ).toBeVisible()
+
+  // PG-006-F001-A009-T017 adds deterministic assertions for optional row
+  // fields while retaining the real persistence assertions above.
+  const summaryPage = await page.context().newPage()
+  await signIn(summaryPage, "staff")
+  const summaryState: AttendanceState = {
+    asOf: "2026-11-14T04:00:00.000Z",
+    employeeId: fixture.actors.staff.employeeId,
+    needsPolicy: true,
+    workday: null,
+  }
+  const summarySession = {
+    id: "pg006-summary-session",
+    startedAt: "2026-11-13T12:00:00.000Z",
+    endedAt: "2026-11-13T20:00:00.000Z",
+    breaks: [],
+  }
+  const summaryWorkday: AttendanceWorkday = {
+    id: "pg006-summary-workday",
+    employeeId: fixture.actors.staff.employeeId,
+    workDate: "2026-11-13",
+    timeZone: "Asia/Manila",
+    isWorkingDay: true,
+    requiredMinutes: 480,
+    workedMilliseconds: 8 * 60 * 60 * 1000,
+    workedHours: 8,
+    remainingMinutes: 0,
+    excessMinutes: 0,
+    excessRequiresReview: false,
+    progressPercent: 100,
+    status: "COMPLETE",
+    isComplete: true,
+    activeSessionId: null,
+    activeBreakId: null,
+    sessions: [summarySession],
+    policy: {
+      id: "pg006-summary-policy",
+      name: "PG-006 scheduled policy",
+      unpaidBreaksEnabled: true,
+      overnightRequiresReview: false,
+    },
+    schedule: {
+      startsAt: "09:00",
+      endsAt: "17:00",
+      unpaidBreakMinutes: 30,
+      lateArrivalMinutes: 15,
+      earlyDepartureMinutes: 20,
+    },
+    overnightRequiresReview: false,
+    pendingCorrections: 1,
+  }
+  const summaryHistory: AttendanceHistory = {
+    asOf: summaryState.asOf,
+    employeeId: fixture.actors.staff.employeeId,
+    total: 1,
+    page: 1,
+    pageSize: 20,
+    workdays: [summaryWorkday],
+  }
+  await summaryPage.route("**/api/attendance/me/current", (route) =>
+    route.fulfill({ json: summaryState }),
+  )
+  await summaryPage.route("**/api/attendance/me/history**", (route) =>
+    route.fulfill({ json: summaryHistory }),
+  )
+  await summaryPage.goto("/attendance/check-ins?pg006-summary=1")
+  const summaryRow = summaryPage
+    .getByRole("table", { name: "Attendance history" })
+    .getByRole("row")
+    .filter({ hasText: "2026-11-13" })
+  await expect(summaryRow).toContainText("Nov 13, 2026, 8:00 PM")
+  await expect(summaryRow).toContainText("Nov 14, 2026, 4:00 AM")
+  await expect(summaryRow).toContainText("08:00:00 / 8h")
+  await expect(summaryRow).toContainText("Complete")
+  await expect(summaryRow).toContainText("Overnight")
+  await expect(summaryRow).toContainText("Correction pending")
+  await expect(summaryRow).toContainText("Late arrival")
+  await expect(summaryRow).toContainText("Early departure")
+  await summaryPage.close()
+
   await page.goto("/employees")
   await expect(page).toHaveURL(/\/module$/)
+})
+
+test("[PG-006-F001-A004-T009] the page continues the prior overnight workday and persists the added session", async ({
+  page,
+}) => {
+  await clock("2026-12-07T20:00:00+08:00")
+  const overnightActor = fixture.actors["pg006-overnight"]
+  const overnightHeaders = {
+    authorization: `Bearer ${overnightActor.token}`,
+    "content-type": "application/json",
+  }
+  const started = await fetch(`${api}/api/attendance/me/clock-in`, {
+    method: "POST",
+    headers: overnightHeaders,
+    body: "{}",
+  })
+  expect(started.status, await started.clone().text()).toBe(201)
+  const startState = (await started.json()) as {
+    workday: { id: string; activeSessionId: string }
+  }
+  const workdayId = startState.workday.id
+  const firstSessionId = startState.workday.activeSessionId
+
+  await clock("2026-12-08T04:00:00+08:00")
+  const firstClockOut = await fetch(`${api}/api/attendance/me/clock-out`, {
+    method: "POST",
+    headers: overnightHeaders,
+    body: JSON.stringify({ sessionId: firstSessionId }),
+  })
+  expect(firstClockOut.status, await firstClockOut.clone().text()).toBe(200)
+  await clock("2026-12-08T04:30:00+08:00")
+
+  await signIn(page, "pg006-overnight")
+  await page.goto("/attendance/check-ins")
+  const continueButton = page.getByRole("button", {
+    name: "Continue 2026-12-07",
+    exact: true,
+  })
+  await expect(continueButton).toBeVisible()
+  await continueButton.click()
+  const dialog = page.getByRole("dialog")
+  const continuationRequest = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === "/api/attendance/me/clock-in",
+  )
+  await dialog
+    .getByRole("button", { name: "Continue overnight workday", exact: true })
+    .click()
+  const posted = await continuationRequest
+  expect(
+    JSON.parse(posted.postData() ?? "{}") as { workdayId?: string },
+  ).toEqual({ workdayId })
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByText("Clocked in", { exact: true })).toBeVisible()
+
+  await clock("2026-12-08T05:30:00+08:00")
+  await confirm(page, "Clock out")
+  const historyResponse = await fetch(
+    `${api}/api/attendance/me/history?from=2026-12-07&to=2026-12-08`,
+    { headers: { authorization: `Bearer ${overnightActor.token}` } },
+  )
+  expect(historyResponse.status).toBe(200)
+  const history = (await historyResponse.json()) as {
+    workdays: {
+      id: string
+      workDate: string
+      requiredMinutes: number
+      workedHours: number
+      sessions: { id: string }[]
+    }[]
+  }
+  expect(history.workdays).toEqual([
+    expect.objectContaining({
+      id: workdayId,
+      workDate: "2026-12-07",
+      requiredMinutes: 480,
+      workedHours: 9,
+      sessions: [
+        expect.objectContaining({ id: firstSessionId }),
+        expect.objectContaining({ id: expect.any(String) }),
+      ],
+    }),
+  ])
 })
 
 test("unpaid break timer freezes and correction request uses the real API", async ({
@@ -296,6 +486,273 @@ test("unpaid break timer freezes and correction request uses the real API", asyn
   await signIn(page, "head")
   await page.goto("/attendance/adjustments")
   await expect(page.getByText("Pending", { exact: true })).toBeVisible()
+})
+
+test("[PG-004-F001-A006-T008] mixed queue submits and reloads a persisted correction", async ({
+  page,
+}) => {
+  const reason = `PG-004 direct correction ${randomUUID()}`
+  await clock("2026-11-17T12:00:00+08:00")
+  await signIn(page, "staff")
+  await page.goto("/attendance/adjustments")
+  await page
+    .getByRole("button", { name: "Request correction", exact: true })
+    .click()
+  const dialog = page.getByRole("dialog", {
+    name: "Request missing attendance",
+  })
+  await dialog
+    .getByLabel("Actual clock-in", { exact: true })
+    .fill("2026-11-16T09:00")
+  await dialog
+    .getByLabel("Actual clock-out", { exact: true })
+    .fill("2026-11-16T10:00")
+  await dialog.getByLabel("Reason", { exact: true }).fill(reason)
+
+  const submitted = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/api/attendance/adjustments",
+  )
+  const refreshed = page
+    .waitForResponse((response) => {
+      const url = new URL(response.url())
+      return (
+        response.request().method() === "GET" &&
+        url.pathname === "/api/attendance/adjustments" &&
+        url.searchParams.get("scope") === "mine"
+      )
+    })
+    .catch(() => undefined)
+  await dialog
+    .getByRole("button", { name: "Submit request", exact: true })
+    .click()
+  const createdResponse = await submitted
+  const createdBody = await createdResponse.text()
+  expect(createdResponse.status(), createdBody).toBe(201)
+  const { adjustment: created } = JSON.parse(createdBody) as {
+    adjustment: {
+      id: string
+      type: string
+      status: string
+      requestedById: string
+      reason: string
+    }
+  }
+  expect(created).toMatchObject({
+    type: "CORRECTION",
+    status: "PENDING",
+    requestedById: fixture.actors.staff.userId,
+    reason,
+  })
+  expect((await refreshed)?.status()).toBe(200)
+  await expect(dialog).toHaveCount(0)
+  await expect(
+    page.getByText("Correction requested", { exact: true }),
+  ).toBeVisible()
+  const row = page.getByRole("row").filter({ hasText: reason })
+  await expect(row.getByText("Correction", { exact: true })).toBeVisible()
+  await expect(row.getByText("Pending", { exact: true })).toBeVisible()
+
+  const persisted = await overtimeFixtureCall(
+    "staff",
+    `${overtimeAdjustments}/${created.id}`,
+  )
+  expect(persisted.status, await persisted.clone().text()).toBe(200)
+  expect(await persisted.json()).toMatchObject({
+    adjustment: {
+      id: created.id,
+      type: "CORRECTION",
+      status: "PENDING",
+      requestedById: fixture.actors.staff.userId,
+      reason,
+    },
+  })
+})
+
+test("[PG-004-F001-A009-T014] mixed queue finalizes and rejects corrections", async ({
+  page,
+}) => {
+  await clock("2026-11-20T12:00:00+08:00")
+  const approvedReason = `PG-004 HR approval ${randomUUID()}`
+  const rejectedReason = `PG-004 HR rejection ${randomUUID()}`
+  const approvedTimes = {
+    startedAt: "2026-11-18T02:00:00.000Z",
+    endedAt: "2026-11-18T03:00:00.000Z",
+  }
+  const rejectedTimes = {
+    startedAt: "2026-11-19T02:00:00.000Z",
+    endedAt: "2026-11-19T03:00:00.000Z",
+  }
+
+  async function submitCorrection(reason: string, times: typeof approvedTimes) {
+    const response = await overtimeFixtureCall(
+      "staff",
+      overtimeAdjustments,
+      "POST",
+      {
+        type: "CORRECTION",
+        requestKey: randomUUID(),
+        ...times,
+        reason,
+      },
+    )
+    expect(response.status, await response.clone().text()).toBe(201)
+    return ((await response.json()) as { adjustment: { id: string } })
+      .adjustment.id
+  }
+
+  const approvedId = await submitCorrection(approvedReason, approvedTimes)
+  const rejectedId = await submitCorrection(rejectedReason, rejectedTimes)
+  const verification = await overtimeFixtureCall(
+    "head",
+    `${overtimeAdjustments}/${approvedId}/review`,
+    "POST",
+    {
+      decision: "APPROVED",
+      note: "Department Head verified this correction",
+    },
+  )
+  expect(verification.status, await verification.clone().text()).toBe(200)
+  expect(await verification.json()).toMatchObject({
+    adjustment: { id: approvedId, status: "VERIFIED" },
+  })
+  const rejectedVerification = await overtimeFixtureCall(
+    "head",
+    `${overtimeAdjustments}/${rejectedId}/review`,
+    "POST",
+    {
+      decision: "APPROVED",
+      note: "Department Head verified the second correction",
+    },
+  )
+  expect(
+    rejectedVerification.status,
+    await rejectedVerification.clone().text(),
+  ).toBe(200)
+  expect(await rejectedVerification.json()).toMatchObject({
+    adjustment: { id: rejectedId, status: "VERIFIED" },
+  })
+
+  const rejectionHistoryBefore = await overtimeFixtureCall(
+    "staff",
+    "/attendance/me/history?from=2026-11-19&to=2026-11-19",
+  )
+  expect(rejectionHistoryBefore.status).toBe(200)
+  const before = (await rejectionHistoryBefore.json()) as {
+    workdays: { sessions: { startedAt: string; endedAt: string | null }[] }[]
+  }
+
+  await signIn(page, "admin")
+  await page.goto("/attendance/adjustments")
+  await expect(
+    page.getByRole("row").filter({ hasText: approvedReason }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("row").filter({ hasText: rejectedReason }),
+  ).toBeVisible()
+
+  const approvedMenu = overtimeRowMenu(page, approvedId)
+  await approvedMenu.click()
+  await page
+    .getByRole("menuitem", { name: "Approve request", exact: true })
+    .click()
+  const approvalPanel = page.getByRole("dialog", {
+    name: "Approve attendance correction",
+  })
+  await approvalPanel
+    .getByRole("textbox", { name: "Review note", exact: true })
+    .fill("HR approved the verified correction")
+  const approvedResponse = overtimeResponse(
+    page,
+    "POST",
+    `${overtimeAdjustments}/${approvedId}/review`,
+  )
+  await approvalPanel
+    .getByRole("button", { name: "Confirm decision", exact: true })
+    .click()
+  const approvalResult = await approvedResponse
+  expect(approvalResult.status()).toBe(200)
+  expect(await approvalResult.json()).toMatchObject({
+    adjustment: { id: approvedId, status: "APPROVED" },
+  })
+  await expect(approvalPanel).toHaveCount(0)
+  await expect(
+    page.getByRole("row").filter({ hasText: approvedReason }),
+  ).toContainText("Approved")
+
+  const rejectedMenu = overtimeRowMenu(page, rejectedId)
+  await rejectedMenu.click()
+  await page
+    .getByRole("menuitem", { name: "Reject request", exact: true })
+    .click()
+  const rejectionPanel = page.getByRole("dialog", {
+    name: "Reject attendance correction",
+  })
+  await rejectionPanel
+    .getByRole("textbox", { name: "Review note", exact: true })
+    .fill("HR rejected the unsupported correction")
+  const rejectedResponse = overtimeResponse(
+    page,
+    "POST",
+    `${overtimeAdjustments}/${rejectedId}/review`,
+  )
+  await rejectionPanel
+    .getByRole("button", { name: "Confirm decision", exact: true })
+    .click()
+  const rejectionResult = await rejectedResponse
+  expect(rejectionResult.status()).toBe(200)
+  expect(await rejectionResult.json()).toMatchObject({
+    adjustment: { id: rejectedId, status: "REJECTED" },
+  })
+  await expect(rejectionPanel).toHaveCount(0)
+  await expect(
+    page.getByRole("row").filter({ hasText: rejectedReason }),
+  ).toContainText("Rejected")
+
+  const [approvedDetail, rejectedDetail, approvedHistory, rejectedHistory] =
+    await Promise.all([
+      overtimeFixtureCall("staff", `${overtimeAdjustments}/${approvedId}`),
+      overtimeFixtureCall("staff", `${overtimeAdjustments}/${rejectedId}`),
+      overtimeFixtureCall(
+        "staff",
+        "/attendance/me/history?from=2026-11-18&to=2026-11-18",
+      ),
+      overtimeFixtureCall(
+        "staff",
+        "/attendance/me/history?from=2026-11-19&to=2026-11-19",
+      ),
+    ])
+  for (const response of [
+    approvedDetail,
+    rejectedDetail,
+    approvedHistory,
+    rejectedHistory,
+  ])
+    expect(response.status, await response.clone().text()).toBe(200)
+  expect(await approvedDetail.json()).toMatchObject({
+    adjustment: { id: approvedId, status: "APPROVED" },
+  })
+  expect(await rejectedDetail.json()).toMatchObject({
+    adjustment: { id: rejectedId, status: "REJECTED" },
+  })
+  const approved = (await approvedHistory.json()) as {
+    workdays: { sessions: { startedAt: string; endedAt: string | null }[] }[]
+  }
+  const rejected = (await rejectedHistory.json()) as {
+    workdays: { sessions: { startedAt: string; endedAt: string | null }[] }[]
+  }
+  expect(approved.workdays.flatMap(({ sessions }) => sessions)).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        startedAt: approvedTimes.startedAt,
+        endedAt: approvedTimes.endedAt,
+      }),
+    ]),
+  )
+  expect(rejected.workdays.flatMap(({ sessions }) => sessions)).toEqual(
+    before.workdays.flatMap(({ sessions }) => sessions),
+  )
 })
 
 test("department head reviews scoped requests and HR policy settings work", async ({
@@ -945,6 +1402,31 @@ test("loaded attendance screens follow the Department Management design", async 
   }
 })
 
+test("[PG-007-F001-A001-T002] overview route admits STAFF and ADMIN and redirects denied roles", async ({
+  page,
+}) => {
+  await page.goto("/login")
+  const cases = [
+    { actor: "staff", pathname: "/attendance/overview", allowed: true },
+    { actor: "admin", pathname: "/attendance/overview", allowed: true },
+    { actor: "client", pathname: "/dashboard", allowed: false },
+    { actor: "superadmin", pathname: "/module", allowed: false },
+  ]
+  for (const scenario of cases) {
+    await setSession(page, scenario.actor)
+    await page.goto("/attendance/overview")
+    await expect
+      .poll(() => new URL(page.url()).pathname)
+      .toBe(scenario.pathname)
+    const heading = page.getByRole("heading", {
+      name: "Attendance Overview",
+      exact: true,
+    })
+    if (scenario.allowed) await expect(heading).toBeVisible()
+    else await expect(heading).toHaveCount(0)
+  }
+})
+
 for (const viewport of [
   { width: 390, height: 844 },
   { width: 820, height: 1180 },
@@ -995,10 +1477,20 @@ for (const viewport of [
     ).toHaveCount(0)
     const refreshed = page.waitForResponse(
       (response) =>
-        new URL(response.url()).pathname === "/api/attendance/me/overview",
+        new URL(response.url()).pathname === "/api/attendance/me/overview" &&
+        response.request().method() === "GET",
     )
     await main.getByRole("button", { name: "Refresh", exact: true }).click()
-    expect((await refreshed).status()).toBe(200)
+    // PG-007-F001-A004-T007 additive assertions; preserve the layout checks.
+    const refreshResponse = await refreshed
+    expect(refreshResponse.status()).toBe(200)
+    const refreshUrl = new URL(refreshResponse.url())
+    expect(refreshUrl.searchParams.get("from")).toBe(
+      await main.getByLabel("Attendance from date").inputValue(),
+    )
+    expect(refreshUrl.searchParams.get("to")).toBe(
+      await main.getByLabel("Attendance through date").inputValue(),
+    )
     await expect(overview).toHaveAttribute("aria-busy", "false")
     await assertNoPageOverflow(page)
     await page.screenshot({
@@ -1007,6 +1499,134 @@ for (const viewport of [
     })
   })
 }
+
+test("[PG-007-F001-A013-T020] PGlite attendance renders through the real personal overview path", async ({
+  page,
+}) => {
+  test.setTimeout(90000)
+  const actor = fixture.actors["pg007-overview"]
+  const headers = { authorization: `Bearer ${actor.token}` }
+  const historyPath = "/api/attendance/me/history?from=2026-11-20&to=2026-11-20"
+  async function readFixtureHistory() {
+    const response = await fetch(`${api}${historyPath}`, { headers })
+    expect(response.status, await response.clone().text()).toBe(200)
+    return (await response.json()) as AttendanceHistory
+  }
+
+  try {
+    const empty = await readFixtureHistory()
+    expect(empty.workdays).toHaveLength(0)
+
+    await clock("2026-11-20T09:00:00+08:00")
+    const started = await fetch(`${api}/api/attendance/me/clock-in`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: "{}",
+    })
+    expect(started.status, await started.clone().text()).toBe(201)
+    const state = (await started.json()) as AttendanceState
+    const sessionId = state.workday?.activeSessionId
+    expect(sessionId).toBeTruthy()
+    if (!sessionId) throw new Error("Clock-in did not create an active session")
+
+    await clock("2026-11-20T10:00:00+08:00")
+    const closed = await fetch(`${api}/api/attendance/me/clock-out`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({ sessionId }),
+    })
+    expect(closed.status, await closed.clone().text()).toBe(200)
+
+    const beforeOverview = await readFixtureHistory()
+    expect(beforeOverview.workdays).toHaveLength(1)
+    const beforeDay = beforeOverview.workdays[0]
+    if (!beforeDay) throw new Error("Expected the isolated workday")
+    expect(beforeDay.workDate.slice(0, 10)).toBe("2026-11-20")
+    expect(beforeDay.sessions).toHaveLength(1)
+    const beforeSession = beforeDay.sessions[0]
+    if (!beforeSession) throw new Error("Expected the isolated work session")
+    expect(beforeSession.endedAt).toBeTruthy()
+    const beforeDayIds = beforeOverview.workdays.map((day) => day.id)
+    const beforeSessionIds = beforeOverview.workdays.flatMap((day) =>
+      day.sessions.map((session) => session.id),
+    )
+
+    await page.clock.install({ time: new Date("2026-11-23T04:30:00.000Z") })
+    await signIn(page, "pg007-overview")
+    const overviewResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url())
+      return (
+        url.pathname === "/api/attendance/me/overview" &&
+        response.request().method() === "GET"
+      )
+    })
+    await page.goto("/attendance/overview")
+    const response = await overviewResponse
+    expect(response.status()).toBe(200)
+    const overviewUrl = new URL(response.url())
+    expect(overviewUrl.searchParams.get("from")).toBe("2026-10-24")
+    expect(overviewUrl.searchParams.get("to")).toBe("2026-11-24")
+
+    const figures = page.getByLabel("Attendance figures")
+    await expect(figures).toHaveAttribute("aria-busy", "false")
+    const figureValue = (label: string) =>
+      figures
+        .getByText(label, { exact: true })
+        .locator("xpath=following-sibling::dd[1]")
+        .locator("span")
+        .first()
+    await expect(figureValue("Attendance days")).toHaveText("1")
+    await expect(figureValue("Check-ins")).toHaveText("1")
+    await expect(figureValue("Check-outs")).toHaveText("1")
+    await expect(
+      page.getByText("100% completed", { exact: true }),
+    ).toBeVisible()
+    await expect(figureValue("Still clocked in")).toHaveText("0")
+    await expect(
+      page
+        .getByText("Sessions per day", { exact: true })
+        .locator("xpath=following-sibling::dd[1]"),
+    ).toHaveText("1.0")
+    const statusTable = page.getByRole("table").filter({
+      has: page.getByRole("columnheader", {
+        name: "Share",
+        exact: true,
+      }),
+    })
+    await expect(
+      statusTable.getByRole("img", {
+        name: "Clocked out: 1 sessions",
+        exact: true,
+      }),
+    ).toBeVisible()
+    const activityTable = page.getByRole("table").filter({
+      has: page.getByRole("columnheader", {
+        name: "Timestamp (UTC)",
+        exact: true,
+      }),
+    })
+    const activityRows = activityTable.locator("tbody tr")
+    await expect(activityRows).toHaveCount(2)
+    await expect(activityRows.nth(0)).toContainText(
+      "Clocked out – Attendance PG-007 overview",
+    )
+    await expect(activityRows.nth(0)).toContainText("Nov 20, 2026, 2:00 AM")
+    await expect(activityRows.nth(1)).toContainText(
+      "Clocked in – Attendance PG-007 overview",
+    )
+    await expect(activityRows.nth(1)).toContainText("Nov 20, 2026, 1:00 AM")
+
+    const afterOverview = await readFixtureHistory()
+    expect(afterOverview.workdays.map((day) => day.id)).toEqual(beforeDayIds)
+    expect(
+      afterOverview.workdays.flatMap((day) =>
+        day.sessions.map((session) => session.id),
+      ),
+    ).toEqual(beforeSessionIds)
+  } finally {
+    await clock("2026-11-13T20:00:00+08:00")
+  }
+})
 
 for (const viewport of [
   { width: 390, height: 844 },
@@ -1316,6 +1936,41 @@ for (const width of [390, 820, 1440]) {
         ["settings", "Policy Management", "/api/attendance/policies"],
       ]
       for (const [path, title, endpoint] of pages) {
+        let myWorkDate: string | null = null
+        let myWorkdayId: string | null = null
+        if (path === "my") {
+          myWorkDate =
+            width === 390
+              ? "2026-11-20"
+              : width === 820
+                ? "2026-11-21"
+                : "2026-11-22"
+          const adminHeaders = {
+            authorization: `Bearer ${fixture.actors.admin.token}`,
+            "content-type": "application/json",
+          }
+          await clock(`${myWorkDate}T09:00:00+08:00`)
+          const started = await fetch(`${api}/api/attendance/me/clock-in`, {
+            method: "POST",
+            headers: adminHeaders,
+            body: "{}",
+          })
+          expect(started.status, await started.clone().text()).toBe(201)
+          const startState = (await started.json()) as {
+            workday: { id: string; activeSessionId: string | null }
+          }
+          myWorkdayId = startState.workday.id
+          expect(startState.workday.activeSessionId).toBeTruthy()
+          await clock(`${myWorkDate}T10:00:00+08:00`)
+          const ended = await fetch(`${api}/api/attendance/me/clock-out`, {
+            method: "POST",
+            headers: adminHeaders,
+            body: JSON.stringify({
+              sessionId: startState.workday.activeSessionId,
+            }),
+          })
+          expect(ended.status, await ended.clone().text()).toBe(200)
+        }
         const read = page.waitForResponse(
           (response) =>
             new URL(response.url()).pathname === endpoint &&
@@ -1364,6 +2019,72 @@ for (const width of [390, 820, 1440]) {
           expect(columns).toBe(4)
         }
         await assertNoPageOverflow(page)
+        if (path === "my") {
+          // PG-006-F001-A011-T024 adds Check-Ins control and dialog usability
+          // assertions to the existing 390/820/1440 px attendance matrix.
+          await expect(page.getByLabel("Attendance from date")).toBeVisible()
+          await expect(page.getByLabel("Attendance through date")).toBeVisible()
+          if (!myWorkDate) throw new Error("Check-Ins workday date was not set")
+          const workDate = myWorkDate
+          await page.getByLabel("Attendance from date").fill(workDate)
+          await page.getByLabel("Attendance through date").fill(workDate)
+          const history = page
+            .getByRole("table", {
+              name: "Attendance history",
+            })
+            .last()
+          const dayRow = history.getByRole("row").filter({ hasText: workDate })
+          await expect(dayRow).toBeVisible()
+          if (!myWorkdayId) throw new Error("Check-Ins workday was not seeded")
+          const rowActions = page
+            .locator(`[id="attendance-history-actions-${myWorkdayId}"]`)
+            .last()
+          await rowActions.click()
+          await expect(rowActions).toHaveAttribute("aria-expanded", "true")
+          const viewDetails = page.getByRole("menuitem", {
+            name: "View details",
+            exact: true,
+          })
+          await expect(viewDetails).toBeVisible()
+          await viewDetails.click()
+          const detailTitle = page.getByText(
+            `Attendance details for ${workDate}`,
+            { exact: true },
+          )
+          await expect(detailTitle).toBeVisible()
+          await page.getByRole("button", { name: "Done", exact: true }).click()
+          await expect(detailTitle).toHaveCount(0)
+          const clockIn = page.getByRole("button", {
+            name: "Clock in",
+            exact: true,
+          })
+          await expect(clockIn).toBeEnabled()
+          await clockIn.click()
+          const clockDialog = page.getByRole("dialog", { name: "Clock in" })
+          await expect(clockDialog).toBeVisible()
+          await clockDialog
+            .getByRole("button", { name: "Cancel", exact: true })
+            .click()
+          await expect(clockDialog).toHaveCount(0)
+          const missingAttendance = page.getByRole("button", {
+            name: "Request missing attendance",
+            exact: true,
+          })
+          await expect(missingAttendance).toBeVisible()
+          await missingAttendance.click()
+          const correctionDialog = page.getByRole("dialog")
+          await expect(
+            correctionDialog.getByLabel("Actual clock-in", { exact: true }),
+          ).toBeVisible()
+          await expect(
+            correctionDialog.getByLabel("Actual clock-out", { exact: true }),
+          ).toBeVisible()
+          await correctionDialog
+            .getByRole("button", { name: "Cancel", exact: true })
+            .click()
+          await expect(correctionDialog).toHaveCount(0)
+          await assertNoPageOverflow(page)
+        }
         if (path === "requests/overtime" || path === "requests/corrections") {
           await expect(
             page.getByRole("table", { name: "Attendance requests" }),
@@ -1570,6 +2291,15 @@ test("attendance audit search stays in sync with pagination and keeps rows durin
 }) => {
   await signIn(page, "admin")
   const queries: string[] = []
+  let releaseInitial!: () => void
+  let notifyInitialRequest!: () => void
+  let initialRequestPending = true
+  const initialRequested = new Promise<void>((resolve) => {
+    notifyInitialRequest = resolve
+  })
+  const pendingInitialResponse = new Promise<void>((resolve) => {
+    releaseInitial = resolve
+  })
   let releaseSearch!: () => void
   let notifySearchStarted!: () => void
   let failRetry = true
@@ -1582,6 +2312,11 @@ test("attendance audit search stays in sync with pagination and keeps rows durin
   await page.route("**/api/attendance/audit?**", async (route) => {
     const url = new URL(route.request().url())
     queries.push(url.search)
+    if (initialRequestPending) {
+      initialRequestPending = false
+      notifyInitialRequest()
+      await pendingInitialResponse
+    }
     const search = url.searchParams.get("search") ?? ""
     if (search === "payroll") {
       notifySearchStarted()
@@ -1617,8 +2352,20 @@ test("attendance audit search stays in sync with pagination and keeps rows durin
       },
     })
   })
-  await page.goto("/attendance/audit")
+  const navigation = page.goto("/attendance/audit")
+  await initialRequested
   const table = page.getByRole("table", { name: "Attendance audit events" })
+  try {
+    // PG-005-F001-A006-T008: the initial request shows five skeleton rows.
+    await expect(table).toHaveAttribute("aria-busy", "true")
+    await expect(table.getByRole("status")).toContainText(
+      "Loading audit events",
+    )
+    await expect(table.getByRole("row")).toHaveCount(6)
+  } finally {
+    releaseInitial()
+  }
+  await navigation
   await expect(table.getByText("event-1", { exact: true })).toBeVisible()
   await page.getByRole("button", { name: "Page 2", exact: true }).click()
   await expect(table.getByText("event-11", { exact: true })).toBeVisible()
@@ -1653,7 +2400,10 @@ test("attendance audit search stays in sync with pagination and keeps rows durin
   await expect(table.getByText("payroll-match", { exact: true })).toBeVisible()
 })
 
-function auditEvent(id: string) {
+function auditEvent(
+  id: string,
+  overrides: Partial<AttendanceAuditEvent> = {},
+): AttendanceAuditEvent {
   return {
     id,
     entityType: "AttendanceWorkday",
@@ -1665,8 +2415,372 @@ function auditEvent(id: string) {
     employee: { fullName: id },
     before: null,
     after: null,
+    ...overrides,
   }
 }
+
+function auditPayload(
+  events: AttendanceAuditEvent[],
+  page: number,
+  total: number,
+) {
+  return {
+    asOf: "2026-11-15T00:00:00.000Z",
+    total,
+    page,
+    pageSize: 10,
+    events,
+    actionCounts: [],
+  }
+}
+
+test("[PG-005-F001-A002-T003] department filter resets pagination and reaches audit API", async ({
+  page,
+}) => {
+  await signIn(page, "admin")
+  const auditQueries: URL[] = []
+  await page.route("**/api/attendance/departments", (route) =>
+    route.fulfill({
+      json: {
+        departments: [
+          { id: "dept-engineering", name: "Engineering" },
+          { id: "dept-finance", name: "Finance" },
+        ],
+      },
+    }),
+  )
+  await page.route("**/api/attendance/audit?**", async (route) => {
+    const url = new URL(route.request().url())
+    auditQueries.push(url)
+    const pageNumber = Number(url.searchParams.get("page") ?? "1")
+    const departmentId = url.searchParams.get("departmentId")
+    if (departmentId === "dept-finance")
+      return route.fulfill({
+        json: auditPayload(
+          [
+            auditEvent("finance-event", {
+              employee: { fullName: "Finance Employee" },
+            }),
+          ],
+          pageNumber,
+          1,
+        ),
+      })
+    const events = Array.from({ length: 10 }, (_, index) =>
+      auditEvent("audit-event-" + ((pageNumber - 1) * 10 + index + 1)),
+    )
+    return route.fulfill({ json: auditPayload(events, pageNumber, 20) })
+  })
+
+  await page.goto("/attendance/audit")
+  const table = page.getByRole("table", { name: "Attendance audit events" })
+  await expect(table.getByText("audit-event-1", { exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Page 2", exact: true }).click()
+  await expect(table.getByText("audit-event-11", { exact: true })).toBeVisible()
+
+  await page.getByRole("combobox", { name: "Audit department" }).click()
+  await page.getByRole("option", { name: "Finance", exact: true }).click()
+  await expect(
+    table.getByText("Finance Employee", { exact: true }),
+  ).toBeVisible()
+  await expect
+    .poll(() => {
+      const latest = auditQueries.at(-1)
+      return latest
+        ? [
+            latest.searchParams.get("page"),
+            latest.searchParams.get("departmentId"),
+          ].join(":")
+        : ""
+    })
+    .toBe("1:dept-finance")
+})
+
+test("[PG-005-F001-A004-T005] date controls submit the UTC range and reset pagination", async ({
+  page,
+}) => {
+  await signIn(page, "admin")
+  const auditQueries: URL[] = []
+  await page.route("**/api/attendance/departments", (route) =>
+    route.fulfill({ json: { departments: [] } }),
+  )
+  await page.route("**/api/attendance/audit?**", async (route) => {
+    const url = new URL(route.request().url())
+    auditQueries.push(url)
+    const pageNumber = Number(url.searchParams.get("page") ?? "1")
+    return route.fulfill({
+      json: auditPayload(
+        [auditEvent("audit-page-" + pageNumber)],
+        pageNumber,
+        20,
+      ),
+    })
+  })
+
+  await page.goto("/attendance/audit")
+  const table = page.getByRole("table", { name: "Attendance audit events" })
+  await expect(table.getByText("audit-page-1", { exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Page 2", exact: true }).click()
+  await expect(table.getByText("audit-page-2", { exact: true })).toBeVisible()
+
+  const from = page.getByLabel("Attendance from date")
+  const through = page.getByLabel("Attendance through date")
+  await from.fill("2026-11-12")
+  await through.fill("2026-11-13")
+  await expect(through).toHaveAttribute("min", "2026-11-12")
+  await expect(from).toHaveAttribute("max", "2026-11-13")
+  await expect
+    .poll(() => {
+      const latest = auditQueries.at(-1)
+      return latest
+        ? [
+            latest.searchParams.get("from"),
+            latest.searchParams.get("to"),
+            latest.searchParams.get("page"),
+          ].join(":")
+        : ""
+    })
+    .toBe("2026-11-12:2026-11-13:1")
+  await expect(table.getByText("audit-page-1", { exact: true })).toBeVisible()
+  await expect(
+    page.getByText(/Dates filter the event timestamp in UTC/),
+  ).toBeVisible()
+})
+
+test("[PG-005-F001-A002-T009] department choices recover through their retry control", async ({
+  page,
+}) => {
+  await signIn(page, "admin")
+  let departmentRequests = 0
+  await page.route("**/api/attendance/departments", async (route) => {
+    departmentRequests += 1
+    if (departmentRequests === 1)
+      return route.fulfill({
+        status: 503,
+        json: { error: "Department choices unavailable." },
+      })
+    return route.fulfill({
+      json: { departments: [{ id: "dept-operations", name: "Operations" }] },
+    })
+  })
+  await page.route("**/api/attendance/audit?**", (route) =>
+    route.fulfill({ json: auditPayload([], 1, 0) }),
+  )
+
+  await page.goto("/attendance/audit")
+  const alert = page
+    .getByRole("alert")
+    .filter({ hasText: "Department choices unavailable." })
+  await expect(alert).toContainText("Department choices unavailable.")
+  await alert.getByRole("button", { name: "Retry", exact: true }).click()
+  await expect.poll(() => departmentRequests).toBe(2)
+  const department = page.getByRole("combobox", {
+    name: "Audit department",
+  })
+  await department.click()
+  await expect(
+    page.getByRole("option", { name: "Operations", exact: true }),
+  ).toBeVisible()
+})
+
+test.describe("PG-005 audit row summaries in explicit UTC", () => {
+  test.use({ timezoneId: "Pacific/Auckland" })
+
+  test("[PG-005-F001-A007-T011] row labels include UTC time and identity fallbacks", async ({
+    page,
+  }) => {
+    await signIn(page, "admin")
+    await page.route("**/api/attendance/departments", (route) =>
+      route.fulfill({ json: { departments: [] } }),
+    )
+    await page.route("**/api/attendance/audit?**", (route) =>
+      route.fulfill({
+        json: auditPayload(
+          [
+            auditEvent("named-event", {
+              createdAt: "2026-11-13T23:30:00.000Z",
+              actor: { fullName: "Audit Actor" },
+              employee: { fullName: "Audit Employee" },
+            }),
+            auditEvent("missing-identity", {
+              actorId: "missing-actor",
+              actor: { fullName: "  " },
+              employee: null,
+            }),
+            auditEvent("policy-event", {
+              entityType: "AttendancePolicy",
+              action: "INSERT",
+              actorId: null,
+              actor: null,
+              employee: null,
+            }),
+            auditEvent("unknown-event", {
+              entityType: "UnknownRecordType",
+              action: "CUSTOM_ACTION",
+              actorId: null,
+              actor: null,
+              employee: null,
+            }),
+          ],
+          1,
+          4,
+        ),
+      }),
+    )
+
+    await page.goto("/attendance/audit")
+    const table = page.getByRole("table", {
+      name: "Attendance audit events",
+    })
+    await expect(
+      table.getByText("Nov 13, 2026, 11:30 PM", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      table.getByText("Nov 14, 2026, 12:30 PM", { exact: true }),
+    ).toHaveCount(0)
+    await expect(table.getByText("Audit Actor", { exact: true })).toBeVisible()
+    await expect(
+      table.getByText("Audit Employee", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      table.getByText("Name unavailable", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      table.getByText("No actor recorded", { exact: true }),
+    ).toHaveCount(2)
+    await expect(
+      table.getByText("Not applicable (policy change)", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      table.getByText("Employee unavailable", { exact: true }),
+    ).toHaveCount(2)
+    await expect(
+      table.getByText("Created an attendance policy", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      table.getByText("Custom action an unknown record type", {
+        exact: true,
+      }),
+    ).toBeVisible()
+  })
+})
+
+test("[PG-005-F001-A008-T012] detail panel renders allowlisted snapshots read-only", async ({
+  page,
+}) => {
+  await signIn(page, "admin")
+  await page.route("**/api/attendance/departments", (route) =>
+    route.fulfill({ json: { departments: [] } }),
+  )
+  await page.route("**/api/attendance/audit?**", (route) =>
+    route.fulfill({
+      json: auditPayload(
+        [
+          auditEvent("event-details", {
+            entityType: "AttendanceAdjustment",
+            action: "UPDATE",
+            reason: "Approved overtime",
+            before: {
+              status: "PENDING",
+              reviewNote: "Old review note",
+              proposedStartedAt: "2026-11-13T22:00:00.000Z",
+            },
+            after: {
+              type: "OVERTIME",
+              status: "APPROVED",
+              overtimeMinutes: 45,
+              startedAt: "2026-11-13T23:30:00.000Z",
+              reviewNote: "Approved note",
+              isWorkingDay: true,
+              privateMetadata: "PRIVATE-UNLISTED-SNAPSHOT",
+              createdAt: null,
+            },
+          }),
+          auditEvent("array-snapshot", {
+            entityType: "AttendanceWorkday",
+            before: null,
+            after: ["unsupported", "snapshot"],
+          }),
+        ],
+        1,
+        2,
+      ),
+    }),
+  )
+
+  await page.goto("/attendance/audit")
+  await page
+    .getByRole("button", { name: "View audit event event-details" })
+    .click()
+  const details = page.getByRole("dialog", { name: "Audit event details" })
+  await expect(details).toBeVisible()
+  await expect(
+    details.getByText("Approved overtime", { exact: true }),
+  ).toBeVisible()
+  await expect(details.getByText("Overtime", { exact: true })).toBeVisible()
+  await expect(details.getByText("Approved", { exact: true })).toBeVisible()
+  await expect(details.getByText("45 minutes", { exact: true })).toBeVisible()
+  await expect(
+    details.getByText("Nov 13, 2026, 11:30 PM", { exact: true }),
+  ).toBeVisible()
+  await expect(
+    details.getByRole("heading", { name: "Previous values", exact: true }),
+  ).toBeVisible()
+  await expect(
+    details.getByText("Old review note", { exact: true }),
+  ).toBeVisible()
+  await expect(details).not.toContainText("PRIVATE-UNLISTED-SNAPSHOT")
+  await expect(details).not.toContainText("isWorkingDay")
+  await expect(
+    details.getByRole("button", {
+      name: /^(Edit|Save|Delete|Approve|Reject)$/i,
+    }),
+  ).toHaveCount(0)
+
+  await details.getByRole("button", { name: "Done", exact: true }).click()
+  await expect(details).toHaveCount(0)
+  await page
+    .getByRole("button", { name: "View audit event array-snapshot" })
+    .click()
+  const emptyDetails = page.getByRole("dialog", {
+    name: "Audit event details",
+  })
+  await expect(
+    emptyDetails.getByText("No additional event details were recorded."),
+  ).toBeVisible()
+  await expect(
+    emptyDetails.getByRole("heading", { name: "Previous values" }),
+  ).toHaveCount(0)
+})
+
+test("[PG-005-F001-A009-T013] keyboard opens and dismisses event details at 390px", async ({
+  page,
+}) => {
+  await signIn(page, "admin")
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.route("**/api/attendance/departments", (route) =>
+    route.fulfill({ json: { departments: [] } }),
+  )
+  await page.route("**/api/attendance/audit?**", (route) =>
+    route.fulfill({
+      json: auditPayload([auditEvent("keyboard-event")], 1, 1),
+    }),
+  )
+
+  await page.goto("/attendance/audit")
+  const trigger = page.getByRole("button", {
+    name: "View audit event keyboard-event",
+  })
+  await expect(trigger).toBeVisible()
+  await trigger.focus()
+  await trigger.press("Enter")
+  const details = page.getByRole("dialog", { name: "Audit event details" })
+  await expect(details).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(details).toHaveCount(0)
+  await expect(trigger).toBeFocused()
+  await assertNoPageOverflow(page)
+})
 
 for (const width of [1280, 390])
   test(`attendance policy skeletons match the responsive grid and retain rows during refresh at ${width}px`, async ({
@@ -3406,6 +4520,76 @@ test("overtime conflict recovers a stale HR approval after Superadmin rejection"
   await expect(detail.getByText(rejection, { exact: true })).toBeVisible()
 })
 
+test("[PG-004-F001-A010-T015] mixed queue reconciles a concurrent overtime decision", async ({
+  page,
+  browser,
+}) => {
+  const { id } = await seedOvertimeReview("2026-11-21", true, "correction-dst")
+  const path = `${overtimeAdjustments}/${id}`
+  const winningNote = `Superadmin rejected mixed-route overtime ${randomUUID()}`
+  await signIn(page, "admin")
+  await page.goto(overtimeAdjustments)
+  const menu = overtimeRowMenu(page, id)
+  await expect(menu).toBeVisible()
+  await menu.click()
+  await page
+    .getByRole("menuitem", { name: "Approve request", exact: true })
+    .click()
+  const review = page.getByRole("dialog", { name: "Approve overtime" })
+  await review
+    .getByRole("textbox", { name: "Review note", exact: true })
+    .fill("HR approval prepared before the competing decision")
+
+  await recordWinningOvertimeDecision(
+    browser,
+    new URL(page.url()).origin,
+    id,
+    "Reject",
+    winningNote,
+  )
+  const stale = overtimeResponse(page, "POST", `${path}/review`)
+  await review
+    .getByRole("button", { name: "Confirm decision", exact: true })
+    .click()
+  const conflict = await stale
+  expect(conflict.status()).toBe(409)
+
+  const details = page.getByRole("dialog", { name: "Overtime request" })
+  await expect(details.getByRole("alert")).toHaveText(
+    "This request has already been reviewed",
+  )
+  await expect(details.getByText("Rejected", { exact: true })).toBeVisible()
+  await expect(details.getByText(winningNote, { exact: true })).toBeVisible()
+  await expect(
+    details.getByRole("textbox", { name: "Review note", exact: true }),
+  ).toHaveCount(0)
+  await expect(
+    details.getByRole("button", { name: "Confirm decision", exact: true }),
+  ).toHaveCount(0)
+  await details.getByRole("button", { name: "Done", exact: true }).click()
+  await expect(page.getByRole("row").filter({ has: menu })).toContainText(
+    "Rejected",
+  )
+  await menu.click()
+  await expect(
+    page.getByRole("menuitem", { name: "Approve request", exact: true }),
+  ).toHaveCount(0)
+  await expect(
+    page.getByRole("menuitem", { name: "Reject request", exact: true }),
+  ).toHaveCount(0)
+
+  const persisted = await overtimeFixtureCall("admin", path)
+  expect(persisted.status, await persisted.clone().text()).toBe(200)
+  expect(await persisted.json()).toMatchObject({
+    adjustment: {
+      id,
+      status: "REJECTED",
+      reviewNote: winningNote,
+      reviewedById: fixture.actors.superadmin.userId,
+    },
+  })
+})
+
 test("overtime conflict shows the winning approval after a stale rejection leaves the filtered queue", async ({
   page,
   browser,
@@ -3512,6 +4696,80 @@ test("overtime conflict clears private details after the Head loses review acces
     })
   } finally {
     recovery.release()
+    const restored = await overtimeFixtureCall("admin", department, "PUT", {
+      headId: fixture.actors.head.userId,
+    })
+    expect(restored.status, await restored.text()).toBe(200)
+  }
+
+  await page.goto(overtimeAdjustments)
+  const mixedMenu = overtimeRowMenu(page, id)
+  await expect(mixedMenu).toBeVisible()
+  await mixedMenu.click()
+  await page
+    .getByRole("menuitem", { name: "Verify overtime", exact: true })
+    .click()
+  const mixedPanel = page.getByRole("dialog", { name: "Verify overtime" })
+  await expect(mixedPanel.getByText(reason, { exact: true })).toBeVisible()
+  await mixedPanel
+    .getByRole("textbox", { name: "Review note", exact: true })
+    .fill("Mixed queue verification prepared before leadership changed")
+
+  const mixedReplacement = await overtimeFixtureCall(
+    "admin",
+    department,
+    "PUT",
+    { headId: fixture.actors["correction-dst"].userId },
+  )
+  expect(mixedReplacement.status, await mixedReplacement.text()).toBe(200)
+  const mixedRecovery = requestGate()
+  try {
+    await page.route(
+      `**/api${path}`,
+      async (route) => {
+        mixedRecovery.start()
+        await mixedRecovery.pending
+        await route.fallback()
+      },
+      { times: 1 },
+    )
+    const mixedConflict = overtimeResponse(page, "POST", `${path}/review`)
+    const mixedDetail = overtimeResponse(page, "GET", path)
+    const mixedList = overtimeResponse(page, "GET", overtimeAdjustments)
+    await mixedPanel
+      .getByRole("button", { name: "Confirm decision", exact: true })
+      .click()
+    const denied = await mixedConflict
+    expect(denied.status()).toBe(403)
+    const { error } = (await denied.json()) as { error: string }
+    await mixedRecovery.started
+    await expect(
+      page.getByRole("alert").filter({ hasText: error }),
+    ).toBeVisible()
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await expect(mixedMenu).toHaveCount(0)
+    mixedRecovery.release()
+    const [detailResult, listResult] = await Promise.all([
+      mixedDetail,
+      mixedList,
+    ])
+    expect(detailResult.status()).toBe(404)
+    expect(listResult.status()).toBe(403)
+    await expect(page.getByText(error, { exact: true }).first()).toBeVisible()
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await expect(page.getByText(reason, { exact: true })).toHaveCount(0)
+    await expect(mixedMenu).toHaveCount(0)
+    const unchanged = await overtimeFixtureCall("correction-dst", path)
+    expect(unchanged.status).toBe(200)
+    expect(await unchanged.json()).toMatchObject({
+      adjustment: {
+        status: "PENDING",
+        verifiedById: null,
+        reviewedById: null,
+      },
+    })
+  } finally {
+    mixedRecovery.release()
     const restored = await overtimeFixtureCall("admin", department, "PUT", {
       headId: fixture.actors.head.userId,
     })

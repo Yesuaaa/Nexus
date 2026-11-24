@@ -21,6 +21,8 @@ export const Permissions = {
   PAYROLL_MANAGE: "payroll:manage",
   SERVICES_READ: "services:read",
   SERVICES_MANAGE: "services:manage",
+  SERVICE_INQUIRIES_READ: "service-inquiries:read",
+  SERVICE_INQUIRIES_MANAGE: "service-inquiries:manage",
   CLIENTS_READ: "clients:read",
   CLIENTS_CREATE: "clients:create",
   MODULES_ACCESS_ALL: "modules:access-all",

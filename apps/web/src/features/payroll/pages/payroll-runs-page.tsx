@@ -1812,7 +1812,7 @@ function PayrollRunDetailsPanel({
                                       {approvals ? (
                                         <>
                                           <Eye size={15} aria-hidden="true" />
-                                          <HoverTooltip side="top-end">
+                                          <HoverTooltip>
                                             View employee calculation details
                                           </HoverTooltip>
                                         </>

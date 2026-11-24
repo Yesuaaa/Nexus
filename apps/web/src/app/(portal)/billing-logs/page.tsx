@@ -224,40 +224,35 @@ export default function BillingLogsPage() {
             </h2>
             {due.length ? (
               <ul className="@container divide-y divide-[#c7d7ef] rounded-xl border border-[#b9cbee] bg-[#eaf1fd]">
-                {due.map((payment) => {
-                  const isDemo = payment.bookingReference === "DEMO-BILLING-001"
-                  return (
-                    <li key={payment.id} className={paymentRowClass}>
-                      <div className="col-span-2 min-w-0 @min-[640px]:col-span-1">
-                        <p className="break-words font-semibold">
-                          {isDemo ? "Website Development" : payment.serviceName}
-                        </p>
-                        <p className="mt-1 break-words text-[11px] text-[#52627a]">
-                          {isDemo
-                            ? "INV-003 · BK-2026-0142"
-                            : payment.bookingReference || "Booked service"}
-                        </p>
-                      </div>
-                      <p className="min-w-0 break-words text-sm leading-5 font-semibold text-slate-900 tabular-nums @min-[640px]:text-center">
-                        {formatAmount(payment)}
+                {due.map((payment) => (
+                  <li key={payment.id} className={paymentRowClass}>
+                    <div className="col-span-2 min-w-0 @min-[640px]:col-span-1">
+                      <p className="break-words font-semibold">
+                        {payment.serviceName}
                       </p>
-                      <p className="text-xs leading-5 text-[#475569] @min-[640px]:text-center">
-                        {isDemo ? "Due Nov 20, 2026" : "Payment due"}
+                      <p className="mt-1 break-words text-[11px] text-[#52627a]">
+                        {payment.bookingReference || "Booked service"}
                       </p>
-                      <Button
-                        type="button"
-                        variant="brand"
-                        className="col-span-2 min-w-24 justify-self-end text-xs @min-[640px]:col-span-1"
-                        onClick={() => {
-                          setDownloadError("")
-                          setSelected(payment)
-                        }}
-                      >
-                        Review
-                      </Button>
-                    </li>
-                  )
-                })}
+                    </div>
+                    <p className="min-w-0 break-words text-sm leading-5 font-semibold text-slate-900 tabular-nums @min-[640px]:text-center">
+                      {formatAmount(payment)}
+                    </p>
+                    <p className="text-xs leading-5 text-[#475569] @min-[640px]:text-center">
+                      Payment due
+                    </p>
+                    <Button
+                      type="button"
+                      variant="brand"
+                      className="col-span-2 min-w-24 justify-self-end text-xs @min-[640px]:col-span-1"
+                      onClick={() => {
+                        setDownloadError("")
+                        setSelected(payment)
+                      }}
+                    >
+                      Review
+                    </Button>
+                  </li>
+                ))}
               </ul>
             ) : (
               <p className="rounded-lg border border-[#e2e8f0] px-4 py-3 text-xs text-[#52627a]">

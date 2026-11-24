@@ -233,6 +233,7 @@ for (const width of [1440, 390]) {
         .getByRole("link", { name: "Internal Messages", exact: true })
         .click()
       await expect(page).toHaveURL(/\/messages\?mode=internal$/)
+      await expect(page.locator("#app-sidebar")).toHaveCount(0)
       const rail = page.getByRole("navigation", {
         name: "Conversations",
         exact: true,

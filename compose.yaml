@@ -1,12 +1,44 @@
 services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: nexus_dev
+      POSTGRES_USER: nexus
+      POSTGRES_PASSWORD: nexus_dev
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - dev-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "pg_isready",
+          "-h",
+          "127.0.0.1",
+          "-U",
+          "nexus",
+          "-d",
+          "nexus_dev",
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
   api:
+    image: ${COMPOSE_PROJECT_NAME}-api-dev
     build:
       context: .
       target: api-dev
+    command: ["sh", "-c", "pnpm exec prisma migrate deploy && exec pnpm dev"]
+    depends_on:
+      db:
+        condition: service_healthy
     environment:
       PORT: "3001"
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET to a random base64url key of at least 32 bytes}
-      DATABASE_URL: ${DATABASE_URL:-}
+      DATABASE_URL: postgresql://nexus:nexus_dev@db:5432/nexus_dev?sslmode=disable
+      DIRECT_URL: postgresql://nexus:nexus_dev@db:5432/nexus_dev?sslmode=disable
       SESSION_GEOLOCATION: ${SESSION_GEOLOCATION:-}
       TRUST_PROXY: ${TRUST_PROXY:-}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:5173}
@@ -16,6 +48,7 @@ services:
       CHOKIDAR_USEPOLLING: "true"
       NODE_ENV: development
       PAYROLL_LOCAL_SIMULATOR: "true"
+      WORKFLOW_LOCAL_PAYMENT_SIMULATOR: "${WORKFLOW_LOCAL_PAYMENT_SIMULATOR:-false}"
     volumes:
       - ./apps/api/src:/workspace/apps/api/src
       - ./apps/api/prisma:/workspace/apps/api/prisma
@@ -36,6 +69,7 @@ services:
       start_period: 20s
 
   web:
+    image: ${COMPOSE_PROJECT_NAME}-web-dev
     build:
       context: .
       target: web-dev
@@ -54,3 +88,6 @@ services:
         condition: service_healthy
     ports:
       - "${WEB_PORT:-5173}:5173"
+
+volumes:
+  dev-postgres:

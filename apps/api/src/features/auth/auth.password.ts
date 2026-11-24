@@ -57,7 +57,7 @@ export async function verifyPassword(
 
 /**
  * Length/size-only check kept for the env-driven bootstrap seed
- * (prisma/seed.ts). Passwords set through the API must pass
+ * (prisma/seed/seed.ts). Passwords set through the API must pass
  * `isStrongPassword` / `assertStrongPassword` from shared/password-policy.
  */
 export function validPassword(value: unknown): value is string {

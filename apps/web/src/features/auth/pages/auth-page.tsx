@@ -3,13 +3,13 @@
 import { useEffect, useState, useSyncExternalStore } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { sileo } from "@/lib/toast"
 import {
   ApiError,
   clearToken,
   getCurrentAccount,
   getToken,
 } from "../api/auth-api"
-import { useAuthTransition } from "../providers/auth-provider"
 import { AuthLayout } from "../components/auth-layout"
 import { AuthContent } from "../components/auth-form"
 import { AuthHeader } from "../components/auth-header"
@@ -21,6 +21,7 @@ import {
 } from "../content/auth-copy"
 import type { AuthLanguage, AuthMode, AuthPortal } from "../model/types"
 import { landingPathForRole } from "../model/auth-portal"
+import type { Role } from "../model/roles"
 
 function subscribeLanguage(onChange: () => void) {
   window.addEventListener("storage", onChange)
@@ -126,7 +127,7 @@ function AuthFormPage({
   mode: AuthMode
   portal: AuthPortal
 }) {
-  const { beginLoginTransition: onLoggedIn } = useAuthTransition()
+  const router = useRouter()
   const storedLanguage = useSyncExternalStore(
     subscribeLanguage,
     getStoredAuthLanguage,
@@ -136,6 +137,17 @@ function AuthFormPage({
   const language = selectedLanguage ?? storedLanguage
   const copy = getAuthCopy(language)
 
+  function onLoggedIn(nextMode: AuthMode, role: Role) {
+    router.replace(landingPathForRole(role))
+    sileo.success({
+      title:
+        nextMode === "register" ? copy.accountCreated : copy.welcomeBackToast,
+      description:
+        nextMode === "register" ? copy.welcomeToExp : copy.signedInToast,
+      position: "top-center",
+    })
+  }
+
   function changeLanguage(next: AuthLanguage) {
     setLanguage(next)
     storeAuthLanguage(next)
@@ -144,6 +156,7 @@ function AuthFormPage({
   return (
     <AuthLayout
       centered={portal === "workforce"}
+      clientSplit={portal === "client"}
       language={language}
       visual={
         portal === "client" && (
@@ -160,15 +173,28 @@ function AuthFormPage({
           copy={copy}
           language={language}
           onLanguageChange={changeLanguage}
+          workforce={portal === "workforce"}
         />
       }
       footer={
-        <footer className="flex min-h-14 items-center justify-center gap-4 px-5 py-3 text-xs text-[#52688d] whitespace-nowrap max-[420px]:flex-wrap max-[420px]:gap-x-3 max-[420px]:gap-y-[5px] max-[420px]:leading-[1.4]">
-          <span>{copy.about}</span>
-          <span>{copy.terms}</span>
-          <span>{copy.privacy}</span>
-          <span>{copy.cookies}</span>
-          <span>{copy.copyright}</span>
+        <footer
+          className={
+            portal === "workforce"
+              ? "px-6 pb-5 text-left text-xs text-[#8a9dbb] sm:px-8"
+              : "flex min-h-14 items-center justify-center gap-4 px-5 py-3 text-xs text-[#52688d] whitespace-nowrap max-[420px]:flex-wrap max-[420px]:gap-x-3 max-[420px]:gap-y-[5px] max-[420px]:leading-[1.4]"
+          }
+        >
+          {portal === "workforce" ? (
+            "© 2026 Converyn Inc. All rights reserved."
+          ) : (
+            <>
+              <span>{copy.about}</span>
+              <span>{copy.terms}</span>
+              <span>{copy.privacy}</span>
+              <span>{copy.cookies}</span>
+              <span>{copy.copyright}</span>
+            </>
+          )}
         </footer>
       }
     >

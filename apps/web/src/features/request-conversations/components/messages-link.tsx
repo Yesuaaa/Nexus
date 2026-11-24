@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
 import { MessageSquare } from "lucide-react"
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { iconButtonClass } from "@/components/layout/styles"
 import { usePortalAccount } from "@/features/auth/providers/account-context"
 import { watchVisibleRefresh } from "@/lib/visible-refresh"
@@ -96,9 +97,10 @@ function AccountMessagesLink({
       href={messagesViewHref(view)}
       aria-label={`Messages${unreadCount ? `, ${unreadCount} unread` : ""}`}
       aria-current={pathname === "/messages" ? "page" : undefined}
-      className={`${iconButtonClass} relative ${pathname === "/messages" ? "bg-[#e9eef5] text-[#203a78]" : ""}`}
+      className={`${iconButtonClass} group relative ${pathname === "/messages" ? "bg-[#e9eef5] text-[#203a78]" : ""}`}
     >
       <MessageSquare size={21} strokeWidth={1.7} aria-hidden="true" />
+      <HoverTooltip side="bottom">Chats</HoverTooltip>
       {unreadCount > 0 && (
         <span
           aria-hidden="true"

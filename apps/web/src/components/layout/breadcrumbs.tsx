@@ -84,7 +84,7 @@ const routeLabels: Record<string, string> = {
   accounts: "Account Management",
   departments: "Department Management",
   employees: "Employee Management",
-  services: "Services",
+  services: "Service",
   "booked-services": "Booked Services",
   "staff-workload": "Staff Workload",
   "request-inbox": "Request Inbox",
@@ -137,6 +137,14 @@ export function Breadcrumbs() {
   const { labels } = useContext(BreadcrumbLabelContext)
   const segments = pathname.split("/").filter(Boolean)
   const decodedSegments = segments.map(decodeURIComponent)
+  const isServiceManagementPage =
+    decodedSegments.length === 1 &&
+    decodedSegments[0] === "services" &&
+    account.role !== "USER"
+  const isServiceRequestOverviewPage =
+    decodedSegments.length === 2 &&
+    decodedSegments[0] === "module" &&
+    decodedSegments[1] === "service-operations"
   const payrollWorkspace =
     decodedSegments[0] === "module" && decodedSegments[1] === "payroll"
       ? getWorkspaceModules(account).find(
@@ -186,26 +194,34 @@ export function Breadcrumbs() {
                 : undefined
           const label =
             (index === 0 ? payrollWorkspace?.title : undefined) ??
+            (isServiceRequestOverviewPage
+              ? index === 0
+                ? "Service"
+                : "Request"
+              : undefined) ??
             projectManagementLabel ??
             labels[segment] ??
             labels[decodedSegment] ??
             (index === 1 && (isWorkspaceDetail || segments[0] === "projects")
               ? "Project"
               : labelFor(segment, segments[index - 1]))
-          const isCurrent = index === segments.length - 1
+          const isCurrent =
+            index === segments.length - 1 && !isServiceManagementPage
           const isDepartmentContext =
             isProjectManagementDepartmentProjects && index === 2
           const baseHref = `/${segments.slice(0, index + 1).join("/")}`
           const href =
-            index === 0 && payrollWorkspace?.href
-              ? payrollWorkspace.href
-              : isProjectManagementDepartmentProjects
-                ? index === 0
-                  ? "/project-management/overview"
-                  : "/project-management"
-                : index === 0 && directoryQuery
-                  ? `${baseHref}?${directoryQuery}`
-                  : baseHref
+            isServiceRequestOverviewPage && index === 0
+              ? "/services"
+              : index === 0 && payrollWorkspace?.href
+                ? payrollWorkspace.href
+                : isProjectManagementDepartmentProjects
+                  ? index === 0
+                    ? "/project-management/overview"
+                    : "/project-management"
+                  : index === 0 && directoryQuery
+                    ? `${baseHref}?${directoryQuery}`
+                    : baseHref
           return (
             <li
               key={`${index}-${segment}`}
@@ -239,6 +255,20 @@ export function Breadcrumbs() {
             </li>
           )
         })}
+        {isServiceManagementPage && (
+          <li className="flex min-w-0 items-center gap-[7px] text-[#8a9ab3]">
+            <ChevronRightIcon
+              className="size-[18px] flex-none"
+              strokeWidth={1.75}
+            />
+            <span
+              aria-current="page"
+              className="min-w-0 truncate font-semibold text-[#253f8c]"
+            >
+              Management
+            </span>
+          </li>
+        )}
       </ol>
     </nav>
   )

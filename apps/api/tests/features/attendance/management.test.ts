@@ -352,6 +352,44 @@ test(
           reason: "Unauthorized correction",
         })
         assert.equal(foreign.status, 404)
+
+        // PG-006-F001-A010-T021 extends this existing PGlite request test
+        // with the API's inclusive reason-length boundaries.
+        const priorCount = await prisma.attendanceAdjustment.count({
+          where: { requestedById: staff.user.id },
+        })
+        for (const [length, expectedStatus] of [
+          [4, 400],
+          [5, 201],
+          [2000, 201],
+          [2001, 400],
+        ] as const) {
+          const reason = "x".repeat(length)
+          const boundary = await request(staff, "/adjustments", {
+            requestKey: randomUUID(),
+            startedAt: "2026-11-12T09:00:00+08:00",
+            endedAt: "2026-11-12T10:00:00+08:00",
+            reason,
+          })
+          assert.equal(
+            boundary.status,
+            expectedStatus,
+            `reason length ${length}: ${await boundary.clone().text()}`,
+          )
+          if (expectedStatus === 201) {
+            const body = (await boundary.json()) as {
+              adjustment: { reason: string }
+            }
+            assert.equal(body.adjustment.reason, reason)
+          }
+        }
+        assert.equal(
+          await prisma.attendanceAdjustment.count({
+            where: { requestedById: staff.user.id },
+          }),
+          priorCount + 2,
+        )
+
         const created = await submit()
         const replay = await request(staff, "/adjustments", created.body)
         assert.equal(replay.status, 201)
@@ -643,6 +681,66 @@ test(
         )
         assert.equal(missing.status, 200)
         assert.equal(((await missing.json()) as { total: number }).total, 0)
+
+        // PG-005-F001-A010-T017: UTC interval, stable tie order, and projection.
+        const boundaryEvent = (id: string, createdAt: string) => ({
+          id,
+          entityType: "AttendanceWorkSession",
+          entityId: id,
+          employeeId: staff.employee.id,
+          actorId: admin.user.id,
+          action: "BOUNDARY_CHECK",
+          reason: "BoundaryMarker",
+          actionId: randomUUID(),
+          createdAt: new Date(createdAt),
+          operationId: randomUUID(),
+          correlationId: randomUUID(),
+          actorRoleAtTime: "ADMIN" as const,
+        })
+        await prisma.attendanceAudit.createMany({
+          data: [
+            boundaryEvent("boundary-start", "2026-11-13T00:00:00.000Z"),
+            boundaryEvent("boundary-tie-a", "2026-11-13T12:00:00.000Z"),
+            boundaryEvent("boundary-tie-z", "2026-11-13T12:00:00.000Z"),
+            boundaryEvent("boundary-end", "2026-11-13T23:59:59.999Z"),
+            boundaryEvent("boundary-outside", "2026-11-14T00:00:00.000Z"),
+          ],
+        })
+        const boundaryResponse = await request(
+          head,
+          "/audit?from=2026-11-13&to=2026-11-13&search=BoundaryMarker",
+        )
+        assert.equal(boundaryResponse.status, 200)
+        const boundaryResult = (await boundaryResponse.json()) as {
+          total: number
+          events: {
+            id: string
+            operationId?: unknown
+            correlationId?: unknown
+            actorRoleAtTime?: unknown
+            actor: Record<string, unknown> | null
+            employee: Record<string, unknown> | null
+          }[]
+        }
+        assert.equal(boundaryResult.total, 4)
+        assert.deepEqual(
+          boundaryResult.events.map((event) => event.id),
+          [
+            "boundary-end",
+            "boundary-tie-z",
+            "boundary-tie-a",
+            "boundary-start",
+          ],
+        )
+        const projected = boundaryResult.events.find(
+          (event) => event.id === "boundary-tie-z",
+        )
+        assert.ok(projected)
+        assert.equal("operationId" in projected, false)
+        assert.equal("correlationId" in projected, false)
+        assert.equal("actorRoleAtTime" in projected, false)
+        assert.deepEqual(Object.keys(projected.actor ?? {}), ["fullName"])
+        assert.deepEqual(Object.keys(projected.employee ?? {}), ["fullName"])
       },
     )
 
@@ -1186,7 +1284,576 @@ test(
             .status,
           400,
         )
+
+        // PG-007-F001-A011-T016 additive authorization assertions.
+        const anonymous = await fetch(
+          `${base}/attendance/me/overview?from=2026-11-13&to=2026-11-13`,
+        )
+        assert.equal(anonymous.status, 401)
+        const anonymousBody = (await anonymous.json()) as {
+          scope?: unknown
+          checkIns?: unknown
+        }
+        assert.equal("scope" in anonymousBody, false)
+        assert.equal("checkIns" in anonymousBody, false)
+
+        const basicUser = await prisma.user.create({
+          data: {
+            email: "pg007-overview-user@management.test",
+            fullName: "PG-007 basic user",
+            role: "USER",
+            passwordHash: "test-only",
+          },
+        })
+        const basicUserToken = (await issueSession(basicUser)).token
+        const forbidden = await fetch(
+          `${base}/attendance/me/overview?from=2026-11-13&to=2026-11-13`,
+          { headers: { authorization: `Bearer ${basicUserToken}` } },
+        )
+        assert.equal(forbidden.status, 403)
+        const forbiddenBody = (await forbidden.json()) as {
+          scope?: unknown
+          checkIns?: unknown
+        }
+        assert.equal("scope" in forbiddenBody, false)
+        assert.equal("checkIns" in forbiddenBody, false)
       },
     )
+    await t.test(
+      "[PG-007-F001-A011-T017] personal overview requires a linked Employee without creating one",
+      async () => {
+        const profileless = await prisma.user.create({
+          data: {
+            email: "pg007-profileless-admin@management.test",
+            fullName: "PG-007 profileless admin",
+            role: "ADMIN",
+            passwordHash: "test-only",
+          },
+        })
+        const token = (await issueSession(profileless)).token
+        const before = {
+          employees: await prisma.employee.count(),
+          workdays: await prisma.attendanceWorkday.count(),
+          sessions: await prisma.attendanceWorkSession.count(),
+        }
+        const response = await fetch(
+          `${base}/attendance/me/overview?from=2026-11-13&to=2026-11-13`,
+          { headers: { authorization: `Bearer ${token}` } },
+        )
+        assert.equal(response.status, 409)
+        const body = (await response.json()) as { error?: string }
+        assert.equal(
+          body.error,
+          "Complete your employee profile before using attendance",
+        )
+        assert.deepEqual(
+          {
+            employees: await prisma.employee.count(),
+            workdays: await prisma.attendanceWorkday.count(),
+            sessions: await prisma.attendanceWorkSession.count(),
+          },
+          before,
+        )
+      },
+    )
+    await t.test(
+      "[PG-007-F001-A012-T018] personal overview validates date range boundaries",
+      async () => {
+        const invalidCalendar = await request(
+          staff,
+          "/me/overview?from=2026-02-30&to=2026-02-30",
+        )
+        assert.equal(invalidCalendar.status, 400)
+        const reversed = await request(
+          staff,
+          "/me/overview?from=2026-11-14&to=2026-11-13",
+        )
+        assert.equal(reversed.status, 400)
+        const acceptedBoundary = await request(
+          staff,
+          "/me/overview?from=2025-01-01&to=2026-01-01",
+        )
+        assert.equal(acceptedBoundary.status, 200)
+        const rejectedBoundary = await request(
+          staff,
+          "/me/overview?from=2025-01-01&to=2026-01-02",
+        )
+        assert.equal(rejectedBoundary.status, 400)
+        const unsupportedKey = await request(
+          staff,
+          "/me/overview?from=2026-11-13&to=2026-11-13&unexpected=true",
+        )
+        assert.equal(unsupportedKey.status, 400)
+      },
+    )
+    await t.test(
+      "[PG-007-F001-A012-T019] personal overview aggregates attendance, approved leave, and recent activity",
+      async () => {
+        const personal = await account("pg007-reporting", "STAFF")
+        const foreign = await account("pg007-foreign", "STAFF", outside.id)
+
+        async function createSession(
+          employeeId: string,
+          startedAt: string,
+          endedAt: string | null = null,
+          suspendedAt: string | null = null,
+        ) {
+          return prisma.attendanceWorkSession.create({
+            data: {
+              employeeId,
+              startedAt: new Date(startedAt),
+              endedAt: endedAt ? new Date(endedAt) : null,
+              suspendedAt: suspendedAt ? new Date(suspendedAt) : null,
+            },
+          })
+        }
+
+        const closedWithBreak = await createSession(
+          personal.employee.id,
+          "2026-11-13T09:00:00+08:00",
+          "2026-11-13T09:30:00+08:00",
+        )
+        await prisma.attendanceBreak.create({
+          data: {
+            sessionId: closedWithBreak.id,
+            startedAt: new Date("2026-11-13T09:10:00+08:00"),
+            endedAt: new Date("2026-11-13T09:15:00+08:00"),
+            isPaid: false,
+          },
+        })
+        await createSession(
+          personal.employee.id,
+          "2026-11-13T10:00:00+08:00",
+          "2026-11-13T10:30:00+08:00",
+        )
+        await createSession(
+          personal.employee.id,
+          "2026-11-13T11:00:00+08:00",
+          "2026-11-13T11:30:00+08:00",
+        )
+        const onBreak = await createSession(
+          personal.employee.id,
+          "2026-11-14T09:00:00+08:00",
+        )
+        await prisma.attendanceBreak.create({
+          data: {
+            sessionId: onBreak.id,
+            startedAt: new Date("2026-11-14T10:00:00+08:00"),
+            isPaid: false,
+          },
+        })
+        await createSession(
+          foreign.employee.id,
+          "2026-11-14T09:30:00+08:00",
+          "2026-11-14T09:45:00+08:00",
+        )
+
+        const assignment =
+          await prisma.attendancePolicyAssignment.findFirstOrThrow({
+            where: { employeeId: personal.employee.id },
+          })
+        for (const workDate of ["2026-11-15", "2026-11-16"])
+          await prisma.attendanceWorkday.create({
+            data: {
+              employeeId: personal.employee.id,
+              assignmentId: assignment.id,
+              workDate: new Date(`${workDate}T00:00:00.000Z`),
+              timeZone: "Asia/Manila",
+              isWorkingDay: true,
+              requiredMinutes: 480,
+              policyName: "Flexible",
+              unpaidBreaksEnabled: false,
+              overnightRequiresReview: false,
+            },
+          })
+
+        // The database overlap constraint permits only one unfinished session
+        // per employee. Keep the suspended and working status cases isolated.
+        const suspendedActor = await account("pg007-suspended", "STAFF")
+        await createSession(
+          suspendedActor.employee.id,
+          "2026-11-15T09:00:00+08:00",
+          null,
+          "2026-11-15T10:00:00+08:00",
+        )
+        const workingActor = await account("pg007-working", "STAFF")
+        await createSession(
+          workingActor.employee.id,
+          "2026-11-16T09:00:00+08:00",
+        )
+
+        await prisma.leaveRequest.create({
+          data: {
+            requestKey: randomUUID(),
+            employeeId: personal.employee.id,
+            requestedById: personal.user.id,
+            type: "ANNUAL",
+            reason: "PG-007 approved leave report fixture",
+            startDate: new Date("2026-11-13T00:00:00.000Z"),
+            endDate: new Date("2026-11-17T00:00:00.000Z"),
+            status: "APPROVED",
+            days: {
+              create: [
+                {
+                  employeeId: personal.employee.id,
+                  assignmentId: assignment.id,
+                  workDate: new Date("2026-11-13T00:00:00.000Z"),
+                  timeZone: "Asia/Manila",
+                  policyName: "Flexible",
+                  baseRequiredMinutes: 480,
+                  leaveMinutes: 240,
+                },
+                {
+                  employeeId: personal.employee.id,
+                  assignmentId: assignment.id,
+                  workDate: new Date("2026-11-17T00:00:00.000Z"),
+                  timeZone: "Asia/Manila",
+                  policyName: "Flexible",
+                  baseRequiredMinutes: 480,
+                  leaveMinutes: 480,
+                },
+              ],
+            },
+          },
+        })
+
+        const seededWorkdays = await prisma.attendanceWorkday.findMany({
+          where: { employeeId: personal.employee.id },
+          orderBy: { workDate: "asc" },
+          select: { workDate: true },
+        })
+        assert.deepEqual(
+          seededWorkdays.map((day) => day.workDate.toISOString().slice(0, 10)),
+          ["2026-11-13", "2026-11-14", "2026-11-15", "2026-11-16"],
+        )
+        assert.equal(
+          await prisma.attendanceWorkSession.count({
+            where: { employeeId: personal.employee.id },
+          }),
+          4,
+        )
+
+        type PersonalOverview = {
+          scope: string
+          employees: number
+          recordedDays: number
+          approvedLeaveDays: number
+          approvedLeaveHours: number
+          checkIns: {
+            employees: number
+            total: number
+            closed: number
+            working: number
+            onBreak: number
+            suspended: number
+            recentActivity: {
+              action: string
+              at: string
+              employeeName: string
+            }[]
+          }
+        }
+        const response = await request(
+          personal,
+          "/me/overview?from=2026-11-13&to=2026-11-17",
+        )
+        assert.equal(response.status, 200)
+        const result = (await response.json()) as PersonalOverview
+        assert.equal(result.scope, "PERSONAL")
+        assert.equal(result.employees, 1)
+        assert.equal(result.recordedDays, 4)
+        assert.equal(result.approvedLeaveDays, 2)
+        assert.equal(result.approvedLeaveHours, 12)
+        assert.deepEqual(
+          {
+            employees: result.checkIns.employees,
+            total: result.checkIns.total,
+            closed: result.checkIns.closed,
+            working: result.checkIns.working,
+            onBreak: result.checkIns.onBreak,
+            suspended: result.checkIns.suspended,
+          },
+          {
+            employees: 1,
+            total: 4,
+            closed: 3,
+            working: 0,
+            onBreak: 1,
+            suspended: 0,
+          },
+        )
+        assert.equal(result.checkIns.recentActivity.length, 8)
+        assert.ok(
+          result.checkIns.recentActivity.every(
+            (event) => event.employeeName === personal.employee.fullName,
+          ),
+        )
+        assert.deepEqual(
+          result.checkIns.recentActivity.map((event) => event.action),
+          [
+            "BREAK_START",
+            "CLOCK_IN",
+            "CLOCK_OUT",
+            "CLOCK_IN",
+            "CLOCK_OUT",
+            "CLOCK_IN",
+            "CLOCK_OUT",
+            "BREAK_END",
+          ],
+        )
+        assert.deepEqual(
+          result.checkIns.recentActivity.map((event) => event.at),
+          [
+            "2026-11-14T02:00:00.000Z",
+            "2026-11-14T01:00:00.000Z",
+            "2026-11-13T03:30:00.000Z",
+            "2026-11-13T03:00:00.000Z",
+            "2026-11-13T02:30:00.000Z",
+            "2026-11-13T02:00:00.000Z",
+            "2026-11-13T01:30:00.000Z",
+            "2026-11-13T01:15:00.000Z",
+          ],
+        )
+
+        const suspendedResponse = await request(
+          suspendedActor,
+          "/me/overview?from=2026-11-15&to=2026-11-15",
+        )
+        assert.equal(suspendedResponse.status, 200)
+        const suspendedResult =
+          (await suspendedResponse.json()) as PersonalOverview
+        assert.deepEqual(
+          {
+            total: suspendedResult.checkIns.total,
+            closed: suspendedResult.checkIns.closed,
+            working: suspendedResult.checkIns.working,
+            onBreak: suspendedResult.checkIns.onBreak,
+            suspended: suspendedResult.checkIns.suspended,
+          },
+          { total: 1, closed: 0, working: 0, onBreak: 0, suspended: 1 },
+        )
+
+        const workingResponse = await request(
+          workingActor,
+          "/me/overview?from=2026-11-16&to=2026-11-16",
+        )
+        assert.equal(workingResponse.status, 200)
+        const workingResult = (await workingResponse.json()) as PersonalOverview
+        assert.deepEqual(
+          {
+            total: workingResult.checkIns.total,
+            closed: workingResult.checkIns.closed,
+            working: workingResult.checkIns.working,
+            onBreak: workingResult.checkIns.onBreak,
+            suspended: workingResult.checkIns.suspended,
+          },
+          { total: 1, closed: 0, working: 1, onBreak: 0, suspended: 0 },
+        )
+      },
+    )
+  },
+)
+
+test(
+  "[PG-005-F001-A003-T015] audit endpoint denies anonymous and USER callers",
+  { timeout: 120000 },
+  async (t) => {
+    const { prisma, base } = await startPgliteApp(t)
+    const user = await prisma.user.create({
+      data: {
+        email: "pg005-audit-user@test.local",
+        fullName: "PG005 audit user",
+        role: "USER",
+        passwordHash: "test-only",
+      },
+    })
+    const token = (await issueSession(user)).token
+    const anonymous = await fetch(base + "/attendance/audit")
+    assert.equal(anonymous.status, 401)
+    const forbidden = await fetch(base + "/attendance/audit", {
+      headers: { Authorization: "Bearer " + token },
+    })
+    assert.equal(forbidden.status, 403)
+    for (const response of [anonymous, forbidden]) {
+      const body = (await response.json()) as Record<string, unknown>
+      assert.equal("events" in body, false)
+    }
+  },
+)
+
+test(
+  "[PG-005-F001-A010-T016] audit endpoint validates query values and boundaries",
+  { timeout: 120000 },
+  async (t) => {
+    const { prisma, base } = await startPgliteApp(t)
+    const headUser = await prisma.user.create({
+      data: {
+        email: "pg005-audit-head@test.local",
+        fullName: "PG005 audit head",
+        role: "STAFF",
+        passwordHash: "test-only",
+      },
+    })
+    await prisma.department.create({
+      data: { name: "PG005 audit department", headId: headUser.id },
+    })
+    const adminUser = await prisma.user.create({
+      data: {
+        email: "pg005-audit-admin@test.local",
+        fullName: "PG005 audit admin",
+        role: "ADMIN",
+        passwordHash: "test-only",
+      },
+    })
+    const headToken = (await issueSession(headUser)).token
+    const adminToken = (await issueSession(adminUser)).token
+    const request = (token: string, path: string) =>
+      fetch(base + "/attendance" + path, {
+        headers: { Authorization: "Bearer " + token },
+      })
+    const range = "from=2026-11-13&to=2026-11-13"
+    const invalidQueries: [string, string][] = [
+      ["search-over-100", range + "&search=" + "x".repeat(101)],
+      ["repeated-search", range + "&search=one&search=two"],
+      ["impossible-date", "from=2026-02-30&to=2026-03-01"],
+      ["wrong-date-format", "from=2026/11/13&to=2026-11-13"],
+      ["reversed-range", "from=2026-11-14&to=2026-11-13"],
+      ["range-over-366-days", "from=2026-01-01&to=2027-01-02"],
+      ["page-zero", range + "&page=0"],
+      ["page-over-limit", range + "&page=100001"],
+      ["malformed-department-id", range + "&departmentId=!"],
+      ["unsupported-query-key", range + "&unsupported=1"],
+    ]
+    for (const [caseName, query] of invalidQueries) {
+      const response = await request(headToken, "/audit?" + query)
+      assert.equal(response.status, 400, caseName)
+    }
+
+    const maximumSearch = await request(
+      headToken,
+      "/audit?" + range + "&search=" + "x".repeat(100),
+    )
+    assert.equal(maximumSearch.status, 200, "100-character search is accepted")
+    const whitespaceSearch = await request(
+      headToken,
+      "/audit?" + range + "&search=%20%20",
+    )
+    assert.equal(whitespaceSearch.status, 200, "whitespace search trims empty")
+    const maximumRange = await request(
+      headToken,
+      "/audit?from=2026-01-01&to=2027-01-01",
+    )
+    assert.equal(maximumRange.status, 200, "366 inclusive dates are accepted")
+    const maximumPage = await request(
+      headToken,
+      "/audit?" + range + "&page=100000",
+    )
+    assert.equal(maximumPage.status, 200, "page 100000 is accepted")
+    assert.equal(((await maximumPage.json()) as { page: number }).page, 100000)
+
+    const missingDepartment = await prisma.department.create({
+      data: { name: "PG005 department to remove" },
+    })
+    await prisma.department.delete({ where: { id: missingDepartment.id } })
+    const missing = await request(
+      adminToken,
+      "/audit?" +
+        range +
+        "&departmentId=" +
+        encodeURIComponent(missingDepartment.id),
+    )
+    assert.equal(missing.status, 404)
+  },
+)
+
+test(
+  "[PG-004-F001-A002-T009] adjustment list paginates ten stable scoped rows",
+  { timeout: 120000 },
+  async (t) => {
+    const { prisma, base } = await startPgliteApp(t)
+    const department = await prisma.department.create({
+      data: { name: "Adjustment pagination team" },
+    })
+    const user = await prisma.user.create({
+      data: {
+        email: "adjustment-pagination@management.test",
+        fullName: "Pagination Staff",
+        role: "STAFF",
+        passwordHash: "test-only",
+      },
+    })
+    const employee = await prisma.employee.create({
+      data: {
+        employeeId: "ADJ-PAGE-001",
+        fullName: "Pagination Staff",
+        userId: user.id,
+        departmentId: department.id,
+      },
+    })
+    const token = (await issueSession(user)).token
+    const request = (page: string) =>
+      fetch(`${base}/attendance/adjustments?scope=mine&page=${page}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+    for (let index = 0; index < 11; index += 1) {
+      const startedAt = new Date(Date.UTC(2026, 10, 1, 9, index))
+      await prisma.attendanceAdjustment.create({
+        data: {
+          employeeId: employee.id,
+          requestedById: user.id,
+          requestKey: randomUUID(),
+          reason: `Pagination fixture ${index}`,
+          proposedStartedAt: startedAt,
+          proposedEndedAt: new Date(startedAt.getTime() + 60_000),
+          createdAt: new Date(Date.UTC(2026, 10, 1, 0, index)),
+        },
+      })
+    }
+
+    const firstResponse = await request("1")
+    assert.equal(firstResponse.status, 200, await firstResponse.clone().text())
+    const first = (await firstResponse.json()) as {
+      adjustments: { id: string }[]
+      total: number
+      page: number
+      pageSize: number
+    }
+    assert.equal(first.total, 11)
+    assert.equal(first.page, 1)
+    assert.equal(first.pageSize, 10)
+    assert.equal(first.adjustments.length, 10)
+
+    const secondResponse = await request("2")
+    assert.equal(
+      secondResponse.status,
+      200,
+      await secondResponse.clone().text(),
+    )
+    const second = (await secondResponse.json()) as {
+      adjustments: { id: string }[]
+      total: number
+      page: number
+      pageSize: number
+    }
+    assert.equal(second.total, 11)
+    assert.equal(second.page, 2)
+    assert.equal(second.pageSize, 10)
+    assert.equal(second.adjustments.length, 1)
+
+    const expected = await prisma.attendanceAdjustment.findMany({
+      where: { employeeId: employee.id },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: { id: true },
+    })
+    assert.deepEqual(
+      [...first.adjustments, ...second.adjustments].map(({ id }) => id),
+      expected.map(({ id }) => id),
+    )
+
+    for (const invalidPage of ["0", "1.5", "100001"]) {
+      const invalid = await request(invalidPage)
+      assert.equal(invalid.status, 400, `page=${invalidPage}`)
+    }
   },
 )

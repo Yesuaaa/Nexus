@@ -1,5 +1,10 @@
+import { ModuleTransition } from "@/components/layout/module-transition"
 import { WorkloadPage } from "@/features/workload/pages/workload-page"
 
 export default function Page() {
-  return <WorkloadPage administrative />
+  return (
+    <ModuleTransition>
+      <WorkloadPage administrative />
+    </ModuleTransition>
+  )
 }

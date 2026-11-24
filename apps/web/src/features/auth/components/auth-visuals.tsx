@@ -1,8 +1,10 @@
 import { getImageProps } from "next/image"
+import Link from "next/link"
 import { useEffect, useState } from "react"
 import type { AuthCopy } from "../content/auth-copy"
 import { focusOutline, heroTitleClass } from "../styles/auth-styles"
 import type { AuthLanguage, AuthMode, AuthPortal } from "../model/types"
+import { Brand } from "./auth-fields"
 
 const photos = [
   { src: "/auth/community-1.webp", width: 1672, height: 941 },
@@ -73,6 +75,120 @@ export function PhotoPanel({
       reduced.removeEventListener("change", update)
     }
   }, [])
+
+  if (portal === "client") {
+    const slides =
+      language === "fil"
+        ? [
+            {
+              word: "Talakayin.",
+              title: "Lahat ng usapan sa proyekto",
+              accent: "sa iisang thread.",
+              description:
+                "Panatilihing organisado ang mga kinakailangan, feedback, at kahilingan sa chat.",
+            },
+            {
+              word: "Presyo.",
+              title: "Mabilis na quotation",
+              accent: "sa loob ng iyong chat.",
+              description:
+                "Suriin ang presyo, saklaw, at timeline nang hindi umaalis sa usapan.",
+            },
+            {
+              word: "Aprubahan.",
+              title: "Mga real-time na update",
+              accent: "at malinaw na pananagutan.",
+              description:
+                "Subaybayan ang mga deliverable, miyembro ng team, at milestone sa real time.",
+            },
+          ]
+        : [
+            {
+              word: "Discuss.",
+              title: "All project discussions",
+              accent: "in one focused thread.",
+              description:
+                "Keep requirements, feedback, and service requests organized directly inside chat.",
+            },
+            {
+              word: "Quote.",
+              title: "Instant quotations",
+              accent: "built inside your chat.",
+              description:
+                "Review itemized pricing, scope breakdowns, and timelines without leaving the conversation.",
+            },
+            {
+              word: "Approve.",
+              title: "Real-time updates",
+              accent: "and clear accountability.",
+              description:
+                "Track active deliverables, assigned squad members, and milestone logs in real time.",
+            },
+          ]
+    const slide = slides[active]
+    return (
+      <aside
+        className="flex h-full min-h-0 flex-col overflow-y-auto border-r border-[#dedede] bg-[#203f8c] bg-[linear-gradient(to_right,rgb(255_255_255_/_0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgb(255_255_255_/_0.05)_1px,transparent_1px)] bg-size-[48px_48px] px-12 py-12 max-[850px]:hidden"
+        aria-label={copy.community}
+      >
+        <div className="flex h-9 items-center">
+          <Link href="/" aria-label="Converyn home" data-auth-home-link>
+            <Brand white className="" />
+          </Link>
+        </div>
+        <div className="flex flex-1 flex-col justify-center py-12">
+          <h1 className="text-[clamp(54px,6vw,88px)] leading-[0.92] font-extrabold tracking-[-0.055em] uppercase">
+            {slides.map((item, index) => (
+              <span
+                key={item.word}
+                className={`block transition-colors ${index === active ? "text-white" : "text-[#6e87b9]"}`}
+              >
+                {item.word}
+              </span>
+            ))}
+          </h1>
+        </div>
+        <div>
+          <h2 className="text-[28px] leading-tight font-bold tracking-[-0.03em] text-white">
+            {slide.title}
+            <br />
+            <span className="text-[#aabce0]">{slide.accent}</span>
+          </h2>
+          <p className="mt-4 max-w-[520px] text-sm leading-snug text-[#bbcbe6]">
+            {slide.description}
+          </p>
+          <div
+            className="mt-5 flex flex-wrap items-center gap-5 border-t border-white/20 pt-5 font-mono text-[11px] font-bold tracking-[0.1em] uppercase"
+            aria-label={copy.choosePhoto}
+          >
+            {slides.map((item, index) => (
+              <span key={item.word} className="flex items-center gap-5">
+                {index > 0 && (
+                  <span aria-hidden="true" className="text-[#6e87b9]">
+                    /
+                  </span>
+                )}
+                <button
+                  type="button"
+                  className={`cursor-pointer uppercase ${index === active ? "text-white" : "text-[#aabce0]"} ${focusOutline}`}
+                  onClick={() =>
+                    setSlide((current) => ({
+                      active: index,
+                      previous: current.active,
+                    }))
+                  }
+                  aria-current={index === active ? "true" : undefined}
+                >
+                  {String(index + 1).padStart(2, "0")}{" "}
+                  {item.word.replace(".", "")}
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      </aside>
+    )
+  }
 
   const image = getPhotoProps(active)
 

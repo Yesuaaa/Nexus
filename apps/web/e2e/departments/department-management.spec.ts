@@ -56,11 +56,47 @@ test.describe("Department Management page regressions", () => {
     ).toHaveCount(0)
 
     await search.clear()
+    await expect(page.getByRole("status")).toHaveText("Showing 1–10 of 12")
     await page.getByRole("button", { name: "Sort by Employees" }).click()
     await expect(page.getByRole("status")).toHaveText("Showing 1–10 of 12")
     await expect(page.getByRole("rowheader").first()).toContainText(
       "Department 12",
     )
+  })
+
+  test("Project Management department directory restores a valid URL page and clamps an invalid page", async ({
+    page,
+  }) => {
+    const departments = Array.from({ length: 12 }, (_, index) =>
+      departmentFixture(index + 1),
+    )
+    await restoreSession(page, "SUPERADMIN")
+    await page.route(
+      "**/api/departments/project-management-directory",
+      (route) => route.fulfill({ json: { departments } }),
+    )
+
+    await page.goto("/project-management?search=CODE&page=2")
+    const pagination = page.getByRole("navigation", {
+      name: "Department pages",
+    })
+    const secondPage = pagination.getByRole("button", {
+      name: "Page 2",
+      exact: true,
+    })
+    await expect(secondPage).toHaveAttribute("aria-current", "page")
+    await page.reload()
+    await expect(secondPage).toHaveAttribute("aria-current", "page")
+    await expect(page).toHaveURL(/search=CODE&page=2$/)
+
+    await page.goto("/project-management?search=CODE&page=99")
+    await expect(secondPage).toHaveAttribute("aria-current", "page")
+    await expect(page).toHaveURL(/search=CODE&page=2$/)
+    await page
+      .getByRole("searchbox", { name: "Search departments" })
+      .fill("CODE-12")
+    await expect(page).toHaveURL(/search=CODE-12$/)
+    await expect(secondPage).toHaveCount(0)
   })
 
   test("department creation reports name boundaries and recovers from validation and uniqueness errors", async ({
