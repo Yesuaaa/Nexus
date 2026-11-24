@@ -39,6 +39,7 @@ test("an unassigned Superadmin enters every implemented registered module", () =
       "people-hr",
       "attendance-monitoring",
       "administration",
+      "billing-finance",
     ],
   )
   for (const module of modules) {
@@ -64,7 +65,7 @@ test("registration alone adds a future implemented administrative entry and rout
       title: "Future Module",
       administrativePath: null,
     },
-    unfinished: { ...moduleRegistry["billing-finance"] },
+    unfinished: { ...moduleRegistry["billing-finance"], implemented: false },
   }
   const entry = getAdministrativeModuleEntries(superadmin, registry).find(
     (module) => module.id === "future-module",
@@ -92,7 +93,6 @@ test("unknown protected routes, prefix lookalikes and unavailable modules fail c
     for (const path of [
       "/unknown",
       "/module/unknown",
-      "/module/billing-finance",
       "/accounts-legacy",
       "/employees/unknown",
       "/attendance/unknown",
@@ -108,11 +108,11 @@ test("unknown protected routes, prefix lookalikes and unavailable modules fail c
     getWorkspaceModules(superadmin).find(
       (module) => module.id === "billing-finance",
     ).href,
-    null,
+    "/billing-finance/overview",
   )
   assert.equal(
     resolveWorkspaceModuleId(superadmin, "/messages", "billing-finance"),
-    null,
+    "billing-finance",
   )
 })
 

@@ -1,4 +1,5 @@
 import { getPrisma } from "../../lib/db.js"
+import { isSandboxWorkflowPayment } from "./workflow-payment.js"
 
 export async function listClientBillingPayments(clientId: string) {
   const payments = await getPrisma()!.workflowPayment.findMany({
@@ -50,10 +51,7 @@ export async function listClientBillingPayments(clientId: string) {
 
   return payments.map(
     ({ amount, workflow, proofFile, verifiedById, ...payment }) => {
-      const sandbox =
-        payment.status === "VERIFIED" &&
-        verifiedById === null &&
-        Boolean(payment.reference?.startsWith("XENDIT-SANDBOX-"))
+      const sandbox = isSandboxWorkflowPayment({ ...payment, verifiedById })
       return {
         ...payment,
         amount: amount.toFixed(2),

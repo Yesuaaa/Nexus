@@ -269,6 +269,80 @@ export async function mockApi(
     const pathname = url.pathname
     expect(url.origin).toBe(new URL(page.url()).origin)
 
+    if (
+      pathname === "/api/request-workflows/billing/invoices" &&
+      method === "GET"
+    ) {
+      await route.fulfill({ json: [] })
+      return
+    }
+    if (pathname === "/api/billing/payments" && method === "GET") {
+      await route.fulfill({
+        json: { rows: [], total: 0, page: 1, pageSize: 10 },
+      })
+      return
+    }
+    if (pathname === "/api/billing/expenses" && method === "GET") {
+      await route.fulfill({
+        json: { rows: [], total: 0, page: 1, pageSize: 10 },
+      })
+      return
+    }
+    if (pathname.startsWith("/api/billing/reports/") && method === "GET") {
+      await route.fulfill({
+        json: {
+          metrics: [],
+          chartTitle: "Report chart",
+          breakdownTitle: "Breakdown",
+          series: ["First", "Second"],
+          aging: [],
+          columns: [],
+          rows: [],
+          chart: [],
+          breakdown: [],
+        },
+      })
+      return
+    }
+    if (pathname === "/api/billing/settings" && method === "GET") {
+      await route.fulfill({
+        json: {
+          configuration: {
+            defaultTerms: "",
+            defaultDueDays: 30,
+            invoicePrefix: "INV",
+            version: 0,
+          },
+          methods: [],
+        },
+      })
+      return
+    }
+    if (pathname === "/api/billing/overview" && method === "GET") {
+      await route.fulfill({
+        json: {
+          totals: {
+            invoiced: "0.00",
+            collected: "0.00",
+            outstanding: "0.00",
+            overdue: "0.00",
+            current: "0.00",
+            unallocated: "0.00",
+            expenses: "0.00",
+            netCollections: "0.00",
+            monthlyExpenses: "0.00",
+          },
+          aging: ["0.00", "0.00", "0.00", "0.00"],
+          performance: [],
+          activity: [],
+          recentPayments: [],
+          outstandingInvoices: [],
+          unallocated: [],
+        },
+      })
+      return
+    }
+
     if (pathname === "/api/auth/login" && method === "POST") {
       const data = request.postDataJSON() as {
         email?: string

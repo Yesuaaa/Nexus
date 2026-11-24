@@ -13,6 +13,7 @@ import { departmentsRouter } from "./features/departments/departments.controller
 import { employeesRouter } from "./features/employees/employees.controller.js"
 import { staffPayrollRouter } from "./features/payroll/payroll-documents.controller.js"
 import { payrollRouter } from "./features/payroll/payroll.controller.js"
+import { billingRouter } from "./features/billing/billing.controller.js"
 import {
   createHealthRouter,
   requireReadyDatabase,
@@ -120,6 +121,7 @@ export function createApp(
   app.use("/api/departments", departmentsRouter)
   app.use("/api/employees", employeesRouter)
   app.use("/api/payroll", payrollRouter)
+  app.use("/api/billing", billingRouter)
   app.use("/api/staff/my-payroll", staffPayrollRouter)
   app.use("/api/clients", clientsRouter)
   app.use("/api/request-inbox", requestInboxRouter)

@@ -15,6 +15,7 @@ export function OverviewPanel({
   action,
   titleClassName,
   className,
+  variant = "default",
   children,
 }: {
   title: string
@@ -22,6 +23,7 @@ export function OverviewPanel({
   action?: ReactNode
   titleClassName?: string
   className?: string
+  variant?: "default" | "compact" | "highlight"
   children: ReactNode
 }) {
   const headingId = useId()
@@ -30,6 +32,10 @@ export function OverviewPanel({
       aria-labelledby={headingId}
       className={cn(
         "min-w-0 rounded-xl border border-[#eceef1] p-5 max-[560px]:p-4",
+        variant === "compact" &&
+          "bg-background p-4 shadow-[0_1px_3px_rgb(30_55_80_/_4%)]",
+        variant === "highlight" &&
+          "border-[#cfdbed] bg-[#f2f6fc] p-4 shadow-[0_2px_8px_rgb(30_55_80_/_5%)]",
         className,
       )}
     >
@@ -52,7 +58,7 @@ export function OverviewPanel({
         </div>
         {action}
       </div>
-      <div className="mt-4">{children}</div>
+      <div className={variant === "default" ? "mt-4" : "mt-3"}>{children}</div>
     </section>
   )
 }

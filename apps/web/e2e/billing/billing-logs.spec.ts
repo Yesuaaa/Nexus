@@ -172,3 +172,33 @@ for (const role of ["STAFF", "ADMIN", "SUPERADMIN"] as const) {
     expect(reads).toBe(0)
   })
 }
+
+test("issued invoices appear alongside existing billing history", async ({
+  page,
+}) => {
+  await restoreSession(page, "USER")
+  await page.route("**/api/request-workflows/billing", (route) =>
+    route.fulfill({ json: [] }),
+  )
+  await page.route("**/api/request-workflows/billing/invoices", (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: "invoice-1",
+          invoiceNumber: "INV-001",
+          description: "Design work",
+          total: "100.00",
+          collected: "25.00",
+          outstanding: "75.00",
+          dueDate: "2099-01-01T00:00:00.000Z",
+          displayStatus: "PARTIALLY_PAID",
+        },
+      ],
+    }),
+  )
+  await page.goto("/billing-logs")
+  const table = page.getByRole("table", { name: "Issued invoices" })
+  await expect(table.getByText("INV-001")).toBeVisible()
+  await expect(table.getByText("₱75.00")).toBeVisible()
+  await expect(page.getByText("No payment history yet.")).toBeVisible()
+})

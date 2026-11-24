@@ -4,7 +4,16 @@ import type { Account } from "../../auth/model/types.ts"
 
 export const moduleRegistry = registry
 export type WorkspaceModuleId = keyof typeof registry
-export type ModuleRegistration = (typeof registry)[WorkspaceModuleId]
+export type ModuleRegistration = {
+  title: string
+  description: string
+  implemented: boolean
+  administrativePath: string | null
+  icon: string
+  color: string
+  staffOnly?: boolean
+  workspaceParent?: string
+}
 
 export function getModuleLogsLabel(moduleId: WorkspaceModuleId): string {
   if (moduleId === "people-hr") return `${moduleRegistry[moduleId].title} Logs`

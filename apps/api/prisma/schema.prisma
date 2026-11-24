@@ -20,6 +20,12 @@ enum Role {
   USER
 }
 
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  CANCELLED
+}
+
 enum LeaveType {
   ANNUAL
   SICK
@@ -441,6 +447,10 @@ model User {
   createdPayrollPeriods             PayrollPeriod[]                   @relation("PayrollPeriodCreator")
   createdPayrollRuns                PayrollRun[]                      @relation("PayrollRunCreator")
   payrollCalculations               PayrollRunCalculation[]           @relation("PayrollCalculationCreator")
+  billingInvoices                   Invoice[]                         @relation("InvoiceClient")
+  createdBillingInvoices            Invoice[]                         @relation("InvoiceCreator")
+  createdInvoicePayments            InvoicePayment[]                  @relation("InvoicePaymentCreator")
+  createdExpenses                   Expense[]                         @relation("ExpenseCreator")
 
   @@index([departmentId])
   @@index([teamId])
@@ -589,6 +599,7 @@ model ServiceRequest {
   submissionKey           String?                      @db.VarChar(36)
   createdAt               DateTime                     @default(now())
   updatedAt               DateTime                     @updatedAt
+  invoices                Invoice[]
 
   @@unique([clientId, submissionKey])
   @@index([clientId, createdAt, id])
@@ -754,6 +765,7 @@ model Project {
   changeRequests    ProjectChangeRequest[]
   messages          ProjectMessage[]
   conversationReads ProjectConversationRead[]
+  invoices          Invoice[]
 
   @@index([clientId, createdAt, id])
   @@index([workspaceGroupId])
@@ -1150,6 +1162,7 @@ model WorkflowQuotation {
   createdAt              DateTime                @default(now())
   approval               WorkflowApproval?
   project                Project?
+  invoices               Invoice[]
 
   @@unique([requestId, version])
 }
@@ -1194,6 +1207,92 @@ model WorkflowPayment {
   reference    String?               @db.VarChar(300)
   verifiedById String?
   verifiedAt   DateTime?
+  invoice      Invoice?
+}
+
+model Invoice {
+  id                String             @id @default(cuid())
+  invoiceNumber     String             @unique
+  clientId          String
+  client            User               @relation("InvoiceClient", fields: [clientId], references: [id], onDelete: Restrict)
+  requestId         String
+  request           ServiceRequest     @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  projectId         String?
+  project           Project?           @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  quotationId       String?
+  quotation         WorkflowQuotation? @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  workflowPaymentId String?            @unique
+  workflowPayment   WorkflowPayment?   @relation(fields: [workflowPaymentId], references: [id], onDelete: Restrict)
+  status            InvoiceStatus      @default(DRAFT)
+  description       String
+  total             Decimal            @db.Decimal(12, 2)
+  currency          String             @default("PHP") @db.VarChar(3)
+  issueDate         DateTime
+  dueDate           DateTime
+  issuedAt          DateTime?
+  issuedSnapshot    Json?
+  createdById       String
+  createdBy         User               @relation("InvoiceCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  version           Int                @default(0)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  payments          InvoicePayment[]
+
+  @@index([requestId, createdAt])
+  @@index([clientId, createdAt])
+}
+
+model InvoicePayment {
+  id             String   @id @default(cuid())
+  invoiceId      String
+  invoice        Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  amount         Decimal  @db.Decimal(12, 2)
+  paidAt         DateTime
+  reference      String?
+  note           String?
+  methodLabel    String?  @db.VarChar(100)
+  createdById    String
+  createdBy      User     @relation("InvoicePaymentCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  idempotencyKey String   @db.VarChar(36)
+  createdAt      DateTime @default(now())
+
+  @@unique([createdById, idempotencyKey])
+  @@index([invoiceId, createdAt])
+}
+
+model BillingConfiguration {
+  id              String   @id
+  defaultTerms    String   @default("") @db.VarChar(2000)
+  defaultDueDays  Int      @default(30)
+  invoicePrefix   String   @default("INV") @db.VarChar(20)
+  version         Int      @default(0)
+  updatedAt       DateTime @updatedAt
+}
+
+model BillingPaymentMethod {
+  id        String   @id @default(cuid())
+  label     String   @unique @db.VarChar(100)
+  createdAt DateTime @default(now())
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  description String   @db.VarChar(1000)
+  category    String   @db.VarChar(100)
+  amount      Decimal  @db.Decimal(12, 2)
+  currency    String   @default("PHP") @db.VarChar(3)
+  expenseDate DateTime
+  vendor      String?  @db.VarChar(300)
+  reference   String?  @db.VarChar(300)
+  note        String?  @db.VarChar(2000)
+  createdById String
+  createdBy   User     @relation("ExpenseCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  version     Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([expenseDate, id])
+  @@index([category, expenseDate])
 }
 
 model WorkflowEvent {

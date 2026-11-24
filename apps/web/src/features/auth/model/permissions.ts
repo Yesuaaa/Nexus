@@ -80,6 +80,14 @@ export function canAccessPayroll(account: Account): boolean {
   )
 }
 
+export function canAccessBilling(account: Account): boolean {
+  return Boolean(
+    account.isActive &&
+    !account.accountDeletedAt &&
+    (account.role === "ADMIN" || account.role === "SUPERADMIN"),
+  )
+}
+
 export function canManagePayroll(account: Account): boolean {
   return (
     Boolean(account.isActive) &&

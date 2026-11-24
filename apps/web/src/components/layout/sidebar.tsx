@@ -16,6 +16,7 @@ import {
   Inbox,
   MessageSquareText,
   MessagesSquare,
+  Settings,
   UsersRound,
   WalletCards,
 } from "lucide-react"
@@ -46,6 +47,7 @@ import { attendanceNavigation } from "@/features/attendance/model/navigation"
 import { useWorkspaceModuleId } from "@/features/workspaces/providers/workspace-provider"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
+import { Button } from "@/components/ui/button"
 
 import { focusRing, iconButtonClass } from "./styles"
 import {
@@ -169,6 +171,7 @@ type NavGroup = {
   kind: "group"
   label: string
   icon: NavIcon
+  defaultHref?: string
   visible: (account: Account) => boolean
   links: {
     href: string
@@ -337,27 +340,54 @@ function GroupDisclosure({
   )
   return (
     <div className="min-w-0">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={panelId}
-        onClick={onToggle}
-        className={cn(
-          rowClass,
-          focusRing,
-          groupActive && "text-[#203f8c] hover:text-[#203f8c]",
-        )}
-      >
-        <RowIcon icon={group.icon} active={groupActive} />
-        <span className="min-w-0 flex-1 truncate">{group.label}</span>
-        <ChevronDown
+      {group.defaultHref ? (
+        <div className="flex items-center">
+          <Link
+            href={group.defaultHref}
+            onClick={onNavigate}
+            className={cn(navLinkClass, groupActive && activeRowClass)}
+          >
+            <RowIcon icon={group.icon} active={groupActive} />
+            <span className="min-w-0 truncate">{group.label}</span>
+          </Link>
+          <Button
+            variant="ghost"
+            size="boardAction"
+            type="button"
+            aria-label={`${open ? "Collapse" : "Expand"} ${group.label}`}
+            aria-expanded={open}
+            aria-controls={panelId}
+            onClick={onToggle}
+          >
+            <ChevronDown
+              className={cn("size-3.5", open && "rotate-180")}
+              aria-hidden="true"
+            />
+          </Button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={onToggle}
           className={cn(
-            "size-3.5 flex-none text-[#9aa4b5] transition-transform duration-200 motion-reduce:transition-none",
-            open && "rotate-180",
+            rowClass,
+            focusRing,
+            groupActive && "text-[#203f8c] hover:text-[#203f8c]",
           )}
-          aria-hidden="true"
-        />
-      </button>
+        >
+          <RowIcon icon={group.icon} active={groupActive} />
+          <span className="min-w-0 flex-1 truncate">{group.label}</span>
+          <ChevronDown
+            className={cn(
+              "size-3.5 flex-none text-[#9aa4b5] transition-transform duration-200 motion-reduce:transition-none",
+              open && "rotate-180",
+            )}
+            aria-hidden="true"
+          />
+        </button>
+      )}
       <div
         id={panelId}
         inert={!open}
@@ -448,6 +478,13 @@ function GroupFlyout({
         <DropdownMenuLabel className="px-2 pt-1.5 pb-1 text-[11px] font-semibold text-[#8a94a6]">
           {group.label}
         </DropdownMenuLabel>
+        {group.defaultHref && (
+          <DropdownMenuItem asChild>
+            <Link href={group.defaultHref} onClick={onNavigate}>
+              Open {group.label}
+            </Link>
+          </DropdownMenuItem>
+        )}
         {group.links.map((link) => {
           const active = isGroupLinkActive(link, pathname)
           if (link.disabled)
@@ -556,6 +593,65 @@ export function Sidebar({
   }
 
   function renderPolicy(policy: RoutePolicy) {
+    if (policy.id === "module-billing-pages") {
+      const root = "/billing-finance"
+      const link = (href: string, label: string) => ({
+        href: `${root}/${href}`,
+        label,
+      })
+      const groups: NavGroup[] = [
+        {
+          kind: "group",
+          label: "Billing & Finance",
+          icon: ClipboardList,
+          visible: policy.canAccess,
+          links: [
+            link("overview", "Overview"),
+            {
+              ...link("management", "Management"),
+              match: (path: string) =>
+                path === `${root}/management` ||
+                path.startsWith(`${root}/management/`),
+            },
+          ],
+        },
+        {
+          kind: "group",
+          label: "Reports",
+          icon: Gauge,
+          visible: policy.canAccess,
+          links: [
+            {
+              ...link("expenses", "Expenses"),
+              match: (path: string) =>
+                path === `${root}/expenses` ||
+                path === `${root}/reports/expense-summary`,
+            },
+            link("reports/revenue", "Revenue"),
+            link("reports/collections", "Collections"),
+            link("reports/receivables", "Receivables"),
+          ],
+        },
+        {
+          kind: "group",
+          label: "Settings",
+          icon: Settings,
+          visible: policy.canAccess,
+          links: [
+            link("settings/billing-configuration", "Billing Configuration"),
+            link("settings/payment-methods", "Payment Methods"),
+            link("settings/invoice-numbering", "Invoice Numbering"),
+          ],
+        },
+      ]
+      return (
+        <div key={policy.id}>
+          {renderGroup(groups[0])}
+          {renderGroup(groups[1])}
+          {renderGroup(groups[2])}
+        </div>
+      )
+    }
     if (policy.id === "module-payroll")
       return renderGroup(payrollModuleGroup(policy.canAccess))
 

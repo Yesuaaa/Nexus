@@ -1,4 +1,5 @@
 import type { Account } from "../../auth/model/types.ts"
+import { canAccessBilling } from "../../auth/model/permissions.ts"
 import { canAccessRoute } from "../../workspaces/model/route-policy.ts"
 import {
   canAccessAdministrativeModules,
@@ -67,6 +68,8 @@ export function getWorkspaceModules(account: Account): WorkspaceModule[] {
         "/my-payroll",
       )
     if (canAccessRoute(account, "/accounts")) add("administration", "/accounts")
+    if (canAccessBilling(account))
+      add("billing-finance", "/billing-finance/overview")
   }
 
   if (modules.length > 0)
