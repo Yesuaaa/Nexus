@@ -186,30 +186,124 @@ test(
     await t.test(
       "policy overview totals cover the inventory and remain configuration-only",
       async () => {
+        // PG-009-F001-A003-T001 adds archived/canceled boundary coverage while
+        // preserving the existing status and summary-equality assertions.
         assert.equal(
           (await request("/policies", "GET", undefined, staffToken)).status,
           403,
         )
-        const response = await request("/policies")
-        assert.equal(response.status, 200)
-        const result = (await response.json()) as {
-          summary: {
-            totalPolicies: number
-            activePolicies: number
-            archivedPolicies: number
-            assignmentPeriods: number
+
+        const fixtures = await prisma.$transaction(async (tx) => {
+          const activePolicy = await tx.attendancePolicy.create({
+            data: {
+              name: "Overview active policy",
+              timeZone: "Asia/Manila",
+              days: {
+                create: Array.from({ length: 7 }, (_, weekday) => ({
+                  weekday,
+                  isWorkingDay: true,
+                  requiredMinutes: 480,
+                })),
+              },
+            },
+          })
+          const archivedPolicy = await tx.attendancePolicy.create({
+            data: {
+              name: "Overview archived policy",
+              timeZone: "Asia/Manila",
+              archivedAt: new Date("2026-11-12T00:00:00.000Z"),
+              days: {
+                create: Array.from({ length: 7 }, (_, weekday) => ({
+                  weekday,
+                  isWorkingDay: true,
+                  requiredMinutes: 480,
+                })),
+              },
+            },
+          })
+          const employeeIds: string[] = []
+          const assignmentIds: string[] = []
+          for (let index = 0; index < 4; index += 1) {
+            const fixtureEmployee = await tx.employee.create({
+              data: {
+                employeeId: `POLICY-OVERVIEW-${index + 1}`,
+                fullName: `Overview assignment ${index + 1}`,
+              },
+            })
+            employeeIds.push(fixtureEmployee.id)
+            const assignment = await tx.attendancePolicyAssignment.create({
+              data: {
+                employeeId: fixtureEmployee.id,
+                policyId: activePolicy.id,
+                effectiveFrom: new Date(
+                  index === 3
+                    ? "2026-12-15T00:00:00.000Z"
+                    : "2026-11-10T00:00:00.000Z",
+                ),
+              },
+            })
+            assignmentIds.push(assignment.id)
+            if (index === 3)
+              await tx.attendancePolicyAssignment.update({
+                where: { id: assignment.id },
+                data: { cancelledAt: new Date("2026-12-01T00:00:00.000Z") },
+              })
           }
-        }
-        assert.deepEqual(result.summary, {
-          totalPolicies: await prisma.attendancePolicy.count(),
-          activePolicies: await prisma.attendancePolicy.count({
-            where: { archivedAt: null },
-          }),
-          archivedPolicies: await prisma.attendancePolicy.count({
-            where: { archivedAt: { not: null } },
-          }),
-          assignmentPeriods: await prisma.attendancePolicyAssignment.count(),
+          return {
+            policyIds: [activePolicy.id, archivedPolicy.id],
+            employeeIds,
+            assignmentIds,
+          }
         })
+
+        try {
+          const response = await request("/policies")
+          assert.equal(response.status, 200)
+          const result = (await response.json()) as {
+            summary: {
+              totalPolicies: number
+              activePolicies: number
+              archivedPolicies: number
+              assignmentPeriods: number
+            }
+          }
+          assert.deepEqual(result.summary, {
+            totalPolicies: await prisma.attendancePolicy.count(),
+            activePolicies: await prisma.attendancePolicy.count({
+              where: { archivedAt: null },
+            }),
+            archivedPolicies: await prisma.attendancePolicy.count({
+              where: { archivedAt: { not: null } },
+            }),
+            assignmentPeriods: await prisma.attendancePolicyAssignment.count({
+              where: { cancelledAt: null },
+            }),
+          })
+          assert.deepEqual(result.summary, {
+            totalPolicies: 3,
+            activePolicies: 2,
+            archivedPolicies: 1,
+            assignmentPeriods: 4,
+          })
+        } finally {
+          await prisma.$transaction(async (tx) => {
+            await tx.attendancePolicyAssignment.deleteMany({
+              where: { id: { in: fixtures.assignmentIds } },
+            })
+            await tx.attendancePolicy.updateMany({
+              where: { id: fixtures.policyIds[0] },
+              data: { archivedAt: new Date("2026-12-02T00:00:00.000Z") },
+            })
+            await tx.attendancePolicyDay.deleteMany({
+              where: { policyId: { in: fixtures.policyIds } },
+            })
+            await tx.attendancePolicy.deleteMany({
+              where: { id: { in: fixtures.policyIds } },
+            })
+            // Employee rows and their audit events remain until this disposable
+            // PGlite fixture closes because attendance audit is append-only.
+          })
+        }
       },
     )
     await t.test(

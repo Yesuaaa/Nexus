@@ -310,6 +310,31 @@ test("all attendance navigation pages preserve module ownership and role boundar
       role,
     )
   }
+
+  // PG-009-F001-A001-T001: the overview has the same exact configure gate
+  // as policy management; preserve the PG-008 assertions above unchanged.
+  const overviewPath = "/attendance/policies/overview"
+  for (const role of ["ADMIN", "SUPERADMIN"]) {
+    const allowed = manager(role, true, manageAttendance)
+    assert.equal(canAccessRoute(allowed, overviewPath), true, role)
+    assert.equal(
+      canAccessRoute(manager(role), overviewPath),
+      false,
+      `${role} without employees:manage`,
+    )
+    assert.equal(
+      canAccessRoute(manager(role, false, manageAttendance), overviewPath),
+      false,
+      `${role} inactive`,
+    )
+  }
+  for (const role of ["STAFF", "USER"]) {
+    assert.equal(
+      canAccessRoute(manager(role, true, manageAttendance), overviewPath),
+      false,
+      role,
+    )
+  }
 })
 
 test("[PG-003-F001-A001-T001] personal attendance selection requires active STAFF or ADMIN", () => {
