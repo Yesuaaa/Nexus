@@ -1033,8 +1033,23 @@ test("Admin policy creation and assignment are live; clients remain denied", asy
     .getByRole("button", { name: "Create policy", exact: true })
     .click()
   await expect(page.getByRole("dialog")).toHaveCount(0)
+  const createdPolicyRow = page
+    .getByRole("row")
+    .filter({ hasText: "Browser new policy" })
+  await expect(createdPolicyRow).toBeVisible()
+  // PG-008-F001-A006-T001 adds row-projection checks to the existing
+  // browser/API/PGlite create-and-assign workflow; C001 remains deferred.
   await expect(
-    page.getByRole("row").filter({ hasText: "Browser new policy" }),
+    createdPolicyRow.getByText("Flexible", { exact: true }),
+  ).toBeVisible()
+  await expect(
+    createdPolicyRow.getByRole("cell", { name: "Asia/Manila", exact: true }),
+  ).toBeVisible()
+  await expect(
+    createdPolicyRow.getByRole("cell", { name: "0 hrs/week", exact: true }),
+  ).toBeVisible()
+  await expect(
+    createdPolicyRow.getByRole("cell", { name: "0 assignments", exact: true }),
   ).toBeVisible()
   await page
     .getByRole("button", { name: "Assign policy to employee", exact: true })
@@ -1057,6 +1072,9 @@ test("Admin policy creation and assignment are live; clients remain denied", asy
     .getByRole("button", { name: "Confirm assignment", exact: true })
     .click()
   await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(
+    createdPolicyRow.getByRole("cell", { name: "1 assignments", exact: true }),
+  ).toBeVisible()
   const clientPage = await page.context().newPage()
   await signIn(clientPage, "client")
   await routeAttendanceApi(clientPage)
@@ -1784,6 +1802,10 @@ for (const viewport of [
       await expect(
         page.getByLabel("Attendance timezone", { exact: true }),
       ).toHaveValue("Asia/Manila")
+      // PG-008-F001-A013-T001: assigned-policy timezone remains read-only.
+      await expect(
+        page.getByLabel("Attendance timezone", { exact: true }),
+      ).toHaveAttribute("readonly", "")
       await page
         .getByRole("dialog")
         .getByRole("button", { name: "Cancel", exact: true })
@@ -2791,8 +2813,10 @@ for (const width of [1280, 390])
     const initial = requestGate()
     const refreshed = requestGate()
     let holdingRefresh = false
+    const initialQuery: { url: URL | null } = { url: null }
     await page.route("**/api/attendance/policies**", async (route) => {
       if (route.request().method() === "GET") {
+        if (!holdingRefresh) initialQuery.url = new URL(route.request().url())
         const gate = holdingRefresh ? refreshed : initial
         gate.start()
         await gate.pending
@@ -2803,6 +2827,14 @@ for (const width of [1280, 390])
     await page.goto("/attendance/settings")
     const table = page.getByRole("table", { name: "Attendance policies" })
     await initial.started
+    // PG-008-F001-A002-T001: the first request explicitly loads page 1, size
+    // 10, active policies, and omits the empty search value.
+    expect({
+      page: initialQuery.url?.searchParams.get("page"),
+      size: initialQuery.url?.searchParams.get("size"),
+      status: initialQuery.url?.searchParams.get("status"),
+      search: initialQuery.url?.searchParams.get("search"),
+    }).toEqual({ page: "1", size: "10", status: "active", search: null })
     await expect(table).toHaveAttribute("aria-busy", "true")
     const skeletonRows = table.getByRole("rowgroup").nth(1).getByRole("row")
     await expect(skeletonRows).toHaveCount(5)

@@ -15,6 +15,7 @@ import {
 } from "../src/features/attendance/model/attendance.ts"
 import {
   canAccessPersonalAttendance,
+  canConfigureAttendance,
   Permissions,
 } from "../src/features/auth/model/permissions.ts"
 import { formatDateTime } from "../src/lib/format.ts"
@@ -267,6 +268,48 @@ test("all attendance navigation pages preserve module ownership and role boundar
       for (const role of ["USER", "SUPERADMIN"])
         assert.equal(canAccessRoute({ ...staff, role }, link.href), false)
     }
+
+  // PG-008-F001-A001-T001: direct permission and route-policy boundaries for
+  // Attendance policy management.
+  const manager = (role, isActive = true, permissions = []) => ({
+    id: `pg008-${role.toLowerCase()}`,
+    role,
+    isActive,
+    permissions,
+  })
+  const manageAttendance = [Permissions.EMPLOYEES_MANAGE]
+  for (const role of ["ADMIN", "SUPERADMIN"]) {
+    const allowed = manager(role, true, manageAttendance)
+    assert.equal(canConfigureAttendance(allowed), true, role)
+    assert.equal(
+      canAccessRoute(allowed, "/attendance/policies/management"),
+      true,
+      role,
+    )
+    const missingPermission = manager(role)
+    assert.equal(canConfigureAttendance(missingPermission), false, role)
+    assert.equal(
+      canAccessRoute(missingPermission, "/attendance/policies/management"),
+      false,
+      role,
+    )
+    const inactive = manager(role, false, manageAttendance)
+    assert.equal(canConfigureAttendance(inactive), false, role)
+    assert.equal(
+      canAccessRoute(inactive, "/attendance/policies/management"),
+      false,
+      role,
+    )
+  }
+  for (const role of ["STAFF", "USER"]) {
+    const unsupported = manager(role, true, manageAttendance)
+    assert.equal(canConfigureAttendance(unsupported), false, role)
+    assert.equal(
+      canAccessRoute(unsupported, "/attendance/policies/management"),
+      false,
+      role,
+    )
+  }
 })
 
 test("[PG-003-F001-A001-T001] personal attendance selection requires active STAFF or ADMIN", () => {
