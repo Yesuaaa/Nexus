@@ -2160,6 +2160,15 @@ test(
       },
     })
     const token = (await issueSession(user)).token
+    const reviewer = await prisma.user.create({
+      data: {
+        email: "adjustment-pagination-reviewer@management.test",
+        fullName: "Pagination Reviewer",
+        role: "STAFF",
+        passwordHash: "test-only",
+        departmentId: department.id,
+      },
+    })
     const request = (page: string) =>
       fetch(`${base}/attendance/adjustments?scope=mine&page=${page}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -2224,5 +2233,143 @@ test(
       const invalid = await request(invalidPage)
       assert.equal(invalid.status, 400, `page=${invalidPage}`)
     }
+
+    const overtimeRows = []
+    const overtimeStatuses = [
+      "PENDING",
+      "VERIFIED",
+      "APPROVED",
+      "REJECTED",
+    ] as const
+    for (const [index, status] of overtimeStatuses.entries()) {
+      const startedAt = new Date(Date.UTC(2026, 10, 2, 9, index))
+      overtimeRows.push(
+        await prisma.attendanceAdjustment.create({
+          data: {
+            employeeId: employee.id,
+            requestedById: user.id,
+            requestKey: randomUUID(),
+            type: "OVERTIME",
+            overtimeMinutes: 30 + index,
+            status,
+            reason:
+              index === 2
+                ? "Needle overtime approved search marker"
+                : `Overtime status fixture ${status}`,
+            proposedStartedAt: startedAt,
+            proposedEndedAt: new Date(startedAt.getTime() + 60_000),
+            createdAt: new Date(startedAt.getTime() + index),
+            ...(status === "VERIFIED" || status === "APPROVED"
+              ? {
+                  verifiedById: reviewer.id,
+                  verifiedAt: startedAt,
+                  verificationNote: "Recorded Department Head verification",
+                }
+              : {}),
+            ...(status === "APPROVED" || status === "REJECTED"
+              ? {
+                  reviewedById: reviewer.id,
+                  reviewedAt: startedAt,
+                  reviewNote: "Recorded final review decision",
+                }
+              : {}),
+          },
+        }),
+      )
+    }
+    async function overtimeList(query: Record<string, string> = {}) {
+      const params = new URLSearchParams({
+        scope: "mine",
+        page: "1",
+        type: "OVERTIME",
+        ...query,
+      })
+      return fetch(`${base}/attendance/adjustments?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    }
+
+    // PG-012-F001-A005-T001: preserve the generic pagination checks above and
+    // verify all four statuses filter Overtime rows at the shared API boundary.
+    for (const [index, status] of overtimeStatuses.entries()) {
+      const filtered = await overtimeList({ status })
+      assert.equal(filtered.status, 200, `status=${status}`)
+      const body = (await filtered.json()) as {
+        adjustments: { id: string; type: string; status: string }[]
+        total: number
+      }
+      assert.equal(body.total, 1, `status=${status}`)
+      assert.deepEqual(
+        body.adjustments.map(({ id, type, status: actual }) => [
+          id,
+          type,
+          actual,
+        ]),
+        [[overtimeRows[index]!.id, "OVERTIME", status]],
+      )
+    }
+
+    // PG-012-F001-A004-T002: search is supported over reason, Employee name,
+    // and Employee ID; the server accepts 100 characters and rejects 101.
+    for (const [search, expected] of [
+      ["Needle overtime approved", [overtimeRows[2]!.id]],
+      ["Pagination Staff", overtimeRows.map(({ id }) => id)],
+      ["ADJ-PAGE-001", overtimeRows.map(({ id }) => id)],
+    ] as const) {
+      const searched = await overtimeList({ search })
+      assert.equal(searched.status, 200, `search=${search}`)
+      const body = (await searched.json()) as {
+        adjustments: { id: string }[]
+        total: number
+      }
+      assert.equal(body.total, expected.length, `search=${search}`)
+      assert.deepEqual(
+        body.adjustments.map(({ id }) => id).sort(),
+        [...expected].sort(),
+      )
+    }
+    assert.equal((await overtimeList({ search: "x".repeat(100) })).status, 200)
+
+    // PG-012-F001-A016-T001: keep supported response projection and query
+    // validation source-backed without replacing existing invalid-page checks.
+    const projected = await overtimeList({ status: "APPROVED" })
+    const projection = (await projected.json()) as {
+      adjustments: {
+        type: string
+        employee: Record<string, unknown>
+        capabilities: { approve: boolean; verify: boolean; reject: boolean }
+      }[]
+      total: number
+      page: number
+      pageSize: number
+    }
+    assert.equal(projected.status, 200)
+    assert.equal(projection.total, 1)
+    assert.equal(projection.page, 1)
+    assert.equal(projection.pageSize, 10)
+    assert.equal(projection.adjustments[0]?.type, "OVERTIME")
+    assert.deepEqual(Object.keys(projection.adjustments[0]!.employee).sort(), [
+      "departmentId",
+      "employeeId",
+      "fullName",
+      "id",
+    ])
+    assert.deepEqual(projection.adjustments[0]?.capabilities, {
+      approve: false,
+      verify: false,
+      reject: false,
+    })
+    const invalidQueries: Record<string, string>[] = [
+      { status: "INVALID" },
+      { type: "INVALID" },
+      { scope: "organization" },
+      { search: "x".repeat(101) },
+    ]
+    for (const query of invalidQueries)
+      assert.equal(
+        (await overtimeList(query)).status,
+        400,
+        JSON.stringify(query),
+      )
   },
 )

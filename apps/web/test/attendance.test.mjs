@@ -468,4 +468,28 @@ test("[PG-004-F001-A001-T001] adjustment route enforces active roles and employe
       false,
       `${role} must be active on Corrections`,
     )
+
+  // PG-012-F001-A001-T001: add the canonical Overtime path to the existing
+  // route-policy matrix while retaining the mixed and Corrections assertions.
+  const overtimePath = "/attendance/requests/overtime"
+  assert.equal(canAccessRoute(account("STAFF"), overtimePath), true)
+  assert.equal(canAccessRoute(account("ADMIN"), overtimePath), true)
+  assert.equal(
+    canAccessRoute(
+      account("SUPERADMIN", true, [Permissions.EMPLOYEES_READ]),
+      overtimePath,
+    ),
+    true,
+  )
+  assert.equal(canAccessRoute(account("SUPERADMIN"), overtimePath), false)
+  assert.equal(canAccessRoute(account("USER"), overtimePath), false)
+  for (const role of ["STAFF", "ADMIN", "SUPERADMIN"])
+    assert.equal(
+      canAccessRoute(
+        account(role, false, [Permissions.EMPLOYEES_READ]),
+        overtimePath,
+      ),
+      false,
+      `${role} must be active on Overtime`,
+    )
 })

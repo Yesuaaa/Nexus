@@ -5323,6 +5323,11 @@ test("overtime conflict recovers a stale HR approval after Superadmin rejection"
   await expect(
     detail.getByRole("button", { name: "Confirm decision" }),
   ).toHaveCount(0)
+  // PG-012-F001-A015-T001: the current winning state is read-only on the
+  // canonical Overtime route; the stale HR note input must not remain usable.
+  await expect(
+    detail.getByRole("textbox", { name: "Review note" }),
+  ).toHaveCount(0)
   await expect
     .poll(() => reads)
     .toEqual(
@@ -7125,4 +7130,121 @@ test("stale leave refresh clears details when Head access is revoked", async ({
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await expect(page.getByText(request.reason)).toHaveCount(0)
   await expect(rowMenu).toHaveCount(0)
+})
+
+test("[PG-012-F001-A019-T002] automatic overtime persists in the normal typed queue", async ({
+  page,
+}) => {
+  const requester = "overtime-staff"
+  await clock("2026-11-22T09:00:00+08:00")
+  const opened = await overtimeFixtureCall(
+    requester,
+    "/attendance/me/clock-in",
+    "POST",
+    {},
+  )
+  expect(opened.status, await opened.clone().text()).toBe(201)
+  const { workday } = (await opened.json()) as {
+    workday: { activeSessionId: string }
+  }
+
+  await clock("2026-11-22T20:00:00+08:00")
+  const closed = await overtimeFixtureCall(
+    requester,
+    "/attendance/me/clock-out",
+    "POST",
+    { sessionId: workday.activeSessionId },
+  )
+  expect(closed.status, await closed.clone().text()).toBe(200)
+
+  const createdList = await overtimeFixtureCall(
+    requester,
+    `${overtimeAdjustments}?scope=mine&type=OVERTIME&status=PENDING`,
+  )
+  expect(createdList.status, await createdList.clone().text()).toBe(200)
+  const createdBody = (await createdList.json()) as {
+    adjustments: {
+      id: string
+      sessionId: string
+      overtimeMinutes: number
+      status: string
+    }[]
+  }
+  const created = createdBody.adjustments.find(
+    ({ sessionId }) => sessionId === workday.activeSessionId,
+  )
+  expect(created).toMatchObject({
+    sessionId: workday.activeSessionId,
+    overtimeMinutes: 180,
+    status: "PENDING",
+  })
+  if (!created) throw new Error("Expected automatic Overtime for this shift")
+
+  await signIn(page, requester)
+  const initialList = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return (
+      response.request().method() === "GET" &&
+      url.pathname === "/api/attendance/adjustments" &&
+      url.searchParams.get("type") === "OVERTIME"
+    )
+  })
+  await page.goto(overtimePage)
+  const initialResponse = await initialList
+  expect(initialResponse.status()).toBe(200)
+  const initialBody = (await initialResponse.json()) as {
+    adjustments: {
+      id: string
+      overtimeMinutes: number
+      status: string
+      employee: { fullName: string }
+    }[]
+  }
+  expect(initialBody.adjustments).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        id: created.id,
+        overtimeMinutes: 180,
+        status: "PENDING",
+        employee: expect.objectContaining({
+          fullName: "Attendance overtime-staff",
+        }),
+      }),
+    ]),
+  )
+  const row = page.getByRole("row").filter({
+    has: page.locator(`[id="attendance-adjustment-actions-${created.id}"]`),
+  })
+  await expect(row).toContainText("Attendance overtime-staff")
+  await expect(row).toContainText("180 minutes requested")
+  await expect(row).toContainText("Pending")
+
+  const reloadedList = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return (
+      response.request().method() === "GET" &&
+      url.pathname === "/api/attendance/adjustments" &&
+      url.searchParams.get("type") === "OVERTIME"
+    )
+  })
+  await page.reload()
+  const reloadedResponse = await reloadedList
+  expect(reloadedResponse.status()).toBe(200)
+  const persistedBody = (await reloadedResponse.json()) as {
+    adjustments: {
+      id: string
+      overtimeMinutes: number
+      status: string
+    }[]
+  }
+  expect(persistedBody.adjustments).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        id: created.id,
+        overtimeMinutes: 180,
+        status: "PENDING",
+      }),
+    ]),
+  )
+  await expect(row).toContainText("180 minutes requested")
 })
