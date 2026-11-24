@@ -1354,7 +1354,7 @@ export function DashboardPage({
                     retry={conversations?.retry}
                     empty="No conversations with your team yet."
                   >
-                    <div className="grid gap-2">
+                    <div className="grid min-w-0 gap-2">
                       {messageRows.map(({ message, ...row }) => {
                         const own = message?.sender?.id === account.id
                         const sender = own

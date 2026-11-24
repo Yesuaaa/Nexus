@@ -122,7 +122,7 @@ export function ConversationRow({
   const { formatDate } = useDatePreferences()
   return (
     <div
-      className={cn("relative", !compact && "mb-2")}
+      className={cn("relative min-w-0", !compact && "mb-2")}
       data-conversation-id={id}
     >
       <Link
@@ -131,7 +131,7 @@ export function ConversationRow({
         aria-current={selected ? "page" : undefined}
         aria-label={label}
         className={cn(
-          "flex items-center gap-3 overflow-hidden rounded-2xl px-3 py-3 no-underline transition-colors",
+          "flex min-w-0 items-center gap-3 overflow-hidden rounded-2xl px-3 py-3 no-underline transition-colors",
           compact && "rounded-lg border border-border px-3 py-2.5",
           compact && unreadCount > 0 && "border-[#dce5fa] bg-[#f4f7fd]",
           focusRing,

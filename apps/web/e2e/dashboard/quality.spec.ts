@@ -548,6 +548,14 @@ test("team message previews share unread counts and keep sender attribution", as
   )
   const previews = team.getByRole("link", { name: /Maria Santos|You:/ })
   await expect(previews).toHaveCount(2)
+  const teamBounds = await team.boundingBox()
+  const previewBounds = await previews.first().boundingBox()
+  expect(teamBounds).not.toBeNull()
+  expect(previewBounds).not.toBeNull()
+  expect(previewBounds!.x).toBeGreaterThanOrEqual(teamBounds!.x)
+  expect(previewBounds!.x + previewBounds!.width).toBeLessThanOrEqual(
+    teamBounds!.x + teamBounds!.width,
+  )
   await expect(previews.first()).toHaveAttribute(
     "href",
     "/messages?project=project-chat",
