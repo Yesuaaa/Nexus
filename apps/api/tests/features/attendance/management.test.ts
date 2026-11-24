@@ -112,6 +112,119 @@ test(
     }
 
     await t.test(
+      "[PG-010-F001-A001-T003] correction API authentication is independent of route access",
+      async () => {
+        const basicUser = await prisma.user.create({
+          data: {
+            email: "pg010-api-basic-user@management.test",
+            fullName: "PG-010 Basic User",
+            role: "USER",
+            passwordHash: "test-only",
+          },
+        })
+        const userToken = (await issueSession(basicUser)).token
+        const before = await prisma.attendanceAdjustment.count()
+        const path = "/attendance/adjustments?scope=mine&type=CORRECTION"
+        const anonymous = await fetch(`${base}${path}`)
+        assert.equal(anonymous.status, 401)
+        const invalidSession = await fetch(`${base}${path}`, {
+          headers: { authorization: "Bearer not-a-valid-token" },
+        })
+        assert.equal(invalidSession.status, 401)
+        const userRead = await fetch(`${base}${path}`, {
+          headers: { authorization: `Bearer ${userToken}` },
+        })
+        assert.equal(userRead.status, 403)
+
+        for (const actor of [staff, admin]) {
+          const allowed = await request(
+            actor,
+            "/adjustments?scope=mine&type=CORRECTION",
+          )
+          assert.equal(allowed.status, 200, await allowed.clone().text())
+        }
+
+        const forbiddenCreate = await fetch(`${base}/attendance/adjustments`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${userToken}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            requestKey: randomUUID(),
+            startedAt: "2026-11-12T09:00:00+08:00",
+            endedAt: "2026-11-12T10:00:00+08:00",
+            reason: "Unauthorized correction request",
+          }),
+        })
+        assert.equal(forbiddenCreate.status, 403)
+        assert.equal(await prisma.attendanceAdjustment.count(), before)
+      },
+    )
+
+    await t.test(
+      "[PG-010-F001-A014-T018] adjustment API rejects unsupported filters and malformed inputs without writes",
+      async () => {
+        const before = await prisma.attendanceAdjustment.count()
+        const invalidQueries = [
+          "/adjustments?scope=organization",
+          "/adjustments?page=0",
+          "/adjustments?page=1.5",
+          "/adjustments?page=100001",
+          `/adjustments?search=${"x".repeat(101)}`,
+          "/adjustments?type=LEAVE",
+          "/adjustments?status=CANCELLED",
+          "/adjustments?status=PENDING&status=REJECTED",
+          "/adjustments?unknown=1",
+        ]
+        for (const path of invalidQueries) {
+          const response = await request(staff, path)
+          assert.equal(
+            response.status,
+            400,
+            `${path}: ${await response.text()}`,
+          )
+        }
+
+        const malformedDetail = await request(
+          head,
+          "/adjustments/not-a-valid-id!",
+        )
+        assert.equal(malformedDetail.status, 400)
+
+        const invalidBodies = [
+          {
+            requestKey: randomUUID(),
+            startedAt: "2026-11-12T09:00:00",
+            endedAt: "2026-11-12T10:00:00+08:00",
+            reason: "Timestamp without an offset",
+          },
+          {
+            requestKey: randomUUID(),
+            startedAt: "2026-11-12T09:00:00+08:00",
+            endedAt: "2026-11-12T10:00:00+08:00",
+            reason: "Extra employee field",
+            employeeId: staff.employee.id,
+          },
+        ]
+        for (const body of invalidBodies) {
+          const response = await request(staff, "/adjustments", body)
+          assert.equal(response.status, 400, await response.text())
+        }
+
+        const unknownSession = await request(staff, "/adjustments", {
+          requestKey: randomUUID(),
+          sessionId: "missing-session-id",
+          startedAt: "2026-11-12T09:00:00+08:00",
+          endedAt: "2026-11-12T10:00:00+08:00",
+          reason: "Unknown session reference",
+        })
+        assert.equal(unknownSession.status, 404)
+        assert.equal(await prisma.attendanceAdjustment.count(), before)
+      },
+    )
+
+    await t.test(
       "unassign requires policy administration and preserves history",
       async () => {
         const person = await account("unassign", "STAFF")
@@ -353,6 +466,83 @@ test(
         })
         assert.equal(foreign.status, 404)
 
+        const whitespaceBaseline = await prisma.attendanceAdjustment.count({
+          where: { requestedById: staff.user.id },
+        })
+        const whitespaceOnly = await request(staff, "/adjustments", {
+          requestKey: randomUUID(),
+          startedAt: "2026-11-12T09:00:00+08:00",
+          endedAt: "2026-11-12T10:00:00+08:00",
+          reason: "     ",
+        })
+        assert.equal(whitespaceOnly.status, 400)
+        assert.equal(
+          await prisma.attendanceAdjustment.count({
+            where: { requestedById: staff.user.id },
+          }),
+          whitespaceBaseline,
+        )
+        const paddedReason = await request(staff, "/adjustments", {
+          requestKey: randomUUID(),
+          startedAt: "2026-11-12T09:00:00+08:00",
+          endedAt: "2026-11-12T10:00:00+08:00",
+          reason: "  Valid correction context  ",
+        })
+        assert.equal(
+          paddedReason.status,
+          201,
+          await paddedReason.clone().text(),
+        )
+        assert.equal(
+          (
+            (await paddedReason.json()) as {
+              adjustment: { reason: string }
+            }
+          ).adjustment.reason,
+          "Valid correction context",
+        )
+
+        const invalidBaseline = await prisma.attendanceAdjustment.count({
+          where: { requestedById: staff.user.id },
+        })
+        const invalidRequests = [
+          {
+            requestKey: randomUUID(),
+            startedAt: "2026-11-12T10:00:00+08:00",
+            endedAt: "2026-11-12T09:00:00+08:00",
+            reason: "Reversed correction interval",
+            expected: 400,
+          },
+          {
+            requestKey: randomUUID(),
+            startedAt: "2026-11-15T09:00:00+08:00",
+            endedAt: "2026-11-15T10:00:00+08:00",
+            reason: "Future correction interval",
+            expected: 400,
+          },
+          {
+            requestKey: randomUUID(),
+            startedAt: "2026-11-13T10:00:00+08:00",
+            endedAt: "2026-11-13T11:00:00+08:00",
+            reason: "Overlapping correction interval",
+            expected: 409,
+          },
+        ] as const
+        for (const { expected, ...body } of invalidRequests) {
+          const response = await request(staff, "/adjustments", body)
+          assert.equal(
+            response.status,
+            expected,
+            `${body.reason}: ${await response.clone().text()}`,
+          )
+        }
+        assert.equal(
+          await prisma.attendanceAdjustment.count({
+            where: { requestedById: staff.user.id },
+          }),
+          invalidBaseline,
+        )
+
         // PG-006-F001-A010-T021 extends this existing PGlite request test
         // with the API's inclusive reason-length boundaries.
         const priorCount = await prisma.attendanceAdjustment.count({
@@ -480,6 +670,152 @@ test(
             )
           ).status,
           409,
+        )
+      },
+    )
+
+    await t.test(
+      "[PG-010-F001-A016-T022] one active correction is allowed per attendance session",
+      async () => {
+        const subject = await account(
+          `pg010-duplicate-${randomUUID()}`,
+          "STAFF",
+        )
+        const target = await prisma.attendanceWorkSession.create({
+          data: {
+            employeeId: subject.employee.id,
+            startedAt: new Date("2026-11-13T09:00:00+08:00"),
+            endedAt: new Date("2026-11-13T10:00:00+08:00"),
+          },
+        })
+        const firstBody = {
+          requestKey: randomUUID(),
+          sessionId: target.id,
+          startedAt: "2026-11-13T09:00:00+08:00",
+          endedAt: "2026-11-13T10:00:00+08:00",
+          reason: "Correct this completed attendance session",
+        }
+        const first = await request(subject, "/adjustments", firstBody)
+        assert.equal(first.status, 201, await first.clone().text())
+        const firstId = ((await first.json()) as { adjustment: { id: string } })
+          .adjustment.id
+
+        const duplicate = await request(subject, "/adjustments", {
+          ...firstBody,
+          requestKey: randomUUID(),
+        })
+        assert.equal(duplicate.status, 409)
+        assert.equal(
+          ((await duplicate.json()) as { error: string }).error,
+          "This session already has a pending correction",
+        )
+        const rows = await prisma.attendanceAdjustment.findMany({
+          where: {
+            sessionId: target.id,
+            type: "CORRECTION",
+            status: { in: ["PENDING", "VERIFIED"] },
+          },
+        })
+        assert.equal(rows.length, 1)
+        assert.equal(rows[0].id, firstId)
+        assert.equal(rows[0].status, "PENDING")
+        assert.equal(rows[0].requestedById, subject.user.id)
+        assert.deepEqual(
+          await prisma.attendanceWorkSession.findUniqueOrThrow({
+            where: { id: target.id },
+          }),
+          target,
+        )
+      },
+    )
+
+    await t.test(
+      "[PG-010-F001-A020-T027] HR finalizes only pending corrections without an independent Head",
+      async () => {
+        async function departmentCase(name: string, selfHead: boolean) {
+          const unit = await prisma.department.create({
+            data: { name: `PG-010 ${name} ${randomUUID()}` },
+          })
+          const subject = await account(
+            `pg010-${name}-${randomUUID()}`,
+            "STAFF",
+            unit.id,
+          )
+          const independent = selfHead
+            ? null
+            : await account(`pg010-head-${randomUUID()}`, "STAFF", unit.id)
+          await prisma.department.update({
+            where: { id: unit.id },
+            data: { headId: (independent ?? subject).user.id },
+          })
+          const created = await request(subject, "/adjustments", {
+            requestKey: randomUUID(),
+            startedAt: "2026-11-12T09:00:00+08:00",
+            endedAt: "2026-11-12T10:00:00+08:00",
+            reason: `Pending request for ${name}`,
+          })
+          assert.equal(created.status, 201, await created.clone().text())
+          return {
+            id: ((await created.json()) as { adjustment: { id: string } })
+              .adjustment.id,
+            subject,
+          }
+        }
+
+        const normal = await departmentCase("independent-head", false)
+        const hrListPath =
+          "/adjustments?scope=team&type=CORRECTION&status=PENDING"
+        const normalList = await request(admin, hrListPath)
+        assert.equal(normalList.status, 200, await normalList.clone().text())
+        const normalRows = (
+          (await normalList.json()) as { adjustments: { id: string }[] }
+        ).adjustments
+        assert.equal(
+          normalRows.some(({ id }) => id === normal.id),
+          false,
+        )
+        const premature = await request(
+          admin,
+          `/adjustments/${normal.id}/review`,
+          { decision: "APPROVED", note: "Head review is still required" },
+        )
+        assert.equal(premature.status, 403)
+        assert.equal(
+          (
+            await prisma.attendanceAdjustment.findUniqueOrThrow({
+              where: { id: normal.id },
+            })
+          ).status,
+          "PENDING",
+        )
+
+        const exception = await departmentCase("self-head", true)
+        const exceptionList = await request(admin, hrListPath)
+        assert.equal(
+          exceptionList.status,
+          200,
+          await exceptionList.clone().text(),
+        )
+        const exceptionRows = (
+          (await exceptionList.json()) as { adjustments: { id: string }[] }
+        ).adjustments
+        assert.equal(
+          exceptionRows.some(({ id }) => id === exception.id),
+          true,
+        )
+        const final = await request(
+          admin,
+          `/adjustments/${exception.id}/review`,
+          { decision: "APPROVED", note: "No independent active Head exists" },
+        )
+        assert.equal(final.status, 200, await final.clone().text())
+        assert.equal(
+          (
+            await prisma.attendanceAdjustment.findUniqueOrThrow({
+              where: { id: exception.id },
+            })
+          ).status,
+          "APPROVED",
         )
       },
     )
@@ -1331,6 +1667,39 @@ test(
           },
         })
         const token = (await issueSession(profileless)).token
+        const adjustmentCount = await prisma.attendanceAdjustment.count()
+        const correctionList = await fetch(
+          `${base}/attendance/adjustments?scope=team&type=CORRECTION`,
+          { headers: { authorization: `Bearer ${token}` } },
+        )
+        assert.equal(
+          correctionList.status,
+          200,
+          await correctionList.clone().text(),
+        )
+        assert.equal(
+          (
+            (await correctionList.json()) as {
+              capabilities: { requestCorrection: boolean }
+            }
+          ).capabilities.requestCorrection,
+          false,
+        )
+        const createCorrection = await fetch(`${base}/attendance/adjustments`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            requestKey: randomUUID(),
+            startedAt: "2026-11-12T09:00:00+08:00",
+            endedAt: "2026-11-12T10:00:00+08:00",
+            reason: "Profileless administrator request",
+          }),
+        })
+        assert.equal(createCorrection.status, 409)
+        assert.equal(await prisma.attendanceAdjustment.count(), adjustmentCount)
         const before = {
           employees: await prisma.employee.count(),
           workdays: await prisma.attendanceWorkday.count(),

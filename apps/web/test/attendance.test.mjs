@@ -420,4 +420,28 @@ test("[PG-004-F001-A001-T001] adjustment route enforces active roles and employe
       false,
       `${role} must be active`,
     )
+
+  // PG-010-F001-A001-T001: preserve the mixed PG-004 route assertions above
+  // and verify the canonical correction-only route with the same policy.
+  const correctionsPath = "/attendance/requests/corrections"
+  assert.equal(canAccessRoute(account("STAFF"), correctionsPath), true)
+  assert.equal(canAccessRoute(account("ADMIN"), correctionsPath), true)
+  assert.equal(
+    canAccessRoute(
+      account("SUPERADMIN", true, [Permissions.EMPLOYEES_READ]),
+      correctionsPath,
+    ),
+    true,
+  )
+  assert.equal(canAccessRoute(account("SUPERADMIN"), correctionsPath), false)
+  assert.equal(canAccessRoute(account("USER"), correctionsPath), false)
+  for (const role of ["STAFF", "ADMIN", "SUPERADMIN"])
+    assert.equal(
+      canAccessRoute(
+        account(role, false, [Permissions.EMPLOYEES_READ]),
+        correctionsPath,
+      ),
+      false,
+      `${role} must be active on Corrections`,
+    )
 })

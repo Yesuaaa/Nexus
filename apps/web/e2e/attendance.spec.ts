@@ -692,6 +692,129 @@ test("[PG-004-F001-A006-T008] mixed queue submits and reloads a persisted correc
   })
 })
 
+test("[PG-010-F001-A015-T019] Corrections route submission persists through Next, Express, and PGlite", async ({
+  page,
+}) => {
+  const reason = `PG-010 integrated correction ${randomUUID()}`
+  await clock("2026-11-24T12:00:00+08:00")
+  await signIn(page, "staff")
+  await page.goto("/attendance/requests/corrections")
+  await expect(
+    page.getByRole("heading", { name: "Attendance Corrections" }),
+  ).toBeVisible()
+  await page
+    .getByRole("button", { name: "Request correction", exact: true })
+    .click()
+  const dialog = page.getByRole("dialog", {
+    name: "Request missing attendance",
+  })
+  await dialog
+    .getByLabel("Actual clock-in", { exact: true })
+    .fill("2026-11-23T09:00")
+  await dialog
+    .getByLabel("Actual clock-out", { exact: true })
+    .fill("2026-11-23T10:00")
+  await dialog.getByLabel("Reason", { exact: true }).fill(reason)
+
+  const submitted = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/api/attendance/adjustments",
+  )
+  const refreshed = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return (
+      response.request().method() === "GET" &&
+      url.pathname === "/api/attendance/adjustments" &&
+      url.searchParams.get("type") === "CORRECTION"
+    )
+  })
+  await dialog
+    .getByRole("button", { name: "Submit request", exact: true })
+    .click()
+  const createdResponse = await submitted
+  const createdText = await createdResponse.text()
+  expect(createdResponse.status(), createdText).toBe(201)
+  const payload = createdResponse.request().postDataJSON() as {
+    type?: string
+    requestKey: string
+    sessionId?: string
+    startedAt: string
+    endedAt: string
+    reason: string
+  }
+  expect(payload.type).toBe("CORRECTION")
+  expect(payload.requestKey).toMatch(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  )
+  expect(payload.sessionId).toBeUndefined()
+  expect(payload.reason).toBe(reason)
+  expect(Date.parse(payload.startedAt)).not.toBeNaN()
+  expect(Date.parse(payload.endedAt)).not.toBeNaN()
+
+  const { adjustment: created } = JSON.parse(createdText) as {
+    adjustment: {
+      id: string
+      type: string
+      status: string
+      requestedById: string
+      sessionId: string | null
+      reason: string
+      proposedStartedAt: string
+      proposedEndedAt: string
+    }
+  }
+  expect(created).toMatchObject({
+    type: "CORRECTION",
+    status: "PENDING",
+    requestedById: fixture.actors.staff.userId,
+    sessionId: null,
+    reason,
+    proposedStartedAt: new Date(payload.startedAt).toISOString(),
+    proposedEndedAt: new Date(payload.endedAt).toISOString(),
+  })
+  expect((await refreshed).status()).toBe(200)
+  await expect(dialog).toHaveCount(0)
+  await expect(
+    page.getByText("Correction requested", { exact: true }),
+  ).toBeVisible()
+  const row = page.getByRole("row").filter({ hasText: reason })
+  await expect(row.getByText("Correction", { exact: true })).toBeVisible()
+  await expect(row.getByText("Pending", { exact: true })).toBeVisible()
+
+  const persisted = await overtimeFixtureCall(
+    "staff",
+    `${overtimeAdjustments}/${created.id}`,
+  )
+  expect(persisted.status, await persisted.clone().text()).toBe(200)
+  expect(await persisted.json()).toMatchObject({
+    adjustment: {
+      id: created.id,
+      type: "CORRECTION",
+      status: "PENDING",
+      requestedById: fixture.actors.staff.userId,
+      sessionId: null,
+      reason,
+      proposedStartedAt: created.proposedStartedAt,
+      proposedEndedAt: created.proposedEndedAt,
+    },
+  })
+  const inbox = await overtimeFixtureCall(
+    "head",
+    "/request-workflows/notifications",
+  )
+  expect(inbox.status, await inbox.clone().text()).toBe(200)
+  const { notifications } = (await inbox.json()) as {
+    notifications: { type: string; entityId: string }[]
+  }
+  expect(
+    notifications.some(
+      ({ type, entityId }) =>
+        type === "ATTENDANCE_CORRECTION_PENDING" && entityId === created.id,
+    ),
+  ).toBe(true)
+})
+
 test("[PG-004-F001-A009-T014] mixed queue finalizes and rejects corrections", async ({
   page,
 }) => {
