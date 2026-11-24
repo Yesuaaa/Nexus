@@ -66,6 +66,7 @@ export async function recordAppliedMigrations(db: PGlite) {
 /** A fake image store for tests that render profile/service image URLs. */
 export const testImageStorage: ServiceImageStorage = {
   upload: async () => "unused",
+  uploadWebp: async () => "unused.webp",
   publicUrl: (path) => `https://images.example.com/${path}`,
   remove: async () => {},
 }

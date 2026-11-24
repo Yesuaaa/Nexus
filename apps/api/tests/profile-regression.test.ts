@@ -16,6 +16,8 @@ test(
       imageStorage: {
         upload: async (_dataUrl, directory = "services") =>
           `${directory}/page-17-${++imageUploads}.png`,
+        uploadWebp: async (_data, directory = "services") =>
+          `${directory}/page-17-${++imageUploads}.webp`,
         publicUrl: (path) => `https://images.example.com/${path}`,
         remove: async () => {},
       },
