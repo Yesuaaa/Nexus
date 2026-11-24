@@ -1,13 +1,6 @@
 "use client"
 
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useRef,
-  useSyncExternalStore,
-  type ReactNode,
-} from "react"
+import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react"
 import { usePathname } from "next/navigation"
 import dynamic from "next/dynamic"
 import { gsap } from "gsap"
@@ -16,10 +9,6 @@ import {
   getToastSnapshot,
   getServerToastSnapshot,
 } from "@/lib/toast"
-import { getAuthCopy, getStoredAuthLanguage } from "../content/auth-copy"
-import { useLoginTransition } from "../hooks/use-login-transition"
-import type { Role } from "../model/roles"
-import type { AuthMode } from "../model/types"
 
 const ToastViewport = dynamic(
   () =>
@@ -29,38 +18,7 @@ const ToastViewport = dynamic(
   { ssr: false },
 )
 
-const AuthRouteLoader = dynamic(
-  () =>
-    import("../components/auth-loader").then(
-      (module) => module.AuthRouteLoader,
-    ),
-  {
-    loading: () => (
-      <div
-        className="fixed inset-0 z-[100] grid place-items-center bg-background"
-        role="status"
-        aria-label="Opening your account"
-      >
-        <span className="sr-only">Opening your account…</span>
-      </div>
-    ),
-  },
-)
-
-type AuthTransition = {
-  beginLoginTransition: (mode: AuthMode, role: Role) => void
-  markDestinationReady: (succeeded: boolean) => void
-}
-
-const AuthTransitionContext = createContext<AuthTransition | null>(null)
-
-export function useAuthTransition() {
-  const context = useContext(AuthTransitionContext)
-  if (!context) throw new Error("AuthProvider is required")
-  return context
-}
-
-// The root layout keeps the login overlay and toasts alive across navigation.
+// The root layout keeps toasts and the module-selector reveal alive across navigation.
 export function AuthProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const moduleReveal = useRef<{
@@ -154,39 +112,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.addEventListener("resize", render)
     moduleReveal.current = { cleanup, start }
   }
-  const transition = useLoginTransition()
   const showToasts = useSyncExternalStore(
     subscribeToasts,
     getToastSnapshot,
     getServerToastSnapshot,
   )
-  const authPage = pathname === "/login" || pathname === "/register"
-
   return (
-    <AuthTransitionContext
-      value={{
-        beginLoginTransition: transition.beginLoginTransition,
-        markDestinationReady: transition.markDestinationReady,
-      }}
-    >
+    <div className="contents" onClick={beginModuleReveal}>
       <div
-        className="contents"
-        inert={transition.showLoader}
-        onClick={beginModuleReveal}
+        className={
+          pathname === "/login" || pathname === "/register"
+            ? "auth-toast-region"
+            : undefined
+        }
       >
-        <div className={authPage ? "auth-toast-region" : undefined}>
-          {showToasts && <ToastViewport />}
-        </div>
-        {children}
+        {showToasts && <ToastViewport />}
       </div>
-      {transition.showLoader && (
-        <AuthRouteLoader
-          destinationReady={transition.destinationReady}
-          onNavigate={transition.navigateToDestination}
-          onExited={transition.finishLoginTransition}
-          ariaLabel={getAuthCopy(getStoredAuthLanguage()).openingAccount}
-        />
-      )}
-    </AuthTransitionContext>
+      {children}
+    </div>
   )
 }

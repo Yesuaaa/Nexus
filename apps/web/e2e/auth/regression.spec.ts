@@ -387,11 +387,17 @@ test.describe("Authentication and session regression", () => {
     expect(await missing.text()).toContain("Page not found")
   })
 
-  test("anonymous home and protected deep links redirect to login", async ({
+  test("anonymous landing stays public and protected deep links redirect to login", async ({
     page,
   }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" })
+    await page.goto("/")
+    await expect(page).toHaveURL(/\/$/)
+    await expect(
+      page.getByRole("heading", { name: /Creative ideas/i }),
+    ).toBeVisible()
+
     for (const path of [
-      "/",
       "/dashboard",
       "/accounts",
       "/departments",
@@ -438,10 +444,9 @@ test.describe("Authentication and session regression", () => {
     })
   }
 
-  test("login preserves the loader, session, success toast, and sign-out", async ({
+  test("login preserves the session, success toast, and sign-out", async ({
     page,
   }) => {
-    await page.emulateMedia({ reducedMotion: "no-preference" })
     await mockApi(page, "ADMIN")
     await page.goto("/internal/login")
     await page
@@ -449,10 +454,10 @@ test.describe("Authentication and session regression", () => {
       .fill(testAccounts.ADMIN.email)
     await page.getByLabel("Password", { exact: true }).fill("CorrectHorse123!")
     await page.getByRole("button", { name: "Sign In", exact: true }).click()
-    const loader = page.getByRole("status", { name: "Opening your account" })
-    await expect(loader.getByRole("img", { name: "Converyn" })).toBeVisible()
     await expect(page).toHaveURL(/\/module$/)
-    await expect(loader).toHaveCount(0)
+    await expect(
+      page.getByRole("status", { name: "Opening your account" }),
+    ).toHaveCount(0)
     expect(
       await page.evaluate(() => sessionStorage.getItem("nexus.auth.token")),
     ).toBe("test-session")
@@ -482,66 +487,42 @@ test.describe("Authentication and session regression", () => {
     ).toBeNull()
   })
 
-  for (const [device, width, height] of [
-    ["desktop", 1440, 900],
-    ["tablet", 820, 1180],
-    ["mobile", 390, 844],
-  ] as const) {
-    test(`login reveals the app from the rendered logo on ${device}`, async ({
-      page,
-    }) => {
-      await page.setViewportSize({ width, height })
-      await page.emulateMedia({ reducedMotion: "no-preference" })
-      await mockApi(page, "ADMIN")
-      await page.goto("/internal/login")
-      await page.addStyleTag({
-        content:
-          '[aria-label="Opening your account"] svg[role="img"] { translate: 24px -16px; }',
-      })
-      await page
-        .getByLabel("Email address", { exact: true })
-        .fill(testAccounts.ADMIN.email)
-      await page
-        .getByLabel("Password", { exact: true })
-        .fill("CorrectHorse123!")
-      await page.getByRole("button", { name: "Sign In", exact: true }).click()
+  test("landing loader only appears on fresh homepage visits", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "no-preference" })
+    await page.goto("/")
 
-      const loader = page.getByRole("status", { name: "Opening your account" })
-      const opening = loader.locator('mask rect[fill="black"]')
-      await expect(opening).toHaveCSS("clip-path", /^circle\(/)
-      const sample = await opening.evaluate((rect) => {
-        const overlay = rect.closest('[role="status"]')!
-        const artwork = overlay.querySelector("[data-logo-fill]")!
-        const bounds = artwork.getBoundingClientRect()
-        const circle = getComputedStyle(rect).clipPath.match(
-          /^circle\(([\d.]+)px at ([\d.]+)px ([\d.]+)px\)$/,
-        )
-        const x = bounds.x + bounds.width / 2
-        const y = bounds.y + bounds.height / 2
-        return {
-          circle: circle?.slice(1).map(Number),
-          x,
-          y,
-          blocksPointer: overlay.contains(document.elementFromPoint(x, y)),
-          blocksFocus: Boolean(
-            document
-              .querySelector('main[aria-label="Workspace selector"]')
-              ?.closest("[inert]"),
-          ),
-        }
-      })
-      expect(sample.circle?.[1]).toBeCloseTo(sample.x, 2)
-      expect(sample.circle?.[2]).toBeCloseTo(sample.y, 2)
-      expect(sample.x).toBeGreaterThan(width / 2 + 20)
-      expect(sample.y).toBeLessThan(height / 2 - 12)
-      expect(sample.blocksPointer).toBe(true)
-      expect(sample.blocksFocus).toBe(true)
-      await expect(loader).toHaveCount(0)
-      await expect(
-        page.getByRole("main", { name: "Workspace selector" }),
-      ).toBeVisible()
-    })
-  }
+    const loader = page.getByRole("status", { name: "Loading Converyn" })
+    await expect(loader.getByRole("img", { name: "Converyn" })).toBeVisible()
+    await expect(loader).toHaveCount(0)
+
+    await page.getByRole("link", { name: "Make an Inquiry" }).click()
+    await expect(page).toHaveURL(/\/explore\/services$/)
+    await page.getByRole("link", { name: "Back to Converyn" }).click()
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.locator("#expertise")).toBeAttached()
+    expect(await loader.count()).toBe(0)
+
+    await page.getByRole("link", { name: "Make an Inquiry" }).click()
+    await expect(page).toHaveURL(/\/explore\/services$/)
+    await page.goBack()
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.locator("#expertise")).toBeAttached()
+    expect(await loader.count()).toBe(0)
+
+    await page.reload()
+    await expect(loader).toHaveCount(0)
+
+    await page.goto("/explore/services")
+    await page.getByRole("link", { name: "Back to Converyn" }).click()
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.locator("#expertise")).toBeAttached()
+    expect(await loader.count()).toBe(0)
+
+    await page.goto("/")
+    await expect(loader.getByRole("img", { name: "Converyn" })).toBeVisible()
+  })
 
   test("module selection reveals the destination from the clicked point", async ({
     page,

@@ -187,6 +187,13 @@
   aspect-ratio: 1.12;
   border-radius: 6px;
 }
+:global(body:has(> [data-service-image-flight]))
+  .detailVisual:has(.coverImage) {
+  background: transparent;
+}
+:global(body:has(> [data-service-image-flight])) .detailVisual .coverImage {
+  opacity: 0;
+}
 .coverImage {
   object-fit: cover;
 }

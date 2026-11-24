@@ -54,7 +54,7 @@ const mobileNavClass = [
 ].join(" ")
 
 const pageClass = [
-  '[--landing-paper:#f2f1ee] [--landing-ink:#121214] [--landing-blue:#2f5bff] [--landing-muted:color-mix(in_srgb,#121214_66%,#f2f1ee)] [--landing-line:color-mix(in_srgb,#121214_16%,#f2f1ee)] [--landing-frame-width:1360px] relative isolate overflow-clip bg-(--landing-paper) text-(color:--landing-ink) [font-family:var(--font-inter),"Inter_Variable",sans-serif] antialiased',
+  '[--landing-paper:var(--background)] [--landing-ink:#121214] [--landing-blue:#2f5bff] [--landing-muted:color-mix(in_srgb,var(--landing-ink)_66%,var(--landing-paper))] [--landing-line:color-mix(in_srgb,var(--landing-ink)_16%,var(--landing-paper))] [--landing-frame-width:1360px] relative isolate overflow-clip bg-(--landing-paper) text-(color:--landing-ink) [font-family:var(--font-inter),"Inter_Variable",sans-serif] antialiased',
   "[container-type:inline-size] [--landing-header-height:92px] max-[761px]:[--landing-header-height:76px] [--landing-frame-inset:max(0px,calc((100cqw_-_var(--landing-frame-width))_/_2))]",
   'before:absolute before:z-50 before:[inset:0_var(--landing-frame-inset)] before:[content:""] before:pointer-events-none before:[border-inline:1px_solid_var(--landing-line)]',
   "[:where(&)_:where(a)]:text-inherit [:where(&)_:where(a)]:no-underline [:where(&)_:where(a)]:touch-manipulation [:where(&)_:where(a)]:[-webkit-tap-highlight-color:transparent]",
@@ -167,9 +167,9 @@ export function LandingHeader() {
         <nav className={desktopNavClass} aria-label="Main navigation">
           {navigation.map((item) =>
             item.href ? (
-              <a key={item.label} href={item.href}>
+              <Link key={item.label} href={item.href}>
                 {item.label}
-              </a>
+              </Link>
             ) : (
               <button key={item.label} type="button" disabled>
                 {item.label}
@@ -205,14 +205,14 @@ export function LandingHeader() {
         >
           {navigation.map((item) =>
             item.href ? (
-              <a
+              <Link
                 key={item.label}
                 href={item.href}
                 onClick={() => setMenuOpen(false)}
               >
                 {item.label}
                 <ArrowUpRight size={17} aria-hidden="true" />
-              </a>
+              </Link>
             ) : (
               <button key={item.label} type="button" disabled>
                 {item.label}

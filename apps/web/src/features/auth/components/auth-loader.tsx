@@ -2,38 +2,31 @@ import { useCallback, useId, useLayoutEffect, useRef, useState } from "react"
 import { gsap } from "gsap"
 import { ConverynLogoReveal } from "./converyn-logo-reveal"
 
-type AuthRouteLoaderProps = {
-  destinationReady: boolean
-  onNavigate: () => void
+type ConverynPageLoaderProps = {
   onExited: () => void
   ariaLabel?: string
 }
 
-export function AuthRouteLoader({
-  destinationReady,
-  onNavigate,
+export function ConverynPageLoader({
   onExited,
-  ariaLabel = "Loading",
-}: AuthRouteLoaderProps) {
+  ariaLabel = "Loading Converyn",
+}: ConverynPageLoaderProps) {
   const coverRef = useRef<HTMLDivElement>(null)
   const openingRef = useRef<SVGRectElement>(null)
   const maskId = useId()
-  const onNavigateRef = useRef(onNavigate)
   const onExitedRef = useRef(onExited)
   const [sequenceComplete, setSequenceComplete] = useState(false)
 
   useLayoutEffect(() => {
-    onNavigateRef.current = onNavigate
     onExitedRef.current = onExited
-  }, [onNavigate, onExited])
+  }, [onExited])
 
   const finishReveal = useCallback(() => {
     setSequenceComplete(true)
-    onNavigateRef.current()
   }, [])
 
   useLayoutEffect(() => {
-    if (!destinationReady || !sequenceComplete) return
+    if (!sequenceComplete) return
 
     const cover = coverRef.current
     const opening = openingRef.current
@@ -95,7 +88,7 @@ export function AuthRouteLoader({
       opening.style.removeProperty("clip-path")
       cover.style.removeProperty("mask-image")
     }
-  }, [destinationReady, maskId, sequenceComplete])
+  }, [maskId, sequenceComplete])
 
   return (
     <div

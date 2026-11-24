@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { gsap } from "gsap"
 import { useHoverLabel } from "@/components/ui/use-hover-label"
 import {
@@ -27,6 +27,11 @@ import {
 } from "../api/public-services-api"
 import { priceLabel, type PublicService } from "../model/types"
 import styles from "../components/public-services.module.css"
+import {
+  cancelServiceImageTransition,
+  finishServiceImageTransition,
+  getServiceImagePreview,
+} from "../components/service-image-transition"
 
 const icons = {
   social: Megaphone,
@@ -50,21 +55,38 @@ export function ServiceVisual({
   iconOnly?: boolean
 }) {
   const [failed, setFailed] = useState(false)
+  const imageRef = useRef<HTMLImageElement>(null)
   const Icon = icons[service.iconKey as keyof typeof icons] ?? Sparkles
+  useLayoutEffect(() => {
+    if (!large) return
+    const image = imageRef.current
+    if (image?.complete && image.naturalWidth)
+      finishServiceImageTransition(service.id, image)
+  }, [large, service.id])
+
   return (
     <div className={large ? styles.detailVisual : styles.serviceVisual}>
       {service.imageUrl && !failed && !iconOnly ? (
         <Image
+          ref={imageRef}
           src={service.imageUrl}
           alt={service.imageAltText || service.name}
           fill
+          loading={large ? "eager" : undefined}
           sizes={
             large
               ? "(max-width: 760px) 100vw, 50vw"
               : "(max-width: 760px) 100vw, 33vw"
           }
           unoptimized
-          onError={() => setFailed(true)}
+          onLoad={(event) => {
+            if (large)
+              finishServiceImageTransition(service.id, event.currentTarget)
+          }}
+          onError={() => {
+            if (large) cancelServiceImageTransition(service.id)
+            setFailed(true)
+          }}
           className={styles.coverImage}
         />
       ) : (
@@ -334,13 +356,19 @@ export function PublicServicesPage() {
 }
 
 export function PublicServiceDetails({ id }: { id: string }) {
+  const [preview] = useState(() => getServiceImagePreview(id))
   const resource = useAsyncResource(
     (signal) => getPublicService(id, signal),
     [id],
   )
-  if (resource.loading)
+  const { data, loading } = resource
+  const service = loading ? (preview?.id === id ? preview : undefined) : data
+  useEffect(() => {
+    if (!loading && !data?.imageUrl) cancelServiceImageTransition(id)
+  }, [data?.imageUrl, id, loading])
+  if (loading && service?.id !== id)
     return <PublicState loading message="Opening service details…" />
-  if (resource.error || !resource.data)
+  if (resource.error || !service)
     return (
       <>
         <Link href="/explore/services" className={styles.back}>
@@ -353,7 +381,6 @@ export function PublicServiceDetails({ id }: { id: string }) {
         />
       </>
     )
-  const service = resource.data
   return (
     <>
       <Link href="/explore/services" className={styles.back}>
@@ -376,9 +403,13 @@ export function PublicServiceDetails({ id }: { id: string }) {
             An inquiry starts a conversation. It does not confirm a booking.
           </p>
         </div>
-        <ServiceVisual key={service.id} service={service} large />
+        <ServiceVisual
+          key={`${service.id}:${service.imageUrl ?? ""}`}
+          service={service}
+          large
+        />
       </div>
-      {!!service.keyBenefits.length && (
+      {!loading && !!service.keyBenefits.length && (
         <section
           className={styles.detailSection}
           aria-labelledby="benefits-heading"
@@ -395,7 +426,7 @@ export function PublicServiceDetails({ id }: { id: string }) {
           </div>
         </section>
       )}
-      {!!service.packages.length && (
+      {!loading && !!service.packages.length && (
         <section
           className={styles.detailSection}
           aria-labelledby="plans-heading"
@@ -432,7 +463,7 @@ export function PublicServiceDetails({ id }: { id: string }) {
           </div>
         </section>
       )}
-      {!!service.clientRequirements.length && (
+      {!loading && !!service.clientRequirements.length && (
         <section
           className={styles.detailSection}
           aria-labelledby="requirements-heading"

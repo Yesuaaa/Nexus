@@ -12,6 +12,8 @@ import { LandingFooter } from "./landing-footer"
 import { ApproachCarousel } from "./approach-carousel"
 import { AboutStoryCards } from "./about-story-cards"
 import { HeroHalftone } from "./hero-halftone"
+import { LandingLoader } from "./landing-loader"
+import { LandingServices } from "./landing-services"
 import { LandingSmoothScroll } from "./landing-smooth-scroll"
 
 const sora = localFont({
@@ -86,30 +88,6 @@ const heroStepsClass = [
   "max-[761px]:[&_li]:max-w-[400px]",
 ].join(" ")
 
-const sectionHeadingClass = [
-  "flex items-end justify-between gap-16.25",
-  "[&>_p]:max-w-[300px] [&>_p]:text-[15px] [&>_p]:leading-[1.85] [&>_p]:text-(color:--landing-muted)",
-  "max-[1101px]:gap-10",
-  "max-[851px]:[&>_p]:max-w-[240px] max-[851px]:[&>_p]:text-[14px]",
-  "max-[761px]:flex-col max-[761px]:items-start max-[761px]:gap-6",
-  "max-[761px]:[&>_p]:max-w-[440px] max-[761px]:[&>_p]:text-[14px]",
-].join(" ")
-
-const servicePreviewClass = [
-  "pt-7 [border-top:1px_solid_var(--landing-line)]",
-  "[&_h3]:text-[20px] [&_h3]:leading-[1.4] [&_h3]:tracking-[-0.6px] [&_h3]:font-medium",
-  "[&_p]:max-w-[290px] [&_p]:mt-3 [&_p]:text-(color:--landing-muted) [&_p]:text-[14px] [&_p]:leading-[1.85]",
-  "max-[761px]:pt-6.25",
-  "max-[761px]:[&_p]:max-w-[440px]",
-].join(" ")
-
-const previewLinkClass = [
-  "inline-flex items-center gap-3.5 mt-5.75 text-[12px] font-medium text-(color:--landing-ink)",
-  "hover:text-(color:--landing-blue)",
-  "[&_svg]:[transition:transform_300ms]",
-  "[&:hover_svg]:[transform:translate(2px,-2px)]",
-].join(" ")
-
 const aboutClass = [
   "max-w-[1264px] m-auto [padding:128px_48px] grid grid-cols-[1.1fr_1fr] items-center gap-25",
   "max-[1101px]:px-9 max-[1101px]:gap-13.75",
@@ -160,24 +138,6 @@ const buttonLightClass = [
   "max-[761px]:text-[13px]",
 ].join(" ")
 
-const services = [
-  {
-    title: "Creative & content",
-    description:
-      "Give your ideas a distinct voice through considered design, compelling visuals, and content that connects.",
-  },
-  {
-    title: "Digital marketing",
-    description:
-      "Connect your brand with the right audience through purposeful campaigns and a clear direction for growth.",
-  },
-  {
-    title: "Web & digital experiences",
-    description:
-      "Bring your business online with thoughtful websites and digital experiences built around the people using them.",
-  },
-]
-
 const questions = [
   {
     question: "What does Converyn offer?",
@@ -198,179 +158,154 @@ const questions = [
 
 export function LandingPage() {
   return (
-    <div
-      className={`${sora.variable} [&_h1]:[font-family:var(--font-landing-heading),sans-serif] [&_h2]:[font-family:var(--font-landing-heading),sans-serif] [&_h3]:[font-family:var(--font-landing-heading),sans-serif]`}
-    >
-      <LandingMotion>
-        <LandingSmoothScroll />
-        <a
-          className="fixed left-4 -top-20 z-100 [padding:12px_20px] bg-(--landing-paper) text-(color:--landing-ink) focus:top-4"
-          href="#main-content"
-        >
-          Skip to content
-        </a>
-        <LandingHeader />
+    <LandingLoader>
+      <div
+        className={`${sora.variable} [&_h1]:[font-family:var(--font-landing-heading),sans-serif] [&_h2]:[font-family:var(--font-landing-heading),sans-serif] [&_h3]:[font-family:var(--font-landing-heading),sans-serif]`}
+      >
+        <LandingMotion>
+          <LandingSmoothScroll />
+          <a
+            className="fixed left-4 -top-20 z-100 [padding:12px_20px] bg-(--landing-paper) text-(color:--landing-ink) focus:top-4"
+            href="#main-content"
+          >
+            Skip to content
+          </a>
+          <LandingHeader />
 
-        <main id="main-content">
-          <PinnedHero>
-            <section className={heroClass} aria-labelledby="hero-heading">
-              <div className={heroCopyClass} data-reveal>
-                <h1 id="hero-heading">
-                  CREATIVE IDEAS.
-                  <br />
-                  <span className="whitespace-nowrap !text-inherit">
-                    CONNECTED GROWTH.
-                  </span>
-                </h1>
-                <p>
-                  Bring your brand to life through creative content, digital
-                  marketing, and web experiences designed around your goals.
-                </p>
-                <div className={heroActionsClass}>
-                  <Link href="/explore/services" className={buttonPrimaryClass}>
-                    Make an Inquiry
-                  </Link>
-                  <Link href="/login" className={buttonSecondaryClass}>
-                    Sign in
+          <main id="main-content">
+            <PinnedHero>
+              <section className={heroClass} aria-labelledby="hero-heading">
+                <div className={heroCopyClass} data-reveal>
+                  <h1 id="hero-heading">
+                    CREATIVE IDEAS.
+                    <br />
+                    <span className="whitespace-nowrap !text-inherit">
+                      CONNECTED GROWTH.
+                    </span>
+                  </h1>
+                  <p>
+                    Bring your brand to life through creative content, digital
+                    marketing, and web experiences designed around your goals.
+                  </p>
+                  <div className={heroActionsClass}>
+                    <Link
+                      href="/explore/services"
+                      className={buttonPrimaryClass}
+                    >
+                      Make an Inquiry
+                    </Link>
+                    <Link href="/login" className={buttonSecondaryClass}>
+                      Sign in
+                    </Link>
+                  </div>
+                </div>
+                <HeroHalftone />
+                <ol className={heroStepsClass} aria-label="How we work">
+                  <li>
+                    <strong>1. Discuss</strong>
+                    <span>
+                      Tell us about your goals, ideas, and the support you need.
+                    </span>
+                  </li>
+                  <li>
+                    <strong>2. Quote</strong>
+                    <span>
+                      Receive a clear scope, timeline, and tailored proposal.
+                    </span>
+                  </li>
+                  <li>
+                    <strong>3. Approve</strong>
+                    <span>
+                      Confirm the plan and let&apos;s bring the work to life.
+                    </span>
+                  </li>
+                </ol>
+              </section>
+            </PinnedHero>
+
+            <div className="relative z-10 bg-(--landing-paper)">
+              <ServiceMarquee />
+
+              <section
+                id="expertise"
+                className="mx-auto min-h-[100vh] max-w-[1360px] px-12 max-[1101px]:px-8 max-[761px]:px-6"
+                aria-label="Services"
+              >
+                <LandingServices />
+              </section>
+
+              <ApproachCarousel />
+
+              <section
+                id="about"
+                className={aboutClass}
+                aria-labelledby="about-heading"
+              >
+                <AboutStoryCards />
+                <div className={aboutCopyClass} data-reveal>
+                  <h2 id="about-heading">
+                    Different skills.
+                    <br />
+                    <span>One shared direction.</span>
+                  </h2>
+                  <p>
+                    Converyn brings creative thinking and digital expertise into
+                    the same conversation, connecting what your business needs
+                    with what it could become.
+                  </p>
+                  <p>
+                    We believe the strongest work starts with listening, a clear
+                    purpose, and care for the details. Together, we make room
+                    for better ideas and meaningful progress.
+                  </p>
+                  <Link
+                    href="/explore/services"
+                    className={buttonSecondaryClass}
+                  >
+                    Explore our expertise
+                    <ArrowUpRight size={18} aria-hidden="true" />
                   </Link>
                 </div>
-              </div>
-              <HeroHalftone />
-              <ol className={heroStepsClass} aria-label="How we work">
-                <li>
-                  <strong>1. Discuss</strong>
-                  <span>
-                    Tell us about your goals, ideas, and the support you need.
-                  </span>
-                </li>
-                <li>
-                  <strong>2. Quote</strong>
-                  <span>
-                    Receive a clear scope, timeline, and tailored proposal.
-                  </span>
-                </li>
-                <li>
-                  <strong>3. Approve</strong>
-                  <span>
-                    Confirm the plan and let&apos;s bring the work to life.
-                  </span>
-                </li>
-              </ol>
-            </section>
-          </PinnedHero>
+              </section>
 
-          <div className="relative z-10 bg-(--landing-paper)">
-            <ServiceMarquee />
-
-            <section
-              id="expertise"
-              className="max-w-[1264px] m-auto [padding:116px_48px_120px] max-[1101px]:px-9 max-[761px]:[padding:76px_24px_80px]"
-              aria-labelledby="expertise-heading"
-            >
-              <div className={sectionHeadingClass} data-reveal>
-                <h2 id="expertise-heading">
-                  A little of what
-                  <br />
-                  <span>we can do together.</span>
+              <section
+                id="faq"
+                className={faqClass}
+                aria-labelledby="faq-heading"
+              >
+                <h2 id="faq-heading" data-reveal>
+                  A little more <span>clarity.</span>
                 </h2>
-                <p>
-                  Different needs. Connected expertise. Discover a starting
-                  point for your next project.
-                </p>
-              </div>
-              <div className="grid grid-cols-3 gap-11 mt-13 max-[851px]:gap-6.5 max-[761px]:grid-cols-1 max-[761px]:gap-7.5 max-[761px]:mt-9.5">
-                {services.map((service) => (
-                  <article
-                    key={service.title}
-                    className={servicePreviewClass}
-                    data-reveal
-                  >
-                    <h3>{service.title}</h3>
-                    <p>{service.description}</p>
-                    <Link href="/explore/services" className={previewLinkClass}>
-                      Explore services
-                      <ArrowUpRight size={16} aria-hidden="true" />
-                    </Link>
-                  </article>
-                ))}
-              </div>
-              <div
-                className="flex justify-center mt-10.5 max-[761px]:mt-8"
+                <LandingFaq items={questions} />
+              </section>
+
+              <section
+                id="contact"
+                className={contactClass}
+                aria-labelledby="contact-heading"
                 data-reveal
               >
-                <Link href="/explore/services" className={buttonPrimaryClass}>
-                  View all services
-                  <ArrowUpRight size={18} aria-hidden="true" />
+                <div>
+                  <h2 id="contact-heading">
+                    Something in mind?
+                    <br />
+                    <span>Let’s connect.</span>
+                  </h2>
+                  <p>
+                    Bring your questions, your goals, or your next big idea.
+                  </p>
+                </div>
+                <Link href="/explore/services" className={buttonLightClass}>
+                  Start a conversation
+                  <ArrowUpRight size={20} aria-hidden="true" />
                 </Link>
-              </div>
-            </section>
+              </section>
+            </div>
+          </main>
 
-            <ApproachCarousel />
-
-            <section
-              id="about"
-              className={aboutClass}
-              aria-labelledby="about-heading"
-            >
-              <AboutStoryCards />
-              <div className={aboutCopyClass} data-reveal>
-                <h2 id="about-heading">
-                  Different skills.
-                  <br />
-                  <span>One shared direction.</span>
-                </h2>
-                <p>
-                  Converyn brings creative thinking and digital expertise into
-                  the same conversation, connecting what your business needs
-                  with what it could become.
-                </p>
-                <p>
-                  We believe the strongest work starts with listening, a clear
-                  purpose, and care for the details. Together, we make room for
-                  better ideas and meaningful progress.
-                </p>
-                <Link href="/explore/services" className={buttonSecondaryClass}>
-                  Explore our expertise
-                  <ArrowUpRight size={18} aria-hidden="true" />
-                </Link>
-              </div>
-            </section>
-
-            <section
-              id="faq"
-              className={faqClass}
-              aria-labelledby="faq-heading"
-            >
-              <h2 id="faq-heading" data-reveal>
-                A little more <span>clarity.</span>
-              </h2>
-              <LandingFaq items={questions} />
-            </section>
-
-            <section
-              id="contact"
-              className={contactClass}
-              aria-labelledby="contact-heading"
-              data-reveal
-            >
-              <div>
-                <h2 id="contact-heading">
-                  Something in mind?
-                  <br />
-                  <span>Let’s connect.</span>
-                </h2>
-                <p>Bring your questions, your goals, or your next big idea.</p>
-              </div>
-              <Link href="/explore/services" className={buttonLightClass}>
-                Start a conversation
-                <ArrowUpRight size={20} aria-hidden="true" />
-              </Link>
-            </section>
-          </div>
-        </main>
-
-        <LandingFooter />
-      </LandingMotion>
-    </div>
+          <LandingFooter />
+        </LandingMotion>
+      </div>
+    </LandingLoader>
   )
 }
