@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test"
 
-for (const linkName of ["About", "Our approach", "Contact"]) {
+for (const linkName of ["Flow", "Connect with Us"]) {
   test(`landing navigation to ${linkName} from services stays client-side`, async ({
     page,
   }) => {
@@ -18,8 +18,7 @@ for (const linkName of ["About", "Our approach", "Contact"]) {
 
     await page.getByRole("link", { name: linkName }).click()
 
-    const target =
-      linkName === "Our approach" ? "approach" : linkName.toLowerCase()
+    const target = linkName === "Flow" ? "approach" : linkName.toLowerCase()
     await expect(page).toHaveURL(new RegExp(`/#${target}$`))
     expect(rootDocumentRequests).toBe(0)
   })
@@ -109,7 +108,7 @@ test("landing preview provides retry when the catalog is unavailable", async ({
   await expect(section.getByRole("button", { name: "Try again" })).toBeVisible()
 })
 
-test("a landing preview travels into the service details image", async ({
+test("a landing service opens its details without an image flight", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" })
@@ -166,22 +165,15 @@ test("a landing preview travels into the service details image", async ({
     )
     .toBeGreaterThan(0)
   const overlay = page.locator("body > [data-service-image-flight]")
-  const destination = page.getByRole("img", { name: "Service preview" })
-  const benefit = page.getByRole("heading", { name: "A clearer identity" })
+  const benefit = page.getByText("A clearer identity", { exact: true })
   try {
     await link.click()
-    await expect(overlay).toBeVisible()
     await expect(page).toHaveURL(/\/explore\/services\/first$/)
-    await Promise.all([
-      expect(overlay).toHaveCSS("clip-path", /^inset\(/),
-      expect(destination).toHaveCSS("opacity", "0"),
-      expect(destination.locator("..")).toHaveCSS("background-image", "none"),
-    ])
     await expect(overlay).toHaveCount(0)
-    await expect(destination).toHaveCSS("opacity", "1")
     await expect(benefit).toHaveCount(0)
   } finally {
     releaseDetails()
   }
+  await expect(page.getByRole("img", { name: "Service preview" })).toBeVisible()
   await expect(benefit).toBeVisible()
 })

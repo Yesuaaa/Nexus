@@ -34,24 +34,18 @@ const footerItemClass = [
 
 const footerLegalClass = [
   "[&_h2]:[margin:4px_0_26px] [&_h2]:text-[14px] [&_h2]:font-semibold [&_h2]:leading-[1.5] [&_h2]:tracking-[-0.2px]",
-  "[border-left:1px_solid_var(--landing-line)] pl-7",
+  "relative self-stretch pl-7 before:absolute before:-top-16 before:-bottom-15 before:left-0 before:w-px before:bg-(--landing-line) before:content-['']",
   "[&>_p]:text-[12px] [&>_p]:leading-[1.95] [&>_p]:text-(color:--landing-muted)",
   "max-[1101px]:pl-5.5",
-  "max-[851px]:col-span-full max-[851px]:[padding:26px_0_0] max-[851px]:[border-left:0] max-[851px]:[border-top:1px_solid_var(--landing-line)]",
+  "max-[851px]:col-span-full max-[851px]:[padding:26px_0_0] max-[851px]:[border-top:1px_solid_var(--landing-line)] max-[851px]:before:hidden",
   "max-[851px]:[&>_p]:max-w-[650px]",
   "max-[761px]:col-span-full",
   "max-[761px]:[&_h2]:mt-0 max-[761px]:[&_h2]:mb-5",
 ].join(" ")
 
-const footerTermsClass = [
-  "inline-flex items-center gap-3.75 min-h-10.75 mt-6 [padding:10px_14px] [border:1px_solid_var(--landing-ink)] rounded-[4px] text-[11px] text-(color:--landing-ink) cursor-default [transition:color_300ms,background_300ms]",
-  "hover:bg-(--landing-ink) hover:text-(color:--landing-paper)",
-  "[&>_svg]:[transition:transform_300ms]",
-  "[&:hover_>_svg]:[transform:translate(2px,-2px)]",
-].join(" ")
-
 const footerBottomClass = [
-  "flex items-center justify-between gap-6 mt-15 pt-6.25 [border-top:1px_solid_var(--landing-line)] text-(color:--landing-muted) text-[11px] leading-[1.8]",
+  "relative flex items-center justify-between gap-6 mt-15 pt-6.25 text-(color:--landing-muted) text-[11px] leading-[1.8]",
+  "before:absolute before:top-0 before:left-1/2 before:w-screen before:-translate-x-1/2 before:[border-top:1px_solid_var(--landing-line)] before:content-['']",
   "max-[851px]:flex-wrap max-[851px]:gap-y-3.5",
   "max-[761px]:mt-8.75 max-[761px]:flex-col max-[761px]:items-start max-[761px]:gap-3.5 max-[761px]:text-[10px]",
 ].join(" ")
@@ -70,7 +64,7 @@ const footerPages = ["About Converyn", "Services", "Insights", "Contact"]
 export function LandingFooter() {
   return (
     <footer className={footerClass}>
-      <div className="max-w-[1264px] mx-auto [padding:64px_48px_28px] max-[1101px]:px-9 max-[761px]:[padding:42px_24px_26px]">
+      <div className="max-w-[1360px] mx-auto [padding:64px_48px_28px] max-[1101px]:px-8 max-[761px]:[padding:42px_24px_26px]">
         <div className={footerColumnsClass}>
           <div className={footerBrandClass}>
             <p className="text-(color:--landing-ink) text-[27px] font-semibold tracking-[-1.1px] leading-[1.3] max-[761px]:text-[25px]">
@@ -117,9 +111,8 @@ export function LandingFooter() {
               respective owners. Their use does not imply ownership,
               endorsement, sponsorship, or affiliation.
             </p>
-            <span className={footerTermsClass}>
+            <span className="mt-6 text-[11px] text-(color:--landing-muted)">
               Terms &amp; Privacy
-              <ArrowUpRight size={16} aria-hidden="true" />
             </span>
           </div>
         </div>

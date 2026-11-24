@@ -1,4 +1,4 @@
-.main,
+﻿.main,
 .admin {
   --catalog-ink: #121214;
   --catalog-paper: #f2f1ee;
@@ -186,13 +186,6 @@
 .detailVisual {
   aspect-ratio: 1.12;
   border-radius: 6px;
-}
-:global(body:has(> [data-service-image-flight]))
-  .detailVisual:has(.coverImage) {
-  background: transparent;
-}
-:global(body:has(> [data-service-image-flight])) .detailVisual .coverImage {
-  opacity: 0;
 }
 .coverImage {
   object-fit: cover;

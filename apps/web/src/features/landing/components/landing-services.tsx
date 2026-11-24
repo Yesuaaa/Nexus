@@ -1,27 +1,20 @@
 "use client"
 
-import { useRef, useState, type CSSProperties, type Ref } from "react"
+import { useState, type CSSProperties } from "react"
 import Image from "next/image"
 import Link from "next/link"
+import { motion, useReducedMotion } from "framer-motion"
 import { ArrowUpRight, Sparkles } from "lucide-react"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import { listPublicServices } from "@/features/public-services/api/public-services-api"
-import { startServiceImageTransition } from "@/features/public-services/components/service-image-transition"
 import type { PublicService } from "@/features/public-services/model/types"
 
-function ServiceImage({
-  service,
-  imageRef,
-}: {
-  service: PublicService
-  imageRef: Ref<HTMLImageElement>
-}) {
+function ServiceImage({ service }: { service: PublicService }) {
   const [failed, setFailed] = useState(false)
   return (
     <div className="relative grid aspect-[4/3] w-full max-w-[360px] place-items-center overflow-hidden bg-(--landing-ink)/5 text-(color:--landing-blue)">
       {service.imageUrl && !failed ? (
         <Image
-          ref={imageRef}
           src={service.imageUrl}
           alt={service.imageAltText || service.name}
           fill
@@ -38,6 +31,7 @@ function ServiceImage({
 }
 
 export function LandingServices() {
+  const reduceMotion = useReducedMotion()
   const resource = useAsyncResource(
     (signal) => listPublicServices("", 1, signal),
     [],
@@ -46,7 +40,6 @@ export function LandingServices() {
     },
   )
   const [selectedIndex, setSelectedIndex] = useState(0)
-  const previewRef = useRef<HTMLImageElement>(null)
   const services = resource.data?.services.slice(0, 5) ?? []
   const selected = services[selectedIndex]
 
@@ -91,11 +84,7 @@ export function LandingServices() {
             } as CSSProperties
           }
         >
-          <ServiceImage
-            key={selected.id}
-            service={selected}
-            imageRef={previewRef}
-          />
+          <ServiceImage key={selected.id} service={selected} />
           <p className="mt-7 text-sm text-(color:--landing-muted)">
             {selected.name}
           </p>
@@ -104,19 +93,24 @@ export function LandingServices() {
           </p>
           <Link
             href={`/explore/services/${encodeURIComponent(selected.id)}`}
-            onNavigate={() =>
-              startServiceImageTransition(selected, previewRef.current)
-            }
             className="mt-6 inline-flex items-center gap-3 text-sm font-medium hover:text-(color:--landing-blue)"
           >
             View service <ArrowUpRight size={16} aria-hidden="true" />
           </Link>
         </div>
       </div>
-      <div
+      <motion.div
         className="flex flex-col justify-center gap-3 py-10 pl-12 max-[761px]:order-1 max-[761px]:gap-2 max-[761px]:py-7 max-[761px]:pl-0"
         role="group"
         aria-label="Choose a service"
+        initial={reduceMotion ? false : "hidden"}
+        animate={reduceMotion ? "visible" : "hidden"}
+        whileInView="visible"
+        viewport={{ amount: 0.15 }}
+        variants={{
+          hidden: {},
+          visible: { transition: { staggerChildren: reduceMotion ? 0 : 0.12 } },
+        }}
       >
         <div className="mb-3 flex items-center justify-between gap-4">
           <p className="text-sm font-semibold tracking-[0.12em] text-[#203f8c]">
@@ -130,30 +124,34 @@ export function LandingServices() {
           </Link>
         </div>
         {services.map((service, index) => (
-          <Link
+          <motion.div
             key={service.id}
-            href={`/explore/services/${encodeURIComponent(service.id)}`}
-            onMouseEnter={() => setSelectedIndex(index)}
-            onFocus={() => setSelectedIndex(index)}
-            onNavigate={() => {
-              if (service.id === selected.id)
-                startServiceImageTransition(service, previewRef.current)
+            variants={{
+              hidden: { opacity: 0 },
+              visible: { opacity: 1 },
             }}
-            className="group flex w-full cursor-pointer items-start gap-4 text-left transition-[color,translate] duration-500 ease-out hover:translate-x-2 focus-visible:translate-x-2 motion-reduce:translate-x-0 motion-reduce:transition-none"
+            transition={{ duration: reduceMotion ? 0 : 0.5, ease: "easeOut" }}
           >
-            <span
-              className={`pt-[0.45em] text-xs font-semibold transition-transform duration-500 ease-out group-hover:translate-x-2 group-focus-visible:translate-x-2 motion-reduce:translate-x-0 motion-reduce:transition-none ${selectedIndex === index ? "text-[#203f8c]" : "text-(color:--landing-muted)"}`}
+            <Link
+              href={`/explore/services/${encodeURIComponent(service.id)}`}
+              onPointerMove={() => setSelectedIndex(index)}
+              onFocus={() => setSelectedIndex(index)}
+              className="group flex w-full cursor-pointer items-start gap-4 text-left transition-[color,translate] duration-500 ease-out hover:translate-x-2 focus-visible:translate-x-2 motion-reduce:translate-x-0 motion-reduce:transition-none"
             >
-              [{String(index + 1).padStart(2, "0")}]
-            </span>
-            <span
-              className={`text-[clamp(28px,5vw,68px)] leading-[1.12] font-medium tracking-[-0.055em] transition-colors motion-reduce:transition-none ${selectedIndex === index ? "text-[#203f8c]" : "text-(color:--landing-muted) group-hover:text-(color:--landing-ink)"}`}
-            >
-              {service.name}
-            </span>
-          </Link>
+              <span
+                className={`pt-[0.45em] text-xs font-semibold transition-transform duration-500 ease-out group-hover:translate-x-2 group-focus-visible:translate-x-2 motion-reduce:translate-x-0 motion-reduce:transition-none ${selectedIndex === index ? "text-[#203f8c]" : "text-(color:--landing-muted)"}`}
+              >
+                [{String(index + 1).padStart(2, "0")}]
+              </span>
+              <span
+                className={`text-[clamp(28px,5vw,68px)] leading-[1.12] font-medium tracking-[-0.055em] transition-colors motion-reduce:transition-none ${selectedIndex === index ? "text-[#203f8c]" : "text-(color:--landing-muted) group-hover:text-(color:--landing-ink)"}`}
+              >
+                {service.name}
+              </span>
+            </Link>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
     </div>
   )
 }
