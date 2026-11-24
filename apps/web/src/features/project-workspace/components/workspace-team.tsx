@@ -3,12 +3,11 @@
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Eye, Plus, UsersRound } from "lucide-react"
+import { Eye, Plus } from "lucide-react"
 import { AnimatedTableBody } from "@/components/ui/animated-table-body"
 import { Alert } from "@/components/ui/alert"
 import { Avatar } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { EmptyState } from "@/components/ui/empty-state"
 import { FilterSelect } from "@/components/ui/filter-select"
 import { SearchField } from "@/components/ui/search-field"
 import { TableSkeletonBody } from "@/components/ui/data-table-skeleton"
@@ -170,88 +169,91 @@ export function WorkspaceTeam({
           onChange={setStreamId}
         />
       </div>
-      {rows.length ? (
-        <div className="overflow-x-auto rounded-xl border border-[#dfe5ec]">
-          <table
-            className="w-full min-w-[640px] text-left text-xs"
-            aria-busy={searchPending}
-          >
-            <thead className="bg-[#edf1f5]">
-              <tr>
-                {["Staff", "Position", "Service", "Assigned on", "Actions"].map(
-                  (label) => (
-                    <th key={label} className="px-4 py-3 font-semibold">
-                      {label}
-                    </th>
-                  ),
-                )}
-              </tr>
-            </thead>
-            {searchPending ? (
-              <TableSkeletonBody label="assigned staff" columns={5} rows={5} />
-            ) : (
-              <AnimatedTableBody
-                items={visible}
-                viewKey={JSON.stringify([settledSearch, streamId])}
-                quickKey={settledSearch}
-                animateRows={false}
-                columns={5}
-                rowClassName="border-t border-[#edf0f4]"
-                emptyContent="No staff match these filters."
-                renderRow={({ id, person, stream }) => (
-                  <>
-                    <td className="px-4 py-4">
-                      <div className="flex items-center gap-3">
-                        <Avatar name={person.fullName} className="size-8" />
-                        <span className="font-medium">{person.fullName}</span>
-                        {person.isTeamLead && (
-                          <span className="rounded-md bg-[#e9effc] px-2 py-1 text-[11px] text-[#294c96]">
-                            Team lead
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 text-[#60718c]">
-                      {person.position || "Staff"}
-                    </td>
-                    <td className="px-4 py-4">
-                      <span className="rounded-md bg-[#e9effc] px-2 py-1 text-[11px] text-[#294c96]">
-                        {stream.serviceName}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 text-[#60718c]">
-                      {new Date(person.approvedAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-4">
-                      <button
-                        type="button"
-                        id={`team-member-view-${id}`}
-                        className={rowActionButton}
-                        aria-label={`View ${person.fullName}`}
-                        onClick={() => setDetailId(id)}
-                      >
-                        <Eye size={16} />
-                        <HoverTooltip>View team member</HoverTooltip>
-                      </button>
-                    </td>
-                  </>
-                )}
-              />
-            )}
-          </table>
-          {!searchPending && (
-            <p className="m-0 border-t border-[#edf0f4] px-4 py-3 text-[11px] text-[#738096]">
-              Showing {visible.length} of {rows.length} assignments
-            </p>
+      <div className="overflow-x-auto rounded-xl border border-[#dfe5ec]">
+        <table
+          className="w-full min-w-[640px] table-fixed text-left text-xs [&_td]:break-words"
+          aria-busy={searchPending}
+        >
+          <colgroup>
+            <col className="w-[28%]" />
+            <col className="w-[20%]" />
+            <col className="w-[26%]" />
+            <col className="w-[16%]" />
+            <col className="w-[10%]" />
+          </colgroup>
+          <thead className="bg-[#edf1f5]">
+            <tr>
+              {["Staff", "Position", "Service", "Assigned on", "Actions"].map(
+                (label) => (
+                  <th key={label} className="px-4 py-3 font-semibold">
+                    {label}
+                  </th>
+                ),
+              )}
+            </tr>
+          </thead>
+          {searchPending ? (
+            <TableSkeletonBody label="assigned staff" columns={5} rows={5} />
+          ) : (
+            <AnimatedTableBody
+              items={visible}
+              viewKey={JSON.stringify([settledSearch, streamId])}
+              quickKey={settledSearch}
+              animateRows={false}
+              columns={5}
+              rowClassName="border-t border-[#edf0f4]"
+              emptyContent={
+                rows.length
+                  ? "No staff match these filters."
+                  : "No staff assigned yet."
+              }
+              renderRow={({ id, person, stream }) => (
+                <>
+                  <td className="px-4 py-4">
+                    <div className="flex items-center gap-3">
+                      <Avatar name={person.fullName} className="size-8" />
+                      <span className="font-medium">{person.fullName}</span>
+                      {person.isTeamLead && (
+                        <span className="rounded-md bg-[#e9effc] px-2 py-1 text-[11px] text-[#294c96]">
+                          Team lead
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 text-[#60718c]">
+                    {person.position || "Staff"}
+                  </td>
+                  <td className="px-4 py-4">
+                    <span className="rounded-md bg-[#e9effc] px-2 py-1 text-[11px] text-[#294c96]">
+                      {stream.serviceName}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4 text-[#60718c]">
+                    {new Date(person.approvedAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-4">
+                    <button
+                      type="button"
+                      id={`team-member-view-${id}`}
+                      className={rowActionButton}
+                      aria-label={`View ${person.fullName}`}
+                      onClick={() => setDetailId(id)}
+                    >
+                      <Eye size={16} />
+                      <HoverTooltip>View team member</HoverTooltip>
+                    </button>
+                  </td>
+                </>
+              )}
+            />
           )}
-        </div>
-      ) : (
-        <EmptyState
-          icon={UsersRound}
-          title="No staff assigned yet"
-          description="The department head can assign eligible staff once the booking is ready for staffing."
-        />
-      )}
+        </table>
+        {!searchPending && (
+          <p className="m-0 border-t border-[#edf0f4] px-4 py-3 text-[11px] text-[#738096]">
+            Showing {visible.length} of {rows.length} assignments
+          </p>
+        )}
+      </div>
       {detail && (
         <TeamMemberPanel
           key={detail.id}

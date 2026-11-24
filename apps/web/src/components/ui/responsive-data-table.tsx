@@ -92,6 +92,26 @@ const ResponsiveDataTableCell = React.forwardRef<
 ))
 ResponsiveDataTableCell.displayName = "ResponsiveDataTableCell"
 
+/** Full-width empty state that keeps the table header visible. */
+function DataTableEmptyRow({
+  children,
+  colSpan,
+}: {
+  children: React.ReactNode
+  colSpan: number
+}) {
+  return (
+    <ResponsiveDataTableRow>
+      <ResponsiveDataTableCell
+        aria-colspan={colSpan}
+        className="grid min-h-[170px] place-content-center p-6 text-center text-xs text-[#7183a2]"
+      >
+        <span role="status">{children}</span>
+      </ResponsiveDataTableCell>
+    </ResponsiveDataTableRow>
+  )
+}
+
 /** Full-width row shown when a table's data failed to load. */
 function DataTableErrorRow({
   message,
@@ -133,6 +153,7 @@ function DataTableErrorRow({
 }
 
 export {
+  DataTableEmptyRow,
   DataTableErrorRow,
   ResponsiveDataTable,
   ResponsiveDataTableBody,

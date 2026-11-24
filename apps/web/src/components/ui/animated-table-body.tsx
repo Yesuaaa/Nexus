@@ -167,7 +167,7 @@ export function AnimatedTableBody<T extends { id: string }>({
           <tr>
             <td
               colSpan={columns}
-              className="p-8 text-center text-xs text-[#7183a2]"
+              className="h-[170px] p-6 text-center text-xs text-[#7183a2]"
             >
               {emptyContent}
             </td>
@@ -209,7 +209,7 @@ export function AnimatedTableBody<T extends { id: string }>({
           <tr>
             <td
               colSpan={columns}
-              className="p-8 text-center text-xs text-[#7183a2]"
+              className="h-[170px] p-6 text-center text-xs text-[#7183a2]"
             >
               {emptyContent}
             </td>
