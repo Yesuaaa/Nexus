@@ -293,6 +293,39 @@ test("all attendance navigation pages preserve module ownership and role boundar
     false,
   )
 
+  // PG-013-F001-A001-T001: the request overview route follows Attendance
+  // access policy for staff, administrators, and permitted Superadmins.
+  const requestsOverviewRoute = "/attendance/requests/overview"
+  assert.equal(canAccessRoute(staff, requestsOverviewRoute), true)
+  assert.equal(canAccessRoute(activeAdmin, requestsOverviewRoute), true)
+  assert.equal(canAccessRoute(permittedSuperadmin, requestsOverviewRoute), true)
+  assert.equal(
+    canAccessRoute(
+      { ...staff, headOf: { id: "dept", name: "Design" } },
+      requestsOverviewRoute,
+    ),
+    true,
+  )
+  assert.equal(
+    canAccessRoute({ ...staff, role: "USER" }, requestsOverviewRoute),
+    false,
+  )
+  assert.equal(
+    canAccessRoute({ ...staff, isActive: false }, requestsOverviewRoute),
+    false,
+  )
+  assert.equal(
+    canAccessRoute(
+      { ...staff, role: "ADMIN", isActive: false },
+      requestsOverviewRoute,
+    ),
+    false,
+  )
+  assert.equal(
+    canAccessRoute({ ...staff, role: "SUPERADMIN" }, requestsOverviewRoute),
+    false,
+  )
+
   // PG-008-F001-A001-T001: direct permission and route-policy boundaries for
   // Attendance policy management.
   const manager = (role, isActive = true, permissions = []) => ({
