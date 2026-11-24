@@ -5,3 +5,9 @@ ba51e389f5576d73dbee28dc76f8df2b39072c7e:apps/api/src/client-requests.test.ts:ge
 # Non-secret idempotency keys used by the payroll simulator's offline tests.
 69c99158869d54cf98b7c9969496f8e932324b1b:apps/api/tests/features/payroll/phase5.test.ts:generic-api-key:389
 69c99158869d54cf98b7c9969496f8e932324b1b:apps/api/tests/features/payroll/phase5.test.ts:generic-api-key:448
+
+# Non-secret payment idempotency UUIDs in historical offline billing fixtures.
+7fbf2b2737051eea03ceabe6895da86f2e1c359f:apps/api/tests/features/billing/billing-read.test.ts:generic-api-key:99
+7fbf2b2737051eea03ceabe6895da86f2e1c359f:apps/api/tests/features/billing/billing-read.test.ts:generic-api-key:274
+7fbf2b2737051eea03ceabe6895da86f2e1c359f:apps/api/tests/features/billing/billing-read.test.ts:generic-api-key:411
+7fbf2b2737051eea03ceabe6895da86f2e1c359f:apps/api/tests/features/billing/billing-read.test.ts:generic-api-key:516
