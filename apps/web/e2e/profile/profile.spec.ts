@@ -55,6 +55,15 @@ for (const role of ["USER", "STAFF", "ADMIN", "SUPERADMIN"] as const) {
     await page.route("https://profile-test.supabase.co/**", (route) =>
       route.fulfill({ contentType: "image/png", body: imageBuffer }),
     )
+    await page.route("https://profile-test.supabase.co/avatar.webp", (route) =>
+      route.fulfill({
+        contentType: "image/webp",
+        body: Buffer.from(
+          "UklGRi4AAABXRUJQVlA4ICIAAABwAQCdASoCAAIAAUAmJZQCdAFAAAD+/DeBV/fU6D4r4AAA",
+          "base64",
+        ),
+      }),
+    )
     const imageWrites: string[] = []
     let failBannerOnce = role === "USER"
     await page.route("**/api/**", async (route) => {
@@ -85,7 +94,7 @@ for (const role of ["USER", "STAFF", "ADMIN", "SUPERADMIN"] as const) {
           })
         }
         expect(dataUrl).toMatch(/^data:image\/png;base64,/)
-        const url = `https://profile-test.supabase.co/${kind}.png`
+        const url = `https://profile-test.supabase.co/${kind}.${kind === "avatar" ? "webp" : "png"}`
         if (kind === "avatar") {
           profile.imageUrl = url
           if (profile.specialist) profile.specialist.imageUrl = url
@@ -224,7 +233,16 @@ for (const role of ["USER", "STAFF", "ADMIN", "SUPERADMIN"] as const) {
         .toEqual(["avatar", "banner", "banner"])
     } else await expect.poll(() => imageWrites).toEqual(["avatar", "banner"])
     await expect(page.getByRole("dialog")).toHaveCount(0)
-    expect(profile.imageUrl).toBe("https://profile-test.supabase.co/avatar.png")
+    const avatar = page.getByRole("img", { name: /profile photo$/ })
+    await expect(avatar).toHaveAttribute(
+      "src",
+      "https://profile-test.supabase.co/avatar.webp",
+    )
+    await expect
+      .poll(() =>
+        avatar.evaluate((img) => (img as HTMLImageElement).naturalWidth),
+      )
+      .toBe(2)
     expect(profile.bannerUrl).toBe(
       "https://profile-test.supabase.co/banner.png",
     )
@@ -286,7 +304,9 @@ for (const role of ["USER", "STAFF", "ADMIN", "SUPERADMIN"] as const) {
         page.getByRole("heading", { name: "Specialist profile", exact: true }),
       ).toHaveCount(0)
     }
-    await page.getByRole("button", { name: "Open account menu" }).click()
+    await page
+      .getByRole("button", { name: "Account menu", exact: true })
+      .click()
     await expect(
       page.getByRole("menuitem", { name: "Profile", exact: true }),
     ).toHaveAttribute("href", "/profile")

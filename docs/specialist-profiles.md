@@ -42,3 +42,5 @@ pnpm --filter @nexus/api exec prisma migrate deploy
 ```
 
 The migrations add optional employee profile columns, a portfolio table, and a social-links table. They do not insert sample profiles, publish projects, change client records, or revoke sessions. Regenerate the Prisma client and rebuild/restart the API after applying them. The migrations are not applied to the live database as part of this implementation.
+
+- Profile picture uploads accept JPEG, PNG, and WebP up to 2 MiB. The API checks the source format and 25-megapixel limit, applies orientation, and fits the image within 1024 × 1024 without enlargement. It stores a quality-82 WebP up to 2 MiB and removes the previous managed avatar after the account update commits. Cover banners and portfolio images retain their source format.
