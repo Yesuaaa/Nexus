@@ -265,7 +265,70 @@ test(
         assert.deepEqual(await pendingInbox(replacement, id), [])
         assert.equal((await notices(id)).length, 3)
         assert.deepEqual(await state(id), before)
+
+        const verificationBefore = await state(id)
+        const noticesBefore = await notices(id)
+        await db.exec(`
+          CREATE FUNCTION fail_correction_verification_notice() RETURNS trigger LANGUAGE plpgsql AS $$
+          BEGIN
+            IF NEW.type = 'ATTENDANCE_CORRECTION_VERIFIED' THEN
+              RAISE EXCEPTION 'Synthetic correction verification notice failure';
+            END IF;
+            RETURN NEW;
+          END $$;
+          CREATE TRIGGER fail_correction_verification_notice
+          BEFORE INSERT ON "WorkflowNotification"
+          FOR EACH ROW EXECUTE FUNCTION fail_correction_verification_notice();
+        `)
+        try {
+          await expectStatus(await review(original, id), 500)
+        } finally {
+          await db.exec(
+            'DROP TRIGGER fail_correction_verification_notice ON "WorkflowNotification"; DROP FUNCTION fail_correction_verification_notice();',
+          )
+        }
+        assert.deepEqual(await state(id), verificationBefore)
+        assert.deepEqual(await notices(id), noticesBefore)
+        assert.equal(
+          await prisma.workflowNotification.count({
+            where: {
+              attendanceAdjustmentId: id,
+              type: "ATTENDANCE_CORRECTION_VERIFIED",
+            },
+          }),
+          0,
+        )
+
         await expectStatus(await review(original, id), 200)
+        const verified = await state(id)
+        assert.equal(verified.request.status, "VERIFIED")
+        assert.equal(
+          verified.audit.filter(
+            ({ entityType, entityId }) =>
+              entityType === "AttendanceAdjustment" && entityId === id,
+          ).length,
+          2,
+        )
+        assert(
+          verified.audit.some(
+            ({ action, actorId }) =>
+              action === "INSERT" && actorId === subject.user.id,
+          ),
+        )
+        assert(
+          verified.audit.some(
+            ({ action, actorId }) =>
+              action === "UPDATE" && actorId === original.user.id,
+          ),
+        )
+        assert(
+          (await prisma.workflowNotification.count({
+            where: {
+              attendanceAdjustmentId: id,
+              type: "ATTENDANCE_CORRECTION_VERIFIED",
+            },
+          })) > 0,
+        )
         await expectStatus(await review(hr, id), 200)
       },
     )

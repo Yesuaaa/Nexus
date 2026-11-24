@@ -154,6 +154,28 @@ test("[PG-004-F001-A002-T002] default route renders mixed scoped requests", asyn
     reason: "Correct clock-out from the mixed queue",
     status: "PENDING",
   })
+  const verifiedCorrection = adjustment("mixed-verified-correction", {
+    reason: "Verified session correction from typed route",
+    status: "VERIFIED",
+    sessionId: "session-mixed-verified",
+  })
+  const approvedCorrection = adjustment("mixed-approved-correction", {
+    reason: "Approved session correction from typed route",
+    status: "APPROVED",
+    sessionId: "session-mixed-approved",
+  })
+  const rejectedCorrection = adjustment("mixed-rejected-correction", {
+    reason: "Rejected session correction from typed route",
+    status: "REJECTED",
+    sessionId: "session-mixed-rejected",
+  })
+  const correctionRows = [
+    correction,
+    verifiedCorrection,
+    approvedCorrection,
+    rejectedCorrection,
+  ]
+  let correctionOnly = false
   const overtime = adjustment("mixed-overtime", {
     type: "OVERTIME",
     overtimeMinutes: 120,
@@ -163,7 +185,12 @@ test("[PG-004-F001-A002-T002] default route renders mixed scoped requests", asyn
   const requests = await stubAdjustmentList(
     page,
     "STAFF",
-    () => ({ body: listPayload([correction, overtime], { total: 2 }) }),
+    () => ({
+      body: listPayload(
+        correctionOnly ? correctionRows : [correction, overtime],
+        { total: correctionOnly ? correctionRows.length : 2 },
+      ),
+    }),
     { headOf: { id: "department", name: "Design" } },
   )
   const initial = waitForListResponse(page)
@@ -199,6 +226,71 @@ test("[PG-004-F001-A002-T002] default route renders mixed scoped requests", asyn
   await expect(
     page.getByRole("combobox", { name: "Request status filter" }),
   ).toBeVisible()
+
+  // PG-010-F001-A008-T006: retain the mixed-list assertions above, then inspect
+  // the same shared row through the dedicated correction-only route.
+  correctionOnly = true
+  const typedResponse = waitForListResponse(page)
+  await page.goto("/attendance/requests/corrections")
+  expect((await typedResponse).status()).toBe(200)
+  expect(requests.at(-1)?.searchParams.get("type")).toBe("CORRECTION")
+  const typedRow = page.getByRole("row").filter({ hasText: correction.reason })
+  await expect(typedRow.getByText("mixed-correction Employee")).toBeVisible()
+  await expect(typedRow.getByText("Missing attendance")).toBeVisible()
+  await expect(
+    typedRow.getByText(correction.reason, { exact: true }),
+  ).toBeVisible()
+  await expect(typedRow.getByText("Correction", { exact: true })).toBeVisible()
+  await expect(typedRow.getByText("Pending", { exact: true })).toBeVisible()
+  await expect(
+    page
+      .getByRole("table", { name: "Attendance requests" })
+      .getByText("Overtime", { exact: true }),
+  ).toHaveCount(0)
+  for (const [record, status] of [
+    [verifiedCorrection, "Verified"],
+    [approvedCorrection, "Approved"],
+    [rejectedCorrection, "Rejected"],
+  ] as const) {
+    const row = page.getByRole("row").filter({ hasText: record.reason })
+    await expect(row.getByText(record.reason, { exact: true })).toBeVisible()
+    await expect(
+      row.getByText("Session correction", { exact: true }),
+    ).toBeVisible()
+    await expect(row.getByText(status, { exact: true })).toBeVisible()
+  }
+  const browserTimeZone = await page.evaluate(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+  )
+  expect(browserTimeZone).toBe("Asia/Singapore")
+  const expectedStart = await page.evaluate(
+    ({ value, timeZone }) => {
+      return new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }).format(new Date(value))
+    },
+    { value: start, timeZone: browserTimeZone },
+  )
+  await expect(typedRow).toContainText(expectedStart)
+  const expectedEnd = await page.evaluate(
+    ({ value, timeZone }) => {
+      return new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }).format(new Date(value))
+    },
+    { value: end, timeZone: browserTimeZone },
+  )
+  await expect(typedRow).toContainText(expectedEnd)
 })
 
 test("[PG-004-F001-A003-T003] mine and team scope follows the account", async ({
@@ -277,6 +369,43 @@ test("[PG-004-F001-A003-T003] mine and team scope follows the account", async ({
         expect(requests[0]?.searchParams.get("scope")).toBe(
           scenario.self ? "mine" : "team",
         )
+      }
+
+      // PG-010-F001-A006-T009: verify the fixed correction query in the same
+      // role matrix without weakening the mixed-route assertions above.
+      const typed = waitForListResponse(target)
+      await target.goto("/attendance/requests/corrections")
+      expect((await typed).status()).toBe(200)
+      expect(requests.at(-1)?.searchParams.get("type")).toBe("CORRECTION")
+      expect(requests.at(-1)?.searchParams.get("scope")).toBe(
+        scenario.manager ? "team" : "mine",
+      )
+      const correctionGroup = target.getByRole("group", {
+        name: "Request view",
+      })
+      if (scenario.manager && scenario.self) {
+        await expect(correctionGroup).toBeVisible()
+        const mine = waitForListResponse(target)
+        await correctionGroup
+          .getByRole("button", { name: "My requests" })
+          .click()
+        expect((await mine).status()).toBe(200)
+        expect(requests.at(-1)?.searchParams.get("type")).toBe("CORRECTION")
+        expect(requests.at(-1)?.searchParams.get("scope")).toBe("mine")
+        const team = waitForListResponse(target)
+        await correctionGroup
+          .getByRole("button", {
+            name:
+              scenario.name === "Head"
+                ? "Department requests"
+                : "Organization requests",
+          })
+          .click()
+        expect((await team).status()).toBe(200)
+        expect(requests.at(-1)?.searchParams.get("type")).toBe("CORRECTION")
+        expect(requests.at(-1)?.searchParams.get("scope")).toBe("team")
+      } else {
+        await expect(correctionGroup).toHaveCount(0)
       }
     } finally {
       await target.close()
@@ -374,6 +503,33 @@ test("[PG-004-F001-A004-T004] search and filters update the default list query",
   await page.getByRole("option", { name: "Verified", exact: true }).click()
   expect((await statusResponse).status()).toBe(200)
   expect(requests.at(-1)?.searchParams.get("search")).toBe("Needle")
+
+  // PG-010-F001-A004-T007: the dedicated route keeps its fixed type while
+  // applying the same debounced search and page reset.
+  const typedInitial = waitForListResponse(page)
+  await page.goto("/attendance/requests/corrections")
+  expect((await typedInitial).status()).toBe(200)
+  expect(requests.at(-1)?.searchParams.get("type")).toBe("CORRECTION")
+  expect(requests.at(-1)?.searchParams.get("page")).toBe("1")
+  await expect(
+    page.getByRole("combobox", { name: "Request type filter" }),
+  ).toHaveCount(0)
+  await visitSecondPage()
+  const typedSearch = waitForListResponse(
+    page,
+    (url) =>
+      url.searchParams.get("type") === "CORRECTION" &&
+      url.searchParams.get("search") === "Needle" &&
+      url.searchParams.get("page") === "1",
+  )
+  await page
+    .getByRole("searchbox", { name: "Search attendance requests" })
+    .fill("Needle")
+  await page.clock.runFor(200)
+  expect((await typedSearch).status()).toBe(200)
+  expect(requests.at(-1)?.searchParams.get("type")).toBe("CORRECTION")
+  expect(requests.at(-1)?.searchParams.get("search")).toBe("Needle")
+  expect(requests.at(-1)?.searchParams.get("page")).toBe("1")
 })
 
 test("[PG-004-F001-A005-T005] pagination follows response metadata and disables during refresh", async ({
@@ -436,13 +592,28 @@ test("[PG-004-F001-A005-T006] loading, empty, error and retry states recover", a
   page,
 }) => {
   const gate = requestGate()
+  const typedGate = requestGate()
   const recovered = adjustment("retry-recovered", {
     reason: "Recovered queue item",
   })
+  let typedRoute = false
+  let typedRequestCount = 0
   const requests = await stubAdjustmentList(
     page,
     "STAFF",
     async (_url, count) => {
+      if (typedRoute) {
+        typedRequestCount += 1
+        if (typedRequestCount === 1) {
+          typedGate.start()
+          await typedGate.pending
+          return {
+            status: 503,
+            body: { error: "Correction requests are temporarily unavailable." },
+          }
+        }
+        return { body: listPayload([]) }
+      }
       if (count === 1) {
         gate.start()
         await gate.pending
@@ -492,8 +663,39 @@ test("[PG-004-F001-A005-T006] loading, empty, error and retry states recover", a
       page.getByText(recovered.reason, { exact: true }),
     ).toBeVisible()
     expect(requests).toHaveLength(3)
+
+    // PG-010-F001-A003-T005: keep the original mixed-route assertions and
+    // repeat the loading/error/retry path through correction-only mode.
+    typedRoute = true
+    const typedFailure = waitForListResponse(page)
+    await page.goto("/attendance/requests/corrections")
+    await typedGate.started
+    expect(requests.at(-1)?.searchParams.get("type")).toBe("CORRECTION")
+    await expect(
+      page.getByRole("table", { name: "Attendance requests" }),
+    ).toHaveAttribute("aria-busy", "true")
+    typedGate.release()
+    expect((await typedFailure).status()).toBe(503)
+    await expect(
+      page.getByRole("alert").filter({
+        hasText: "Correction requests are temporarily unavailable.",
+      }),
+    ).toBeVisible()
+    const typedRetry = waitForListResponse(page)
+    await page.getByRole("button", { name: "Retry", exact: true }).click()
+    expect((await typedRetry).status()).toBe(200)
+    await expect(
+      page.getByRole("table", { name: "Attendance requests" }),
+    ).toHaveAttribute("aria-busy", "false")
+    await expect(
+      page.getByRole("alert").filter({
+        hasText: "Correction requests are temporarily unavailable.",
+      }),
+    ).toHaveCount(0)
+    expect(typedRequestCount).toBe(2)
   } finally {
     gate.release()
+    typedGate.release()
   }
 })
 
@@ -545,7 +747,29 @@ test("[PG-004-F001-A006-T007] correction action is capability-gated and validate
       new URL(response.url()).pathname === "/api/attendance/adjustments",
   )
   await dialog.getByRole("button", { name: "Submit request" }).click()
-  expect((await rejected).status()).toBe(409)
+  const rejectedResponse = await rejected
+  expect(rejectedResponse.status()).toBe(409)
+  const payload = rejectedResponse.request().postDataJSON() as {
+    type: string
+    requestKey: string
+    sessionId?: string
+    startedAt: string
+    endedAt: string
+    reason: string
+  }
+  expect(payload.type).toBe("CORRECTION")
+  expect(payload.requestKey).toMatch(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  )
+  expect(payload.sessionId).toBeUndefined()
+  const expectedInstants = await page.evaluate(() => ({
+    startedAt: new Date("2026-11-10T09:00").toISOString(),
+    endedAt: new Date("2026-11-10T10:00").toISOString(),
+  }))
+  expect(payload).toMatchObject({
+    ...expectedInstants,
+    reason: "Reverse interval",
+  })
   await expect(dialog.getByRole("alert")).toHaveText(
     "A matching request already exists.",
   )

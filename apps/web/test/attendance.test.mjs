@@ -15,6 +15,7 @@ import {
 } from "../src/features/attendance/model/attendance.ts"
 import {
   canAccessPersonalAttendance,
+  canConfigureAttendance,
   Permissions,
 } from "../src/features/auth/model/permissions.ts"
 import { formatDateTime } from "../src/lib/format.ts"
@@ -267,6 +268,97 @@ test("all attendance navigation pages preserve module ownership and role boundar
       for (const role of ["USER", "SUPERADMIN"])
         assert.equal(canAccessRoute({ ...staff, role }, link.href), false)
     }
+
+  // PG-011-F001-A001-T001: the canonical Leave route follows the attendance
+  // role and permission policy for both self-service and administrative users.
+  const leaveRoute = "/attendance/requests/leave"
+  const activeAdmin = { ...staff, id: "admin", role: "ADMIN" }
+  const permittedSuperadmin = {
+    ...staff,
+    id: "superadmin",
+    role: "SUPERADMIN",
+    permissions: [Permissions.EMPLOYEES_READ],
+  }
+  assert.equal(canAccessRoute(staff, leaveRoute), true)
+  assert.equal(canAccessRoute(activeAdmin, leaveRoute), true)
+  assert.equal(canAccessRoute(permittedSuperadmin, leaveRoute), true)
+  assert.equal(canAccessRoute({ ...staff, role: "USER" }, leaveRoute), false)
+  assert.equal(canAccessRoute({ ...staff, isActive: false }, leaveRoute), false)
+  assert.equal(
+    canAccessRoute({ ...staff, role: "ADMIN", isActive: false }, leaveRoute),
+    false,
+  )
+  assert.equal(
+    canAccessRoute({ ...staff, role: "SUPERADMIN" }, leaveRoute),
+    false,
+  )
+
+  // PG-008-F001-A001-T001: direct permission and route-policy boundaries for
+  // Attendance policy management.
+  const manager = (role, isActive = true, permissions = []) => ({
+    id: `pg008-${role.toLowerCase()}`,
+    role,
+    isActive,
+    permissions,
+  })
+  const manageAttendance = [Permissions.EMPLOYEES_MANAGE]
+  for (const role of ["ADMIN", "SUPERADMIN"]) {
+    const allowed = manager(role, true, manageAttendance)
+    assert.equal(canConfigureAttendance(allowed), true, role)
+    assert.equal(
+      canAccessRoute(allowed, "/attendance/policies/management"),
+      true,
+      role,
+    )
+    const missingPermission = manager(role)
+    assert.equal(canConfigureAttendance(missingPermission), false, role)
+    assert.equal(
+      canAccessRoute(missingPermission, "/attendance/policies/management"),
+      false,
+      role,
+    )
+    const inactive = manager(role, false, manageAttendance)
+    assert.equal(canConfigureAttendance(inactive), false, role)
+    assert.equal(
+      canAccessRoute(inactive, "/attendance/policies/management"),
+      false,
+      role,
+    )
+  }
+  for (const role of ["STAFF", "USER"]) {
+    const unsupported = manager(role, true, manageAttendance)
+    assert.equal(canConfigureAttendance(unsupported), false, role)
+    assert.equal(
+      canAccessRoute(unsupported, "/attendance/policies/management"),
+      false,
+      role,
+    )
+  }
+
+  // PG-009-F001-A001-T001: the overview has the same exact configure gate
+  // as policy management; preserve the PG-008 assertions above unchanged.
+  const overviewPath = "/attendance/policies/overview"
+  for (const role of ["ADMIN", "SUPERADMIN"]) {
+    const allowed = manager(role, true, manageAttendance)
+    assert.equal(canAccessRoute(allowed, overviewPath), true, role)
+    assert.equal(
+      canAccessRoute(manager(role), overviewPath),
+      false,
+      `${role} without employees:manage`,
+    )
+    assert.equal(
+      canAccessRoute(manager(role, false, manageAttendance), overviewPath),
+      false,
+      `${role} inactive`,
+    )
+  }
+  for (const role of ["STAFF", "USER"]) {
+    assert.equal(
+      canAccessRoute(manager(role, true, manageAttendance), overviewPath),
+      false,
+      role,
+    )
+  }
 })
 
 test("[PG-003-F001-A001-T001] personal attendance selection requires active STAFF or ADMIN", () => {
@@ -351,5 +443,53 @@ test("[PG-004-F001-A001-T001] adjustment route enforces active roles and employe
       ),
       false,
       `${role} must be active`,
+    )
+
+  // PG-010-F001-A001-T001: preserve the mixed PG-004 route assertions above
+  // and verify the canonical correction-only route with the same policy.
+  const correctionsPath = "/attendance/requests/corrections"
+  assert.equal(canAccessRoute(account("STAFF"), correctionsPath), true)
+  assert.equal(canAccessRoute(account("ADMIN"), correctionsPath), true)
+  assert.equal(
+    canAccessRoute(
+      account("SUPERADMIN", true, [Permissions.EMPLOYEES_READ]),
+      correctionsPath,
+    ),
+    true,
+  )
+  assert.equal(canAccessRoute(account("SUPERADMIN"), correctionsPath), false)
+  assert.equal(canAccessRoute(account("USER"), correctionsPath), false)
+  for (const role of ["STAFF", "ADMIN", "SUPERADMIN"])
+    assert.equal(
+      canAccessRoute(
+        account(role, false, [Permissions.EMPLOYEES_READ]),
+        correctionsPath,
+      ),
+      false,
+      `${role} must be active on Corrections`,
+    )
+
+  // PG-012-F001-A001-T001: add the canonical Overtime path to the existing
+  // route-policy matrix while retaining the mixed and Corrections assertions.
+  const overtimePath = "/attendance/requests/overtime"
+  assert.equal(canAccessRoute(account("STAFF"), overtimePath), true)
+  assert.equal(canAccessRoute(account("ADMIN"), overtimePath), true)
+  assert.equal(
+    canAccessRoute(
+      account("SUPERADMIN", true, [Permissions.EMPLOYEES_READ]),
+      overtimePath,
+    ),
+    true,
+  )
+  assert.equal(canAccessRoute(account("SUPERADMIN"), overtimePath), false)
+  assert.equal(canAccessRoute(account("USER"), overtimePath), false)
+  for (const role of ["STAFF", "ADMIN", "SUPERADMIN"])
+    assert.equal(
+      canAccessRoute(
+        account(role, false, [Permissions.EMPLOYEES_READ]),
+        overtimePath,
+      ),
+      false,
+      `${role} must be active on Overtime`,
     )
 })
