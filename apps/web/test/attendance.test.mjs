@@ -269,6 +269,30 @@ test("all attendance navigation pages preserve module ownership and role boundar
         assert.equal(canAccessRoute({ ...staff, role }, link.href), false)
     }
 
+  // PG-011-F001-A001-T001: the canonical Leave route follows the attendance
+  // role and permission policy for both self-service and administrative users.
+  const leaveRoute = "/attendance/requests/leave"
+  const activeAdmin = { ...staff, id: "admin", role: "ADMIN" }
+  const permittedSuperadmin = {
+    ...staff,
+    id: "superadmin",
+    role: "SUPERADMIN",
+    permissions: [Permissions.EMPLOYEES_READ],
+  }
+  assert.equal(canAccessRoute(staff, leaveRoute), true)
+  assert.equal(canAccessRoute(activeAdmin, leaveRoute), true)
+  assert.equal(canAccessRoute(permittedSuperadmin, leaveRoute), true)
+  assert.equal(canAccessRoute({ ...staff, role: "USER" }, leaveRoute), false)
+  assert.equal(canAccessRoute({ ...staff, isActive: false }, leaveRoute), false)
+  assert.equal(
+    canAccessRoute({ ...staff, role: "ADMIN", isActive: false }, leaveRoute),
+    false,
+  )
+  assert.equal(
+    canAccessRoute({ ...staff, role: "SUPERADMIN" }, leaveRoute),
+    false,
+  )
+
   // PG-008-F001-A001-T001: direct permission and route-policy boundaries for
   // Attendance policy management.
   const manager = (role, isActive = true, permissions = []) => ({

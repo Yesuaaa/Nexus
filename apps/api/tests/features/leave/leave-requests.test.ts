@@ -155,6 +155,22 @@ test(
     const created = await submit()
     assert.equal(created.request.status, "SUBMITTED")
 
+    // PG-011-F001-A014-T003: overlapping active requests are rejected without
+    // leaving request, snapshot, decision, or notification records behind.
+    const overlapBefore = {
+      requests: await prisma.leaveRequest.count({
+        where: { employeeId: employee.employee.id },
+      }),
+      days: await prisma.leaveRequestDay.count({
+        where: { employeeId: employee.employee.id },
+      }),
+      decisions: await prisma.leaveDecision.count({
+        where: { requestId: created.request.id },
+      }),
+      notifications: await prisma.workflowNotification.count({
+        where: { leaveRequestId: created.request.id },
+      }),
+    }
     const overlap = await api(employee, "/leave/requests", {
       body: {
         requestKey: randomUUID(),
@@ -165,6 +181,23 @@ test(
       },
     })
     assert.equal(overlap.status, 409)
+    assert.deepEqual(
+      {
+        requests: await prisma.leaveRequest.count({
+          where: { employeeId: employee.employee.id },
+        }),
+        days: await prisma.leaveRequestDay.count({
+          where: { employeeId: employee.employee.id },
+        }),
+        decisions: await prisma.leaveDecision.count({
+          where: { requestId: created.request.id },
+        }),
+        notifications: await prisma.workflowNotification.count({
+          where: { leaveRequestId: created.request.id },
+        }),
+      },
+      overlapBefore,
+    )
 
     assert.equal(
       (await api(admin, "/leave/requests?scope=team&page=1")).status,
@@ -497,6 +530,223 @@ test(
       "/leave/requests?scope=mine&from=2026-12-01&to=2026-12-02",
     )
     assert.equal(((await filtered.json()) as { total: number }).total, 0)
+
+    // PG-011-F001-A004-T002 and A005-T002: search is normalized, scoped to
+    // supported text fields, bounded, and combined with the API filters.
+    const searchActor = await account("pg011-searcher", "STAFF")
+    const searchable = await api(searchActor, "/leave/requests", {
+      body: {
+        requestKey: randomUUID(),
+        type: "SICK",
+        reason: "Search Needle phrase",
+        startDate: "2026-12-08",
+        endDate: "2026-12-08",
+      },
+    })
+    assert.equal(searchable.status, 201, await searchable.clone().text())
+    const searchableId = (
+      (await searchable.json()) as { request: { id: string } }
+    ).request.id
+    assert.equal((await action(head, searchableId, "verify", 1)).status, 200)
+    assert.equal((await action(admin, searchableId, "approve", 2)).status, 200)
+    for (const value of ["needle", "pg011-searcher", "LEAVE-pg011-searcher"]) {
+      const result = await api(
+        searchActor,
+        `/leave/requests?scope=mine&search=${encodeURIComponent(value)}`,
+      )
+      assert.equal(result.status, 200, await result.clone().text())
+      assert.equal(((await result.json()) as { total: number }).total, 1, value)
+    }
+    const maximumSearch = await api(
+      searchActor,
+      `/leave/requests?scope=mine&search=${"x".repeat(100)}`,
+    )
+    assert.equal(maximumSearch.status, 200)
+    assert.equal(
+      (
+        await api(
+          searchActor,
+          `/leave/requests?scope=mine&search=${"x".repeat(101)}`,
+        )
+      ).status,
+      400,
+    )
+    const combinedFilters = await api(
+      searchActor,
+      "/leave/requests?scope=mine&type=SICK&status=APPROVED",
+    )
+    assert.equal(combinedFilters.status, 200)
+    assert.deepEqual(
+      (
+        (await combinedFilters.json()) as {
+          requests: { id: string }[]
+          total: number
+        }
+      ).requests.map(({ id }) => id),
+      [searchableId],
+    )
+    assert.equal(
+      (await api(searchActor, "/leave/requests?scope=mine&type=VACATION"))
+        .status,
+      400,
+    )
+    assert.equal(
+      (await api(searchActor, "/leave/requests?scope=mine&status=UNKNOWN"))
+        .status,
+      400,
+    )
+
+    // PG-011-F001-A006-T001: API date filters include request endpoints,
+    // require paired ordered values, and accept overlap at either boundary.
+    const dateActor = await account("pg011-date-filter", "STAFF")
+    const dateIds: string[] = []
+    for (const [startDate, endDate] of [
+      ["2026-12-10", "2026-12-10"],
+      ["2026-12-11", "2026-12-12"],
+      ["2026-12-14", "2026-12-14"],
+    ]) {
+      dateIds.push((await submit(startDate, endDate, dateActor)).request.id)
+    }
+    const dateWindow = await api(
+      dateActor,
+      "/leave/requests?scope=mine&from=2026-12-10&to=2026-12-12",
+    )
+    assert.equal(dateWindow.status, 200)
+    const dateWindowBody = (await dateWindow.json()) as {
+      requests: { id: string }[]
+    }
+    assert.deepEqual(
+      dateWindowBody.requests.map(({ id }) => id).sort(),
+      dateIds.slice(0, 2).sort(),
+    )
+    const inclusiveEnd = await api(
+      dateActor,
+      "/leave/requests?scope=mine&from=2026-12-12&to=2026-12-12",
+    )
+    assert.deepEqual(
+      (
+        (await inclusiveEnd.json()) as { requests: { id: string }[] }
+      ).requests.map(({ id }) => id),
+      [dateIds[1]],
+    )
+    for (const query of [
+      "/leave/requests?scope=mine&from=2026-12-10",
+      "/leave/requests?scope=mine&to=2026-12-12",
+      "/leave/requests?scope=mine&from=2026-12-13&to=2026-12-10",
+    ]) {
+      assert.equal((await api(dateActor, query)).status, 400, query)
+    }
+
+    // PG-011-F001-A014-T001: direct API boundaries reject malformed input
+    // without leaving request snapshots, decisions, or notices.
+    const boundaryActor = await account("pg011-boundaries", "STAFF")
+    const boundaryBase = {
+      requestKey: randomUUID(),
+      type: "ANNUAL",
+      reason: "Valid request reason",
+      startDate: "2026-12-08",
+      endDate: "2026-12-08",
+    }
+    async function boundaryCounts() {
+      return {
+        requests: await prisma.leaveRequest.count({
+          where: { requestedById: boundaryActor.user.id },
+        }),
+        days: await prisma.leaveRequestDay.count({
+          where: { employeeId: boundaryActor.employee.id },
+        }),
+        decisions: await prisma.leaveDecision.count({
+          where: { actorId: boundaryActor.user.id },
+        }),
+        notifications: await prisma.workflowNotification.count(),
+      }
+    }
+    const invalidBoundaryInputs: { label: string; body: object }[] = [
+      { label: "extra field", body: { ...boundaryBase, unsupported: true } },
+      {
+        label: "malformed UUID",
+        body: { ...boundaryBase, requestKey: "not-a-uuid" },
+      },
+      {
+        label: "unsupported type",
+        body: { ...boundaryBase, type: "VACATION" },
+      },
+      {
+        label: "four-character reason",
+        body: { ...boundaryBase, reason: "four" },
+      },
+      {
+        label: "2001-character reason",
+        body: { ...boundaryBase, reason: "x".repeat(2001) },
+      },
+      {
+        label: "invalid non-leap date",
+        body: {
+          ...boundaryBase,
+          startDate: "2027-02-29",
+          endDate: "2027-02-29",
+        },
+      },
+      {
+        label: "reversed date range",
+        body: {
+          ...boundaryBase,
+          startDate: "2026-12-09",
+          endDate: "2026-12-08",
+        },
+      },
+      {
+        label: "367 inclusive dates",
+        body: {
+          ...boundaryBase,
+          startDate: "2027-01-01",
+          endDate: "2028-01-02",
+        },
+      },
+    ]
+    for (const { label, body } of invalidBoundaryInputs) {
+      const before = await boundaryCounts()
+      const result = await api(boundaryActor, "/leave/requests", { body })
+      assert.equal(result.status, 400, label)
+      assert.deepEqual(await boundaryCounts(), before, label)
+    }
+    for (const [label, body] of [
+      [
+        "five-character reason",
+        { ...boundaryBase, requestKey: randomUUID(), reason: "12345" },
+      ],
+      [
+        "2000-character reason",
+        {
+          ...boundaryBase,
+          requestKey: randomUUID(),
+          reason: "x".repeat(2000),
+          startDate: "2026-12-09",
+          endDate: "2026-12-09",
+        },
+      ],
+      [
+        "valid leap day",
+        {
+          ...boundaryBase,
+          requestKey: randomUUID(),
+          startDate: "2028-02-29",
+          endDate: "2028-02-29",
+        },
+      ],
+      [
+        "366 inclusive dates",
+        {
+          ...boundaryBase,
+          requestKey: randomUUID(),
+          startDate: "2027-01-01",
+          endDate: "2028-01-01",
+        },
+      ],
+    ] as const) {
+      const result = await api(boundaryActor, "/leave/requests", { body })
+      assert.equal(result.status, 201, label)
+    }
 
     const policyEdit = await api(admin, `/attendance/policies/${policy.id}`, {
       method: "PATCH",
@@ -2175,6 +2425,236 @@ test(
           (await action(admin, request.id, "approve", 2)).status,
           200,
         )
+      },
+    )
+
+    await t.test(
+      "[PG-011-F001-A007-T001] leave-list pages keep metadata and deterministic tie order",
+      async () => {
+        const subject = await account("pg011-page-order", "STAFF")
+        const dates = [
+          "2026-12-01",
+          "2026-12-02",
+          "2026-12-03",
+          "2026-12-04",
+          "2026-12-07",
+          "2026-12-08",
+          "2026-12-09",
+          "2026-12-10",
+          "2026-12-11",
+          "2026-12-14",
+          "2026-12-15",
+        ]
+        const tieTime = new Date("2026-12-20T12:00:00.000Z")
+        const ids: string[] = []
+        for (const date of dates) {
+          const result = await submit(date, date, subject)
+          ids.push(result.request.id)
+          await prisma.leaveRequest.update({
+            where: { id: result.request.id },
+            data: { createdAt: tieTime },
+          })
+        }
+        const expected = [...ids].sort().reverse()
+        const firstResponse = await api(
+          subject,
+          "/leave/requests?scope=mine&page=1",
+        )
+        assert.equal(
+          firstResponse.status,
+          200,
+          await firstResponse.clone().text(),
+        )
+        const first = (await firstResponse.json()) as {
+          requests: { id: string }[]
+          total: number
+          page: number
+          pageSize: number
+        }
+        assert.deepEqual(
+          { total: first.total, page: first.page, pageSize: first.pageSize },
+          { total: 11, page: 1, pageSize: 10 },
+        )
+        assert.deepEqual(
+          first.requests.map(({ id }) => id),
+          expected.slice(0, 10),
+        )
+        const secondResponse = await api(
+          subject,
+          "/leave/requests?scope=mine&page=2",
+        )
+        const second = (await secondResponse.json()) as {
+          requests: { id: string }[]
+          total: number
+          page: number
+          pageSize: number
+        }
+        assert.equal(secondResponse.status, 200)
+        assert.deepEqual(
+          { total: second.total, page: second.page, pageSize: second.pageSize },
+          { total: 11, page: 2, pageSize: 10 },
+        )
+        assert.deepEqual(
+          second.requests.map(({ id }) => id),
+          expected.slice(10),
+        )
+        const repeated = await api(subject, "/leave/requests?scope=mine&page=1")
+        assert.deepEqual(
+          (
+            (await repeated.json()) as { requests: { id: string }[] }
+          ).requests.map(({ id }) => id),
+          expected.slice(0, 10),
+        )
+        assert.equal(
+          (await api(subject, "/leave/requests?scope=mine&page=0")).status,
+          400,
+        )
+        const outside = await api(subject, "/leave/requests?scope=mine&page=99")
+        assert.equal(outside.status, 200)
+        const outsideBody = (await outside.json()) as {
+          requests: unknown[]
+          total: number
+          page: number
+          pageSize: number
+        }
+        assert.deepEqual(
+          {
+            requests: outsideBody.requests,
+            total: outsideBody.total,
+            page: outsideBody.page,
+            pageSize: outsideBody.pageSize,
+          },
+          { requests: [], total: 11, page: 99, pageSize: 10 },
+        )
+      },
+    )
+
+    await t.test(
+      "[PG-011-F001-A014-T002] policy gaps reject preview and submission without partial writes",
+      async () => {
+        const noAssignment = await account("pg011-no-policy", "STAFF")
+        await prisma.attendancePolicyAssignment.deleteMany({
+          where: { employeeId: noAssignment.employee.id },
+        })
+
+        const ambiguous = await account("pg011-ambiguous-policy", "STAFF")
+        // Model legacy-corrupt overlap only to exercise this service branch.
+        // The isolated database guard is restored before any API request.
+        await prisma.$executeRaw`ALTER TABLE "AttendancePolicyAssignment" DISABLE TRIGGER USER`
+        try {
+          await prisma.attendancePolicyAssignment.create({
+            data: {
+              employeeId: ambiguous.employee.id,
+              policyId: policy.id,
+              effectiveFrom: new Date("2026-12-01T00:00:00.000Z"),
+            },
+          })
+        } finally {
+          await prisma.$executeRaw`ALTER TABLE "AttendancePolicyAssignment" ENABLE TRIGGER USER`
+        }
+
+        const incompletePolicy = await prisma.attendancePolicy.create({
+          data: {
+            name: "PG-011 incomplete weekday policy",
+            timeZone: "Asia/Manila",
+            days: {
+              create: Array.from({ length: 7 }, (_, weekday) => ({
+                weekday,
+                isWorkingDay: weekday > 0 && weekday < 6,
+                requiredMinutes: weekday > 0 && weekday < 6 ? 480 : 0,
+              })),
+            },
+          },
+        })
+        const incomplete = await account(
+          "pg011-incomplete-policy",
+          "STAFF",
+          department.id,
+          incompletePolicy.id,
+        )
+        // Assignment guards require all weekday rows. Remove one only after
+        // assignment to represent a legacy-corrupt/incomplete policy state.
+        await prisma.$executeRaw`ALTER TABLE "AttendancePolicyDay" DISABLE TRIGGER USER`
+        try {
+          await prisma.attendancePolicyDay.deleteMany({
+            where: { policyId: incompletePolicy.id, weekday: 3 },
+          })
+        } finally {
+          await prisma.$executeRaw`ALTER TABLE "AttendancePolicyDay" ENABLE TRIGGER USER`
+        }
+
+        const zeroPolicy = await prisma.attendancePolicy.create({
+          data: {
+            name: "PG-011 zero-work policy",
+            timeZone: "Asia/Manila",
+            days: {
+              create: Array.from({ length: 7 }, (_, weekday) => ({
+                weekday,
+                isWorkingDay: false,
+                requiredMinutes: 0,
+              })),
+            },
+          },
+        })
+        const zero = await account(
+          "pg011-zero-policy",
+          "STAFF",
+          department.id,
+          zeroPolicy.id,
+        )
+
+        async function counts() {
+          return {
+            requests: await prisma.leaveRequest.count(),
+            days: await prisma.leaveRequestDay.count(),
+            decisions: await prisma.leaveDecision.count(),
+            notifications: await prisma.workflowNotification.count(),
+          }
+        }
+        const cases = [
+          {
+            actor: noAssignment,
+            startDate: "2026-12-08",
+            endDate: "2026-12-08",
+            expected: 409,
+          },
+          {
+            actor: ambiguous,
+            startDate: "2026-12-08",
+            endDate: "2026-12-08",
+            expected: 409,
+          },
+          {
+            actor: incomplete,
+            startDate: "2026-12-09",
+            endDate: "2026-12-09",
+            expected: 409,
+          },
+          {
+            actor: zero,
+            startDate: "2026-12-06",
+            endDate: "2026-12-06",
+            expected: 400,
+          },
+        ] as const
+        for (const { actor, startDate, endDate, expected } of cases) {
+          const before = await counts()
+          const previewResult = await api(actor, "/leave/preview", {
+            body: { startDate, endDate },
+          })
+          assert.equal(previewResult.status, expected, "preview")
+          const submitted = await api(actor, "/leave/requests", {
+            body: {
+              requestKey: randomUUID(),
+              type: "ANNUAL",
+              reason: "Policy coverage failure",
+              startDate,
+              endDate,
+            },
+          })
+          assert.equal(submitted.status, expected, "submission")
+          assert.deepEqual(await counts(), before)
+        }
       },
     )
   },

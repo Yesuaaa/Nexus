@@ -5763,6 +5763,7 @@ test("typed attendance deep links enforce request type and backend scope", async
 
 test("Superadmin opens organization leave by direct URL and notification", async ({
   page,
+  context,
 }) => {
   await page.unroute("**/api/**")
   await routeAttendanceApi(page, { realNotifications: true })
@@ -5786,10 +5787,36 @@ test("Superadmin opens organization leave by direct URL and notification", async
   const { request } = (await response.json()) as { request: { id: string } }
   const link = `/attendance/requests/leave?request=${request.id}`
 
+  // PG-011-F001-A001-T002: an ordinary Staff user can reach the same page
+  // through Attendance > Requests & Approvals > Leave, then by its URL.
+  const staffPage = await context.newPage()
+  await routeAttendanceApi(staffPage)
+  await signIn(staffPage, "staff")
+  await staffPage.goto("/attendance/requests/overview")
+  await staffPage.getByRole("link", { name: "Leave", exact: true }).click()
+  await expect(staffPage).toHaveURL(/\/attendance\/requests\/leave$/)
+  await staffPage.goto("/attendance/requests/leave")
+  await expect(
+    staffPage.getByRole("heading", { name: "Leave Requests" }),
+  ).toBeVisible()
+  await staffPage.close()
+
   await signIn(page, "superadmin")
   await page.goto(link)
   const detail = page.getByRole("dialog", { name: "Leave request" })
   await expect(detail.getByText(reason, { exact: true })).toBeVisible()
+  // PG-011-F001-A010-T001: read mode displays its source summaries and
+  // decision history without exposing an action form.
+  await expect(
+    detail.getByRole("heading", { name: "Request summary" }),
+  ).toBeVisible()
+  await expect(
+    detail.getByRole("heading", { name: "Policy coverage" }),
+  ).toBeVisible()
+  await expect(
+    detail.getByRole("heading", { name: "Decision history" }),
+  ).toBeVisible()
+  await expect(detail.getByLabel("Decision note")).toHaveCount(0)
 
   await page.goto("/attendance/requests/leave")
   await page
@@ -5805,6 +5832,78 @@ test("Superadmin opens organization leave by direct URL and notification", async
     (url) => url.searchParams.get("request") === request.id,
   )
   await expect(detail.getByText(reason, { exact: true })).toBeVisible()
+
+  // PG-011-F001-A018-T001: reversal is confirmed before the page posts the
+  // action, then the refreshed row reflects the persisted terminal status.
+  const reversalCreated = await leaveFixtureCall("staff", "/leave/requests", {
+    requestKey: randomUUID(),
+    type: "ANNUAL",
+    reason: "UI reversal candidate",
+    startDate: "2026-11-19",
+    endDate: "2026-11-19",
+  })
+  expect(reversalCreated.status, await reversalCreated.clone().text()).toBe(201)
+  const { request: reversalRequest } = (await reversalCreated.json()) as {
+    request: { id: string }
+  }
+  const verified = await leaveFixtureCall(
+    "head",
+    `/leave/requests/${reversalRequest.id}/verify`,
+    {
+      actionId: randomUUID(),
+      expectedVersion: 1,
+      note: "Verified before reversal UI check",
+    },
+  )
+  expect(verified.status, await verified.clone().text()).toBe(200)
+  const approved = await leaveFixtureCall(
+    "superadmin",
+    `/leave/requests/${reversalRequest.id}/approve`,
+    {
+      actionId: randomUUID(),
+      expectedVersion: 2,
+      note: "Approved before reversal UI check",
+    },
+  )
+  expect(approved.status, await approved.clone().text()).toBe(200)
+
+  await page.goto("/attendance/requests/leave")
+  const reversePath = `/api/leave/requests/${reversalRequest.id}/reverse`
+  let reversalPosts = 0
+  page.on("request", (item) => {
+    if (new URL(item.url()).pathname === reversePath) reversalPosts += 1
+  })
+  await page.locator(`[id="leave-actions-${reversalRequest.id}"]`).click()
+  await page.getByRole("menuitem", { name: "Reverse approval" }).click()
+  const reversePanel = page.getByRole("dialog", { name: "Reverse approval" })
+  await reversePanel
+    .getByLabel("Decision note")
+    .fill("Coverage is no longer required")
+  await reversePanel.getByRole("button", { name: "Reverse approval" }).click()
+  const reverseConfirmation = page
+    .getByRole("dialog")
+    .filter({ hasText: "This removes approved leave coverage" })
+  await expect(reverseConfirmation).toBeVisible()
+  expect(reversalPosts).toBe(0)
+  const reversalResponse = page.waitForResponse(
+    (item) => new URL(item.url()).pathname === reversePath,
+  )
+  await reverseConfirmation
+    .getByRole("button", { name: "Reverse approval" })
+    .click()
+  const reversed = await reversalResponse
+  expect(reversed.status()).toBe(200)
+  expect(reversed.request().postDataJSON()).toMatchObject({
+    expectedVersion: 3,
+    note: "Coverage is no longer required",
+  })
+  await expect(
+    page
+      .getByRole("table", { name: "Leave requests" })
+      .getByRole("row")
+      .filter({ hasText: "Nov 19, 2026" }),
+  ).toContainText("Reversed")
+  expect(reversalPosts).toBe(1)
 })
 
 async function leaveFixtureCall(actor: string, suffix: string, body?: unknown) {
@@ -5817,6 +5916,109 @@ async function leaveFixtureCall(actor: string, suffix: string, body?: unknown) {
     body: body === undefined ? undefined : JSON.stringify(body),
   })
 }
+
+test("[PG-011-F001-A013-T001] browser submission persists the leave request and reviewer notice", async ({
+  page,
+}) => {
+  await clock("2026-11-13T20:00:00+08:00")
+  await signIn(page, "staff")
+  await page.goto("/attendance/requests/leave")
+  await page.getByRole("button", { name: "Request leave" }).click()
+  const form = page.getByRole("dialog", { name: "Request leave" })
+  await form.getByRole("combobox", { name: "Leave type" }).click()
+  await page.getByRole("option", { name: "Sick leave", exact: true }).click()
+  await form.getByLabel("Leave start date").fill("2026-12-08")
+  await form.getByLabel("Leave end date").fill("2026-12-08")
+  await form
+    .getByPlaceholder("Explain the leave request for authorized reviewers.")
+    .fill("Medical appointment follow-up")
+  await expect(form.getByRole("status")).toContainText("1 working day(s)")
+  await expect(
+    form.getByRole("button", { name: "Submit request" }),
+  ).toBeEnabled()
+
+  const submitted = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/api/leave/requests" &&
+      response.request().method() === "POST",
+  )
+  await form.getByRole("button", { name: "Submit request" }).click()
+  const result = await submitted
+  expect(result.status(), await result.text()).toBe(201)
+  const { request } = (await result.json()) as {
+    request: { id: string; status: string; version: number }
+  }
+  const payload = result.request().postDataJSON() as {
+    requestKey: string
+    type: string
+    reason: string
+    startDate: string
+    endDate: string
+  }
+  expect(payload).toMatchObject({
+    type: "SICK",
+    reason: "Medical appointment follow-up",
+    startDate: "2026-12-08",
+    endDate: "2026-12-08",
+  })
+  expect(payload.requestKey).toMatch(/^[0-9a-f-]{36}$/i)
+  expect(request).toMatchObject({ status: "SUBMITTED", version: 1 })
+  await expect(form).toHaveCount(0)
+  await expect(
+    page
+      .getByRole("table", { name: "Leave requests" })
+      .getByRole("row")
+      .filter({ hasText: "Dec 8, 2026" }),
+  ).toContainText("Sick")
+
+  const saved = await leaveFixtureCall("staff", `/leave/requests/${request.id}`)
+  expect(saved.status).toBe(200)
+  const { request: persisted } = (await saved.json()) as {
+    request: {
+      id: string
+      employeeId: string
+      type: string
+      reason: string
+      startDate: string
+      endDate: string
+      status: string
+      days: { workDate: string; leaveMinutes: number }[]
+      decisions: { action: string; version: number }[]
+    }
+  }
+  expect(persisted).toMatchObject({
+    id: request.id,
+    employeeId: fixture.actors.staff.employeeId,
+    type: "SICK",
+    reason: "Medical appointment follow-up",
+    status: "SUBMITTED",
+  })
+  expect(persisted.startDate.slice(0, 10)).toBe("2026-12-08")
+  expect(persisted.endDate.slice(0, 10)).toBe("2026-12-08")
+  expect(persisted.days).toHaveLength(1)
+  expect(persisted.days[0]).toMatchObject({
+    workDate: "2026-12-08T00:00:00.000Z",
+    leaveMinutes: 480,
+  })
+  expect(
+    persisted.decisions.map(({ action, version }) => ({ action, version })),
+  ).toEqual([{ action: "SUBMITTED", version: 1 }])
+
+  const inbox = await leaveFixtureCall(
+    "head",
+    "/request-workflows/notifications",
+  )
+  expect(inbox.status).toBe(200)
+  const { notifications } = (await inbox.json()) as {
+    notifications: { entityId: string; type: string }[]
+  }
+  expect(
+    notifications.filter(
+      ({ entityId, type }) =>
+        entityId === request.id && type === "LEAVE_SUBMITTED",
+    ),
+  ).toHaveLength(1)
+})
 
 test("WC-I3-F01 Employee Directory transfer routes both Leave review stages to the receiving Head", async ({
   page,
@@ -5965,6 +6167,18 @@ test("WC-I3-F01 Employee Directory transfer routes both Leave review stages to t
   await review.getByRole("button", { name: "Verify request" }).click()
   const result = await reviewResponse
   expect(result.status()).toBe(200)
+  // PG-011-F001-A016-T001: preserve the submitted version and note together
+  // with the refreshed response state.
+  const reviewPayload = result.request().postDataJSON() as {
+    actionId: string
+    expectedVersion: number
+    note: string
+  }
+  expect(reviewPayload).toMatchObject({
+    expectedVersion: 2,
+    note: "Verified by the receiving Department Head",
+  })
+  expect(reviewPayload.actionId).toMatch(/^[0-9a-f-]{36}$/i)
   expect(await result.json()).toMatchObject({
     request: {
       status: "VERIFIED",
@@ -6062,7 +6276,17 @@ test("stale HR approval refreshes leave after Superadmin rejection", async ({
     (response) => new URL(response.url()).pathname === `/api${path}/approve`,
   )
   await approve.click()
-  expect((await conflict).status()).toBe(409)
+  const staleApproval = await conflict
+  expect(staleApproval.status()).toBe(409)
+  // PG-011-F001-A017-T001: the stale command keeps its original payload and
+  // does not produce an approval success notification.
+  expect(staleApproval.request().postDataJSON()).toMatchObject({
+    expectedVersion: 2,
+    note: "HR approval prepared earlier",
+  })
+  await expect(
+    page.getByText("Leave request approved", { exact: true }),
+  ).toHaveCount(0)
   await expect(
     page.getByText("Leave request changed; refresh and try again", {
       exact: true,
@@ -6890,7 +7114,9 @@ test("stale leave refresh clears details when Head access is revoked", async ({
       new URL(response.url()).pathname === `/api${path}`,
   )
   await panel.getByRole("button", { name: "Verify request" }).click()
-  expect((await detail).status()).toBe(404)
+  const refreshed = await detail
+  expect(refreshed.status()).toBe(404)
+  expect(await refreshed.json()).toEqual({ error: "Leave request not found" })
   await expect(
     page.getByText("Leave request changed; refresh and try again", {
       exact: true,
