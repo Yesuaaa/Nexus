@@ -437,24 +437,14 @@ export function WorkloadPage({
                 rowClassName="border-t border-[#eceef1]"
                 onRowsSettled={table.onRowsSettled}
                 emptyContent={
-                  <>
-                    {" "}
-                    {error ? (
-                      <div role="alert">
-                        {error}
-                        <Button variant="outline" onClick={workload.retry}>
-                          Retry
-                        </Button>
-                      </div>
-                    ) : staff.length ? (
-                      "No staff match these filters."
-                    ) : administrative ? (
-                      "No staff with active logins in the organization."
-                    ) : (
-                      "No employees in this department yet."
-                    )}
-                  </>
+                  staff.length
+                    ? "No staff match these filters."
+                    : administrative
+                      ? "No staff with active logins in the organization."
+                      : "No employees in this department yet."
                 }
+                error={error}
+                onRetry={workload.retry}
                 renderRow={(s) => {
                   const m = metrics(s)
                   return (

@@ -9,6 +9,8 @@ apps/api/src/generated
 **/.env.*
 **/.pnpm-store
 **/.localappdata
+**/.test-build
+**/.ci-tools
 **/*.tsbuildinfo
 **/*.log
 .git

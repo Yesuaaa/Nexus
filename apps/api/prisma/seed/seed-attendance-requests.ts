@@ -1,7 +1,7 @@
 import "dotenv/config"
 import { randomUUID } from "node:crypto"
-import { getPrisma } from "../src/lib/db.js"
-import { createAttendanceManagement } from "../src/features/attendance/attendance.management.js"
+import { getPrisma } from "../../src/lib/db.js"
+import { createAttendanceManagement } from "../../src/features/attendance/attendance.management.js"
 
 async function main() {
   const prisma = getPrisma()

@@ -14,6 +14,7 @@ import {
   swapAnimatedRows,
   type AnimatedRowSlot,
 } from "./animated-data-row"
+import { TableErrorRow } from "./table"
 
 type RowLayout = {
   top: number
@@ -32,6 +33,8 @@ export function AnimatedTableBody<T extends { id: string }>({
   renderRow,
   rowClassName,
   emptyContent,
+  error,
+  onRetry,
   columns,
   onRowsSettled,
 }: {
@@ -42,6 +45,8 @@ export function AnimatedTableBody<T extends { id: string }>({
   renderRow: (item: T) => ReactNode
   rowClassName?: string | ((item: T) => string)
   emptyContent: ReactNode
+  error?: ReactNode
+  onRetry?: () => void
   columns: number
   onRowsSettled?: () => void
 }) {
@@ -156,7 +161,9 @@ export function AnimatedTableBody<T extends { id: string }>({
   if (!animateRows) {
     return (
       <tbody className="relative" aria-live="polite" aria-busy={false}>
-        {items.length === 0 ? (
+        {error && onRetry ? (
+          <TableErrorRow message={error} onRetry={onRetry} colSpan={columns} />
+        ) : items.length === 0 ? (
           <tr>
             <td
               colSpan={columns}
@@ -195,16 +202,19 @@ export function AnimatedTableBody<T extends { id: string }>({
         layout: { duration: reduced ? 0 : 0.14, ease: [0, 0, 0.2, 1] },
       }}
     >
-      {slots.length === 0 && (
-        <tr>
-          <td
-            colSpan={columns}
-            className="p-8 text-center text-xs text-[#7183a2]"
-          >
-            {emptyContent}
-          </td>
-        </tr>
-      )}
+      {slots.length === 0 &&
+        (error && onRetry ? (
+          <TableErrorRow message={error} onRetry={onRetry} colSpan={columns} />
+        ) : (
+          <tr>
+            <td
+              colSpan={columns}
+              className="p-8 text-center text-xs text-[#7183a2]"
+            >
+              {emptyContent}
+            </td>
+          </tr>
+        ))}
       {slots.flatMap((slot) =>
         [slot.exiting, slot.entering]
           .filter((row) => row !== null)

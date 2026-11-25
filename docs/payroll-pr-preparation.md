@@ -21,7 +21,7 @@ Shared changes are intentional reuse dependencies: authenticated file download a
 
 ### REVIEW entries
 
-1. `apps/api/prisma/seed-november-payroll-demo.ts`: optional demo tool, not a runtime dependency. It loads configured environment and can update employee start dates/compensation; November behavior is tied to a specific fixture run ID, and only the December repair path has the explicit local-simulator guard. Decide whether this fixture-specific tool belongs in the PR. Do not run it against hosted/shared data. It is already committed: excluding it would require an explicitly authorized follow-up removal, not merely omitting a new staging command.
+1. `apps/api/prisma/seed/seed-november-payroll-demo.ts`: optional demo tool, not a runtime dependency. It loads configured environment and can update employee start dates/compensation; November behavior is tied to a specific fixture run ID, and only the December repair path has the explicit local-simulator guard. Decide whether this fixture-specific tool belongs in the PR. Do not run it against hosted/shared data. It is already committed: excluding it would require an explicitly authorized follow-up removal, not merely omitting a new staging command.
 2. `apps/web/next-env.d.ts`: Next production build regenerated the imports from `.next/dev/types` to `.next/types`. The current working version matches the provisional merge base, so staging this correction would remove this path from the net PR diff. Generated-file policy and this correction require an explicit decision; it is not silently discarded.
 
 ### EXCLUDE entry
@@ -168,7 +168,7 @@ The following generated table is a snapshot, not a staging command. Commit group
 | INCLUDE     | `apps/api/prisma/migrations/20261118150000_payroll_reconciliation_decisions/migration.sql`       | committed            | existing              | Ordered schema/security SQL dependency                    |
 | INCLUDE     | `apps/api/prisma/migrations/20261118160000_payroll_approved_snapshot_guard/migration.sql`        | committed            | existing              | Ordered schema/security SQL dependency                    |
 | INCLUDE     | `apps/api/prisma/schema.prisma`                                                                  | committed            | existing              | Payroll implementation or shared integration dependency   |
-| REVIEW      | `apps/api/prisma/seed-november-payroll-demo.ts`                                                  | committed            | existing              | Optional fixture-specific mutation tool already committed |
+| REVIEW      | `apps/api/prisma/seed/seed-november-payroll-demo.ts`                                             | committed            | existing              | Optional fixture-specific mutation tool already committed |
 | INCLUDE     | `apps/api/scripts/audit-payroll-db-permissions.ts`                                               | untracked            | 2                     | Payroll implementation or shared integration dependency   |
 | EXCLUDE     | `apps/api/scripts/verify-payroll-postgres.ps1`                                                   | untracked            | none pending decision | Explicit local-only launcher                              |
 | INCLUDE     | `apps/api/src/app.ts`                                                                            | committed            | existing              | Payroll implementation or shared integration dependency   |

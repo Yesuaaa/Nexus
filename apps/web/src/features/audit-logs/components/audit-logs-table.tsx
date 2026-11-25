@@ -1,3 +1,4 @@
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Eye } from "lucide-react"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { Avatar } from "@/components/ui/avatar"
@@ -221,6 +222,7 @@ export function AuditLogsTable({
                   onClick={() => onView(log)}
                 >
                   <Eye className="size-4" aria-hidden="true" />
+                  <HoverTooltip>View log details</HoverTooltip>
                 </button>
               </ResponsiveDataTableCell>
             </>

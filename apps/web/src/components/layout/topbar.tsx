@@ -12,12 +12,14 @@ export function Topbar({
   onOpenMenu,
   onSignOut,
   showMessages,
+  showNavigationMenu = true,
   minimal = false,
 }: {
   drawerOpen?: boolean
   onOpenMenu?: () => void
   onSignOut: () => void
   showMessages?: boolean
+  showNavigationMenu?: boolean
   minimal?: boolean
 }) {
   return (
@@ -27,16 +29,18 @@ export function Topbar({
     >
       {!minimal && (
         <>
-          <button
-            type="button"
-            className={`${iconButtonClass} hidden max-[767px]:grid`}
-            aria-label="Open navigation menu"
-            aria-controls="app-sidebar"
-            aria-expanded={drawerOpen}
-            onClick={onOpenMenu}
-          >
-            <MenuIcon className="size-[18px]" strokeWidth={1.75} />
-          </button>
+          {showNavigationMenu && (
+            <button
+              type="button"
+              className={`${iconButtonClass} hidden max-[767px]:grid`}
+              aria-label="Open navigation menu"
+              aria-controls="app-sidebar"
+              aria-expanded={drawerOpen}
+              onClick={onOpenMenu}
+            >
+              <MenuIcon className="size-[18px]" strokeWidth={1.75} />
+            </button>
+          )}
           <Breadcrumbs />
         </>
       )}

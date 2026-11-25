@@ -1,5 +1,5 @@
 import "dotenv/config"
-import { getPrisma } from "../src/lib/db.js"
+import { getPrisma } from "../../src/lib/db.js"
 
 async function main() {
   const prisma = getPrisma()

@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation"
+import { ModuleTransition } from "@/components/layout/module-transition"
 import { moduleRegistry } from "@/features/workspaces/model/module-registry"
 import { ModuleEntryPage } from "@/features/workspaces/pages/module-entry-page"
 
@@ -13,5 +14,10 @@ export default async function Page({
     !moduleRegistry[moduleId as keyof typeof moduleRegistry].implemented
   )
     notFound()
-  return <ModuleEntryPage moduleId={moduleId} />
+  const page = <ModuleEntryPage moduleId={moduleId} />
+  return moduleId === "service-operations" ? (
+    <ModuleTransition>{page}</ModuleTransition>
+  ) : (
+    page
+  )
 }

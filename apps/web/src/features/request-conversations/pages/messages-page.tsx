@@ -6,6 +6,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   Archive,
+  ArrowLeft,
   ChevronDown,
   List,
   LoaderCircle,
@@ -663,6 +664,23 @@ function ConversationInbox({
             Business conversation oversight
           </Link>
         )}
+        <Link
+          href="/module"
+          aria-label="Back to workspace"
+          className={cn(
+            "mx-5 mb-2 flex h-9 items-center gap-2 rounded-lg border border-[#e1e4ea] px-3 text-xs font-medium text-[#294a9b] transition-colors hover:bg-[#f4f7fc]",
+            focusRing,
+            railCollapsed &&
+              "mx-auto w-10 justify-center px-0 max-[767px]:mx-5 max-[767px]:w-auto max-[767px]:justify-start max-[767px]:px-3",
+          )}
+        >
+          <ArrowLeft className="size-4 shrink-0" aria-hidden="true" />
+          <span
+            className={cn(railCollapsed && "sr-only max-[767px]:not-sr-only")}
+          >
+            Back to workspace
+          </span>
+        </Link>
         <ConversationSearch
           value={search}
           onChange={setSearch}

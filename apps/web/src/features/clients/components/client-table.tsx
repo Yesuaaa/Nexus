@@ -1,3 +1,4 @@
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Eye } from "lucide-react"
 import type { ReactNode } from "react"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
@@ -56,6 +57,7 @@ function ClientRowActions({
         onClick={() => onView(client)}
       >
         <Eye size={15} aria-hidden="true" />
+        <HoverTooltip>View client details</HoverTooltip>
       </button>
     </div>
   )

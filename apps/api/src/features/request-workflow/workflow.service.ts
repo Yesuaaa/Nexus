@@ -1086,6 +1086,13 @@ export async function actOnWorkflow(
     async (tx) => {
       await lockRequest(tx, requestId)
       const { request } = await workflowAccess(tx, userId, requestId)
+      if (
+        command.type === "COMPLETE_SANDBOX_PAYMENT" &&
+        (process.env.WORKFLOW_LOCAL_PAYMENT_SIMULATOR !== "true" ||
+          (process.env.NODE_ENV !== "development" &&
+            process.env.NODE_ENV !== "test"))
+      )
+        fail("Sandbox checkout is disabled", 403)
       const existing = await tx.workflowActionReceipt.findUnique({
         where: {
           requestId_actorId_actionId: { requestId, actorId: userId, actionId },

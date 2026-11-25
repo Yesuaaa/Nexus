@@ -1,3 +1,4 @@
+import { ModuleTransition } from "@/components/layout/module-transition"
 import { BookedServicesPage } from "@/features/bookings/pages/booked-services-page"
 
 export default async function Page({
@@ -9,9 +10,11 @@ export default async function Page({
   const initialBookingId =
     typeof booking === "string" && booking.length <= 200 ? booking : null
   return (
-    <BookedServicesPage
-      key={initialBookingId ?? "list"}
-      initialBookingId={initialBookingId}
-    />
+    <ModuleTransition>
+      <BookedServicesPage
+        key={initialBookingId ?? "list"}
+        initialBookingId={initialBookingId}
+      />
+    </ModuleTransition>
   )
 }

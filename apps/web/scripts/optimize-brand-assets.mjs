@@ -8,7 +8,7 @@ const sharp = nextRequire("sharp")
 // These SVGs embed raster artwork. Preserve the SVG geometry and every pixel;
 // only replace the embedded PNG encoding with lossless WebP.
 for (const relativePath of [
-  "../public/auth/exp-logo.svg",
+  "../public/auth/converyn-logo.svg",
   "../public/favicon.svg",
 ]) {
   const file = new URL(relativePath, import.meta.url)

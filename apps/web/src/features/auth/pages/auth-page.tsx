@@ -144,6 +144,7 @@ function AuthFormPage({
   return (
     <AuthLayout
       centered={portal === "workforce"}
+      clientSplit={portal === "client"}
       language={language}
       visual={
         portal === "client" && (
@@ -160,15 +161,28 @@ function AuthFormPage({
           copy={copy}
           language={language}
           onLanguageChange={changeLanguage}
+          workforce={portal === "workforce"}
         />
       }
       footer={
-        <footer className="flex min-h-14 items-center justify-center gap-4 px-5 py-3 text-xs text-[#52688d] whitespace-nowrap max-[420px]:flex-wrap max-[420px]:gap-x-3 max-[420px]:gap-y-[5px] max-[420px]:leading-[1.4]">
-          <span>{copy.about}</span>
-          <span>{copy.terms}</span>
-          <span>{copy.privacy}</span>
-          <span>{copy.cookies}</span>
-          <span>{copy.copyright}</span>
+        <footer
+          className={
+            portal === "workforce"
+              ? "px-6 pb-5 text-left text-xs text-[#8a9dbb] sm:px-8"
+              : "flex min-h-14 items-center justify-center gap-4 px-5 py-3 text-xs text-[#52688d] whitespace-nowrap max-[420px]:flex-wrap max-[420px]:gap-x-3 max-[420px]:gap-y-[5px] max-[420px]:leading-[1.4]"
+          }
+        >
+          {portal === "workforce" ? (
+            "© 2026 Converyn Inc. All rights reserved."
+          ) : (
+            <>
+              <span>{copy.about}</span>
+              <span>{copy.terms}</span>
+              <span>{copy.privacy}</span>
+              <span>{copy.cookies}</span>
+              <span>{copy.copyright}</span>
+            </>
+          )}
         </footer>
       }
     >

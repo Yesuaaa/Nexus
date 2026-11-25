@@ -1,5 +1,7 @@
 "use client"
 
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
+
 import {
   Banknote,
   CircleAlert,
@@ -529,6 +531,11 @@ export function PayrollOverviewPage() {
                           }
                         >
                           <Eye size={15} aria-hidden />
+                          <HoverTooltip>
+                            {row.category === "APPROVAL"
+                              ? "View payroll approval"
+                              : "View reconciliation details"}
+                          </HoverTooltip>
                         </Link>
                       </Button>
                     </ResponsiveDataTableCell>

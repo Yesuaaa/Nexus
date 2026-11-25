@@ -1,3 +1,4 @@
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import { Eye } from "lucide-react"
 import type { ReactNode } from "react"
@@ -183,6 +184,7 @@ export function BookedServicesTable({
                   onClick={() => onView(booking)}
                 >
                   <Eye size={16} aria-hidden="true" />
+                  <HoverTooltip>View booking</HoverTooltip>
                 </button>
               </div>
             </>

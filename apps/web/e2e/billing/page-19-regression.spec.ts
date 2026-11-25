@@ -125,36 +125,31 @@ test("Billing Logs lets clients download a linked sandbox receipt", async ({
   expect((await download).suggestedFilename()).toBe("sandbox-receipt.txt")
 })
 
-test("Billing Logs should show source booking data instead of fixed demo details", async ({
+test("Billing Logs renders the authorized booking data and an unspecified due date", async ({
   page,
-}, testInfo) => {
+}) => {
   await restoreSession(page, "USER")
+  const payment = {
+    ...maximumPayment,
+    id: "page-19-demo-reference-payment",
+    requestId: "page-19-demo-reference-request",
+    serviceName: "Source-backed Website Redesign",
+    bookingReference: "DEMO-BILLING-001",
+    amount: "125.07",
+    lineItems: null,
+  }
   await page.route("**/api/request-workflows/billing", (route) =>
-    route.fulfill({
-      json: [
-        {
-          ...maximumPayment,
-          id: "page-19-demo-reference-payment",
-          requestId: "page-19-demo-reference-request",
-          serviceName: "Source-backed Website Redesign",
-          bookingReference: "DEMO-BILLING-001",
-          amount: "125.00",
-          lineItems: null,
-        },
-      ],
-    }),
+    route.fulfill({ json: [payment] }),
   )
   await page.goto("/billing-logs")
 
   const dueRow = page
     .locator('section[aria-labelledby="billing-due"] li')
     .first()
-  await page.screenshot({
-    path: testInfo.outputPath("page-19-hard-coded-demo-billing-defect.png"),
-    fullPage: true,
-  })
-  await expect.soft(dueRow).toContainText("Source-backed Website Redesign")
-  await expect.soft(dueRow).toContainText("DEMO-BILLING-001")
+  await expect.soft(dueRow).toContainText(payment.serviceName)
+  await expect.soft(dueRow).toContainText(payment.bookingReference)
+  await expect.soft(dueRow).toContainText(payment.amount)
+  await expect.soft(dueRow).toContainText("Payment due")
   await expect.soft(dueRow).not.toContainText("INV-003")
   await expect.soft(dueRow).not.toContainText("Due Nov 20, 2026")
 
@@ -163,7 +158,8 @@ test("Billing Logs should show source booking data instead of fixed demo details
     name: "Payment summary",
     exact: true,
   })
-  await expect(dialog).toContainText("Source-backed Website Redesign")
-  await expect(dialog).toContainText("DEMO-BILLING-001")
+  await expect(dialog).toContainText(payment.serviceName)
+  await expect(dialog).toContainText(payment.bookingReference)
+  await expect(dialog).toContainText(payment.amount)
   await expect(dialog).toContainText("Not specified")
 })
