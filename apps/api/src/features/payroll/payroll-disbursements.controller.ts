@@ -11,6 +11,7 @@ import { getPrisma } from "../../lib/db.js"
 import { fail } from "../../shared/http-error.js"
 import { createManagementOperation } from "../../shared/management-history.js"
 import {
+  containsText,
   insensitive,
   paginate,
   parsePage,
@@ -193,12 +194,12 @@ disbursementsRouter.get("/disbursements", read, async (req, res) => {
     ...(search
       ? {
           OR: [
-            { id: { contains: search, mode: "insensitive" } },
+            { id: containsText(search) },
             {
               calculation: {
                 run: {
                   period: {
-                    cutoffLabel: { contains: search, mode: "insensitive" },
+                    cutoffLabel: containsText(search),
                   },
                 },
               },

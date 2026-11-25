@@ -1,4 +1,9 @@
-import { isPlainObject, isRecordId, isUuidV4 } from "../../shared/validation.js"
+import {
+  isCalendarDateTime,
+  isPlainObject,
+  isRecordId,
+  isUuidV4,
+} from "../../shared/validation.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 
 function invalid(message: string): never {
@@ -25,7 +30,7 @@ function date(value: unknown) {
   if (
     typeof value !== "string" ||
     !/^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:\d{2})$/.test(value) ||
-    !Number.isFinite(Date.parse(value))
+    !isCalendarDateTime(value)
   )
     invalid("Enter a valid meeting date and time")
   return new Date(value)

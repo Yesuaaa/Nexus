@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import { test } from "node:test"
 import { issueSession } from "../src/features/auth/auth.service.js"
 import type { ProjectWorkPlan } from "../src/features/project-workspace/templates.js"
+import { auditCode } from "../src/features/service-operation-logs/audit-context.js"
 import { startPgliteApp } from "./support/pglite-app.js"
 
 type Booking = {
@@ -431,6 +432,10 @@ test(
     assert.equal(invalidResume.status, 409)
     assert.equal((await workspace(workspaceId)).status, "IN_PROGRESS")
 
+    const requestBefore = await prisma.serviceRequest.findUniqueOrThrow({
+      where: { id: first.request.id },
+      include: { service: true },
+    })
     const completedResponse = await request(
       `/${workspaceId}/status`,
       head.id,
@@ -464,6 +469,24 @@ test(
       }),
       2,
     )
+    const concluded = await prisma.serviceOperationLog.findFirstOrThrow({
+      where: {
+        correlationId: completionTrace,
+        event: "REQUEST_CONCLUDED",
+        requestId: first.request.id,
+      },
+    })
+    assert.equal(
+      concluded.targetLabel,
+      `${requestBefore.service.name} (${requestBefore.referenceNumber ?? requestBefore.id})`,
+    )
+    assert.deepEqual(concluded.changes, [
+      {
+        field: "Status",
+        before: auditCode(requestBefore.status),
+        after: "Concluded",
+      },
+    ])
     assert.ok(
       completed.workstreams.every(({ status }) => status === "COMPLETED"),
     )
@@ -501,6 +524,9 @@ test(
     }
     assert.equal(separate.workspaces.length, 1)
     const cancellableId = separate.workspaces[0]!.id
+    const thirdBefore = await prisma.serviceRequest.findUniqueOrThrow({
+      where: { id: third.request.id },
+    })
     const deniedSeparateCancel = await request(
       `/${cancellableId}/cancel`,
       staff.id,
@@ -523,6 +549,24 @@ test(
     )
     assert.equal(cancelledResponse.status, 200)
     assert.deepEqual(await cancelledResponse.json(), { saved: true })
+    assert.deepEqual(
+      await prisma.serviceOperationLog.findMany({
+        where: { event: "REQUEST_CANCELLED", requestId: third.request.id },
+        select: { actorId: true, changes: true },
+      }),
+      [
+        {
+          actorId: head.id,
+          changes: [
+            {
+              field: "Status",
+              before: auditCode(thirdBefore.status),
+              after: "Cancelled",
+            },
+          ],
+        },
+      ],
+    )
     assert.equal((await workspace(cancellableId)).status, "CANCELLED")
     assert.equal(
       (
@@ -1374,6 +1418,18 @@ test(
             })
           ).state,
           "CANCELLED",
+        )
+        assert.deepEqual(
+          (
+            await prisma.serviceOperationLog.findMany({
+              where: {
+                event: "REQUEST_CANCELLED",
+                requestId: booking.request.id,
+              },
+              select: { actorId: true },
+            })
+          ).map(({ actorId }) => actorId),
+          [head.id],
         )
         assert.equal(
           await prisma.projectChangeRequest.count({

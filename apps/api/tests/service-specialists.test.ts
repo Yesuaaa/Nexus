@@ -631,6 +631,7 @@ test(
         )
         const safeKeys = [
           "id",
+          "referenceNumber",
           "title",
           "status",
           "packageName",

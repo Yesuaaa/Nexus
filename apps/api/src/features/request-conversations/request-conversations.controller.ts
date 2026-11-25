@@ -17,6 +17,7 @@ import {
 } from "./request-conversations.realtime.js"
 import {
   getConversationAccess,
+  getWaitingConversation,
   getConversationStreamAccess,
   listConversations,
   listConversationMessages,
@@ -57,7 +58,16 @@ export function createRequestConversationsRouter(
       request.auth!.user.id,
       id,
       booking,
-    )
+    ).catch((error: unknown) => {
+      if (error instanceof HttpError && error.status === 404) return null
+      throw error
+    })
+    if (!access) {
+      const waiting = await getWaitingConversation(request.auth!.user.id, id)
+      if (!waiting)
+        return response.status(404).json({ error: "Conversation not found" })
+      return response.json(waiting)
+    }
     const history = await listConversationMessages(
       request.auth!.user.id,
       id,

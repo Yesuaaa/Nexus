@@ -6,8 +6,7 @@ import {
   type ProjectLogEvent,
 } from "../project-management-logs/events.js"
 import { writeProjectLog } from "../project-management-logs/writer.js"
-import { writeServiceLog } from "../service-operation-logs/log-writer.js"
-import { auditCode } from "../service-operation-logs/audit-context.js"
+import { finishLoggedRequest } from "../service-operation-logs/request-status-log.js"
 import {
   Prisma,
   Role,
@@ -39,6 +38,7 @@ import { pageWindow, type Page } from "../../shared/query/pagination.js"
 import { parseWorkspaceIdentity } from "./workspace-identity.js"
 
 const terminalProjectStatuses: ProjectStatus[] = ["COMPLETED", "CANCELLED"]
+const MAX_PHASE_TASKS = 50
 
 function validateEditablePlan(input: unknown): ProjectWorkPlan {
   const plan = readWorkPlan(input)
@@ -50,7 +50,7 @@ function validateEditablePlan(input: unknown): ProjectWorkPlan {
       (phase) =>
         !phase.title.trim() ||
         phase.title.length > 120 ||
-        phase.tasks.length > 50 ||
+        phase.tasks.length > MAX_PHASE_TASKS ||
         phase.tasks.some(
           (task) =>
             !task.title.trim() ||
@@ -61,7 +61,7 @@ function validateEditablePlan(input: unknown): ProjectWorkPlan {
   )
     throw new ServiceRequestsError(
       400,
-      "Add 1–20 named phases, with up to 50 named tasks per phase",
+      `Add 1–20 named phases, with up to ${MAX_PHASE_TASKS} named tasks per phase`,
     )
   const ids = plan.phases.flatMap((phase) => [
     phase.id,
@@ -2127,10 +2127,7 @@ export async function cancelProjectWorkspace(
         ],
       })
       if (project.requestId) {
-        await tx.serviceRequest.update({
-          where: { id: project.requestId },
-          data: { status: "CANCELLED" },
-        })
+        await finishLoggedRequest(tx, project.requestId, userId, "CANCELLED")
         await tx.requestWorkflow.updateMany({
           where: { requestId: project.requestId },
           data: { state: "CANCELLED" },
@@ -2278,30 +2275,8 @@ export async function updateProjectWorkspaceStatus(
           projectAuditStatus(status),
         ],
       })
-      if (project.requestId && status === "COMPLETED") {
-        await tx.serviceRequest.update({
-          where: { id: project.requestId },
-          data: { status: "CONCLUDED" },
-        })
-        await writeServiceLog(
-          tx,
-          "REQUEST_CONCLUDED",
-          project.requestId,
-          project.requestId,
-          userId,
-          undefined,
-          {
-            targetLabel: project.name,
-            changes: [
-              {
-                field: "Status",
-                before: auditCode(project.status),
-                after: "Concluded",
-              },
-            ],
-          },
-        )
-      }
+      if (project.requestId && status === "COMPLETED")
+        await finishLoggedRequest(tx, project.requestId, userId, "CONCLUDED")
       if (project.requestId)
         await writeWorkspaceEvent(
           tx,
@@ -3166,6 +3141,11 @@ export async function addProjectTask(
       throw new ServiceRequestsError(409, "This project has no task plan yet")
     const phase = plan.phases.find(({ id }) => id === phaseId)
     if (!phase) throw new ServiceRequestsError(404, "Project phase not found")
+    if (phase.tasks.length >= MAX_PHASE_TASKS)
+      throw new ServiceRequestsError(
+        400,
+        `A phase can have up to ${MAX_PHASE_TASKS} tasks`,
+      )
     const task = {
       id: randomUUID(),
       title,

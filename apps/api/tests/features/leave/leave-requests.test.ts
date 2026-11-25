@@ -629,6 +629,18 @@ test(
       ).requests.map(({ id }) => id),
       [dateIds[1]],
     )
+    // The 366-day limit applies to one leave request, not to searching.
+    const longWindow = await api(
+      dateActor,
+      "/leave/requests?scope=mine&from=2025-01-01&to=2027-12-31",
+    )
+    assert.equal(longWindow.status, 200)
+    assert.deepEqual(
+      ((await longWindow.json()) as { requests: { id: string }[] }).requests
+        .map(({ id }) => id)
+        .sort(),
+      [...dateIds].sort(),
+    )
     for (const query of [
       "/leave/requests?scope=mine&from=2026-12-10",
       "/leave/requests?scope=mine&to=2026-12-12",

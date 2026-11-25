@@ -101,6 +101,14 @@ test(
       where: { id: client.user.id },
       data: { fullName: "New actor name" },
     })
+    for (const wildcard of ["%25", "Updated%25Project", "__________"]) {
+      const response = await call(`${reader}?search=${wildcard}`)
+      assert.equal(
+        ((await response.json()) as { total: number }).total,
+        0,
+        wildcard,
+      )
+    }
     for (const filter of [
       `event=CLIENT_BRIEF_UPDATED&projectId=${project.id}`,
       `outcome=SUCCESS&workspaceId=${project.id}&actorId=${client.user.id}`,

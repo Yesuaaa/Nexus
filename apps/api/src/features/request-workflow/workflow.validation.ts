@@ -1,4 +1,8 @@
-import { isPlainObject, isUuidV4 } from "../../shared/validation.js"
+import {
+  isCalendarDateTime,
+  isPlainObject,
+  isUuidV4,
+} from "../../shared/validation.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 
 export type WorkflowCommand =
@@ -131,8 +135,7 @@ function bool(value: unknown): boolean {
 
 function date(value: unknown): string {
   const result = textField(value, "date", 40)
-  if (!/^\d{4}-\d\d-\d\dT/.test(result) || !Number.isFinite(Date.parse(result)))
-    fail("Invalid date")
+  if (!isCalendarDateTime(result)) fail("Invalid date")
   return new Date(result).toISOString()
 }
 

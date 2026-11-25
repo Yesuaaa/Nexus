@@ -233,6 +233,25 @@ test(
         assert.equal(body.conversation, null)
         assert.equal(body.canSend, false)
         assert.deepEqual(body.messages, [])
+        for (const outsider of [otherClient, staff, admin, superadmin])
+          assert.equal(
+            (
+              await get(
+                `/request-conversations/${ownBookings[0]!.id}`,
+                outsider,
+              )
+            ).status,
+            404,
+          )
+        const cancelled = await booking(client.record.id, 40)
+        await prisma.serviceRequest.update({
+          where: { id: cancelled.id },
+          data: { status: "CANCELLED" },
+        })
+        assert.equal(
+          (await get(`/request-conversations/${cancelled.id}`, client)).status,
+          404,
+        )
       },
     )
   },
