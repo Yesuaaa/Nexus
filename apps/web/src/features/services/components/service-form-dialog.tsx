@@ -312,7 +312,11 @@ export function ServiceFormDialog({
 
   function handleImage(file: File | undefined) {
     if (!file) return
-    if (!imageTypes.includes(file.type) || file.size > maxImageBytes) {
+    if (
+      !imageTypes.includes(file.type) ||
+      file.size === 0 ||
+      file.size > maxImageBytes
+    ) {
       showError("Choose a JPEG, PNG, or WebP image up to 2 MB")
       if (imageInputRef.current) imageInputRef.current.value = ""
       return

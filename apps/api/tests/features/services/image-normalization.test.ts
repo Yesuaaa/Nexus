@@ -113,3 +113,64 @@ test("rejects invalid base64 and input bytes above the configured limit", async 
     ImageNormalizationError,
   )
 })
+
+test("applies EXIF orientation and rejects animated or malformed envelopes", async () => {
+  const rotatedJpeg = await sharp({
+    create: {
+      width: 12,
+      height: 6,
+      channels: 3,
+      background: { r: 18, g: 36, b: 73 },
+    },
+  })
+    .withMetadata({ orientation: 6 })
+    .jpeg()
+    .toBuffer()
+  const upright = await normalizeImageDataUrlToWebp(
+    dataUrl("jpeg", rotatedJpeg),
+    options,
+  )
+  assert.equal(upright.width, 6)
+  assert.equal(upright.height, 12)
+
+  const secondFrame = await sharp({
+    create: { width: 4, height: 4, channels: 4, background: "white" },
+  })
+    .png()
+    .toBuffer()
+  const animatedGif = await sharp({
+    create: {
+      width: 4,
+      height: 8,
+      pageHeight: 4,
+      channels: 4,
+      background: { r: 26, g: 72, b: 140, alpha: 1 },
+    },
+  })
+    .composite([{ input: secondFrame, top: 4, left: 0 }])
+    .gif({ delay: [100, 100] })
+    .toBuffer()
+  const animatedWebp = await sharp(animatedGif, { animated: true })
+    .webp()
+    .toBuffer()
+  await assert.rejects(
+    normalizeImageDataUrlToWebp(dataUrl("webp", animatedWebp), options),
+    (error: unknown) =>
+      error instanceof ImageNormalizationError &&
+      /Animated images are not supported/.test(error.message),
+  )
+
+  for (const invalidEnvelope of [
+    "",
+    "data:image/png;base64,",
+    "data:image/svg+xml;base64,PHN2Zy8+",
+    "data:image/PNG;base64,iVBORw0KGgo=",
+    "data:image/png;base64,AB==",
+  ]) {
+    await assert.rejects(
+      normalizeImageDataUrlToWebp(invalidEnvelope, options),
+      ImageNormalizationError,
+      invalidEnvelope,
+    )
+  }
+})

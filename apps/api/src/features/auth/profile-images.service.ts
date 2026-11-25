@@ -38,8 +38,15 @@ function validateLegacyImage(dataUrl: string) {
 }
 
 export async function uploadProfileImage(userId: string, input: unknown) {
-  const body = input as { kind?: unknown; dataUrl?: unknown } | null
-  if (!body || !["avatar", "banner", "project"].includes(String(body.kind)))
+  const body =
+    input && typeof input === "object" && !Array.isArray(input)
+      ? (input as { kind?: unknown; dataUrl?: unknown })
+      : null
+  if (
+    !body ||
+    typeof body.kind !== "string" ||
+    !["avatar", "banner", "project"].includes(body.kind)
+  )
     throw new AuthError(400, "Choose a profile photo, banner, or project image")
   const kind = body.kind as "avatar" | "banner" | "project"
   const prisma = getPrisma()

@@ -6,7 +6,9 @@
 
 ## 2026-11-24 implementation addendum
 
-Service Management now accepts JPEG, PNG, and WebP source images up to 2 MiB. The API validates and decodes the source, rejects mismatched or unsafe content, auto-orients and resizes within 2560×2560 without enlargement, and stores a quality-82 WebP object. Existing stored images are not migrated. This phase applies only to the primary service image; profile and other upload flows retain their prior behavior.
+Service Management now accepts JPEG, PNG, and WebP source images up to 2 MiB. The API validates and decodes the source, rejects mismatched or unsafe content, auto-orients and resizes within 2560×2560 without enlargement, and stores a quality-82 WebP object. Existing stored images are not migrated. The later profile-image change applies the same decoding and WebP-normalization approach to avatars within a 1024×1024 bound; banners and portfolio images retain their source format.
+
+The current branch-specific RBAC, negative-input, storage-cleanup, and execution evidence is recorded in [Image upload regression QA report](../image-upload-regression-2026-11-26.md).
 
 ## A. Page status
 

@@ -109,6 +109,37 @@ test.describe("Service management", () => {
         .getByRole("button", { name: "Remove image", exact: true })
         .click()
     }
+
+    for (const invalidFile of [
+      {
+        name: "animated.gif",
+        mimeType: "image/gif",
+        buffer: Buffer.from("GIF89a"),
+      },
+      {
+        name: "vector.svg",
+        mimeType: "image/svg+xml",
+        buffer: Buffer.from("<svg xmlns='http://www.w3.org/2000/svg'/>"),
+      },
+      {
+        name: "empty.png",
+        mimeType: "image/png",
+        buffer: Buffer.alloc(0),
+      },
+      {
+        name: "oversized.webp",
+        mimeType: "image/webp",
+        buffer: Buffer.alloc(2 * 1024 * 1024 + 1),
+      },
+    ]) {
+      await input.setInputFiles(invalidFile)
+      await expect(dialog.getByRole("alert")).toContainText(
+        "Choose a JPEG, PNG, or WebP image up to 2 MB",
+      )
+      await expect(
+        dialog.getByRole("button", { name: "Remove image", exact: true }),
+      ).toHaveCount(0)
+    }
   })
 
   test("service search shows aligned skeleton rows before its empty result", async ({
@@ -122,6 +153,7 @@ test.describe("Service management", () => {
     ).toBeVisible()
 
     await page.clock.install()
+    await page.clock.pauseAt(new Date())
     await page
       .getByRole("searchbox", { name: "Search services", exact: true })
       .fill("missing service for skeleton test")

@@ -537,5 +537,95 @@ test(
         assert.equal((await request("/auth/profile", expiredToken)).status, 401)
       },
     )
+
+    await t.test(
+      "profile image endpoint enforces kind validation, animated image rejection, and project-image staff linkage",
+      async () => {
+        const uploadsBefore = imageUploads
+        const validPng =
+          "data:image/png;base64," +
+          (
+            await sharp({
+              create: { width: 4, height: 4, channels: 3, background: "navy" },
+            })
+              .png()
+              .toBuffer()
+          ).toString("base64")
+        const secondFrame = await sharp({
+          create: { width: 4, height: 4, channels: 4, background: "white" },
+        })
+          .png()
+          .toBuffer()
+        const animatedGif = await sharp({
+          create: {
+            width: 4,
+            height: 8,
+            pageHeight: 4,
+            channels: 4,
+            background: "navy",
+          },
+        })
+          .composite([{ input: secondFrame, top: 4, left: 0 }])
+          .gif({ delay: [100, 100] })
+          .toBuffer()
+        const animatedWebp =
+          "data:image/webp;base64," +
+          (
+            await sharp(animatedGif, { animated: true }).webp().toBuffer()
+          ).toString("base64")
+
+        for (const invalidBody of [
+          null,
+          {},
+          { kind: "cover", dataUrl: validPng },
+          { kind: "", dataUrl: validPng },
+          { kind: ["avatar"], dataUrl: validPng },
+          { kind: "avatar", dataUrl: null },
+          { kind: "avatar", dataUrl: "" },
+          { kind: "avatar", dataUrl: animatedWebp },
+        ]) {
+          const rejected = await request(
+            "/auth/profile/images",
+            selfSession.token,
+            "POST",
+            invalidBody,
+          )
+          assert.equal(rejected.status, 400, await rejected.clone().text())
+        }
+
+        const unlinkedStaff = await prisma.user.create({
+          data: {
+            email: "page-17-unlinked-staff@example.test",
+            fullName: "Unlinked Staff",
+            role: "STAFF",
+            passwordHash,
+          },
+        })
+        const superadmin = await prisma.user.create({
+          data: {
+            email: "page-17-superadmin@example.test",
+            fullName: "Superadmin Account",
+            role: "SUPERADMIN",
+            passwordHash,
+          },
+        })
+        const foreignToken = (await issueSession(foreign)).token
+        const superadminToken = (await issueSession(superadmin)).token
+        const unlinkedStaffToken = (await issueSession(unlinkedStaff)).token
+
+        for (const token of [
+          foreignToken,
+          superadminToken,
+          unlinkedStaffToken,
+        ]) {
+          const denied = await request("/auth/profile/images", token, "POST", {
+            kind: "project",
+            dataUrl: validPng,
+          })
+          assert.equal(denied.status, 403, await denied.clone().text())
+        }
+        assert.equal(imageUploads, uploadsBefore)
+      },
+    )
   },
 )
