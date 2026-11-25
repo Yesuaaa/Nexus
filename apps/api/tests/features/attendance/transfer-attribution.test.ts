@@ -267,6 +267,18 @@ test(
       }
       assert.equal(adjustment.capabilities.verify, true)
     }
+    const correction = requests.find(({ type }) => type === "CORRECTION")
+    assert(correction)
+    await call(
+      northHead,
+      `${adjustments}/${correction.id}/review`,
+      404,
+      "POST",
+      {
+        decision: "APPROVED",
+        note: "Former Head cannot verify after transfer",
+      },
+    )
     const reopened = await prisma.attendanceAdjustment.findMany({
       where: { id: { in: requestIds } },
     })
