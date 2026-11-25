@@ -122,7 +122,7 @@ fun ServicesScreen(
             }
         } else if (state.step == 1) {
             item {
-                PageHeading("Build Your Brand with EXP",
+                PageHeading("Build Your Brand with Converyn",
                     "Discover digital services crafted to amplify your presence and turn ideas into business impact.")
             }
             item { TextButton(shape = NexusButtonShape, onClick = onBookedRequests, contentPadding = PaddingValues(0.dp)) { Text("My booked requests  →") } }

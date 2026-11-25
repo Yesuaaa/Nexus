@@ -3,7 +3,8 @@ package com.nexus.app.core.theme
 import androidx.compose.ui.graphics.Color
 
 object NexusColors {
-    // Primary & Accent Brand Tokens (Figma Exact)
+    // Primary & Accent Brand Tokens (Converyn / Figma Exact)
+    val ConverynBlue = Color(0xFF203F8C)
     val PrimaryBlue = Color(0xFF253E92)
     val ServiceCardNavy = Color(0xFF1E3A78)
     val HeaderDarkNavy = Color(0xFF1B2A4A)

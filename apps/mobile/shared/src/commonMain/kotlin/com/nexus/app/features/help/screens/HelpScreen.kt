@@ -109,7 +109,7 @@ fun HelpScreen(
             SupportBookingCard(
                 onOpenMessages = onOpenMessages,
                 onEmailClick = {
-                    val email = "support@exp.test"
+                    val email = "support@converyn.test"
                     if (onEmailSupport != null) {
                         onEmailSupport(email)
                     } else {
@@ -368,7 +368,7 @@ private fun SupportBookingCard(
                     color = NexusColors.TextSecondary,
                 )
                 Text(
-                    text = "support@exp.test",
+                    text = "support@converyn.test",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     color = NexusColors.PrimaryBlue,

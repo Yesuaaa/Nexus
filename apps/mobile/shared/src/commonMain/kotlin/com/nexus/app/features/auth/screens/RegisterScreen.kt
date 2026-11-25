@@ -28,7 +28,7 @@ fun RegisterScreen(onRegistered: (AuthUser) -> Unit, onNavigateToLogin: () -> Un
         action = { AuthButton(if (state.offline) "Retry" else "Create Account", state.submitting) { submitted = true; viewModel.submit { user -> submitted = false; onRegistered(user) } } },
         switchLink = { AuthSwitchLink("Already have an account?", "Sign In", !state.submitting, onNavigateToLogin) }
     ) {
-        AuthHeading("Create Account", "Begin your digital journey with EXP today.")
+        AuthHeading("Create Account", "Create your Converyn account to get started.")
         Spacer(Modifier.height(22.dp))
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             AuthTextField(state.fullName, viewModel::onFullNameChange, "Full Name", "John Doe", errorMessage = errors["fullName"], enabled = !state.submitting, fieldHeight = 48.dp)

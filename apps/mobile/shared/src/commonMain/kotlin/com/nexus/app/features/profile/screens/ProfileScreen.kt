@@ -204,7 +204,7 @@ fun ProfileScreen(
                     Text(user.fullName ?: "Your profile", fontWeight = FontWeight.SemiBold, color = ink)
                     Surface(color = Color(0xFFE9EFF9), shape = RoundedCornerShape(4.dp)) { Text(roleLabel(user.role), Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 10.sp, color = blue) }
                 }
-                Hint(if (user.role == "USER") "Client at EXP Digital Solutions" else "EXP Digital Solutions")
+                Hint(if (user.role == "USER") "Client at Converyn" else "Converyn")
                 user.createdAt?.let { Detail(Icons.Outlined.CalendarMonth, "", "Member since ${dateLabel(it, preferences)}") }
                 Action("Edit profile", edit, enabled = profile != null)
             }

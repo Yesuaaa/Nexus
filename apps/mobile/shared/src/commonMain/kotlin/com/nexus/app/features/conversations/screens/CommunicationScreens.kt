@@ -448,7 +448,7 @@ fun ChatScreen(
             IconButton(onClick = onBack, modifier = Modifier.size(32.dp)) {
                 Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back to messages", Modifier.size(20.dp), tint = ConversationStyle.Navy)
             }
-            ChatAvatar(conversation?.head?.fullName ?: "EXP", modifier = Modifier.size(36.dp))
+            ChatAvatar(conversation?.head?.fullName ?: "CV", modifier = Modifier.size(36.dp))
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(conversation?.head?.fullName ?: "Conversation", fontSize = 18.sp, lineHeight = 22.sp,

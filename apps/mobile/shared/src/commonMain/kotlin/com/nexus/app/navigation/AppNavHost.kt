@@ -26,6 +26,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -53,6 +54,8 @@ import com.nexus.app.core.session.SessionManager
 import com.nexus.app.core.theme.NexusColors
 import com.nexus.app.features.auth.api.AuthRepository
 import com.nexus.app.features.auth.api.SessionRestoration
+import com.nexus.app.features.auth.components.ConverynSplashScreen
+import com.nexus.app.features.auth.screens.LandingScreen
 import com.nexus.app.features.auth.screens.LoginScreen
 import com.nexus.app.features.auth.screens.RegisterScreen
 import com.nexus.app.features.booked_requests.screens.BookedRequestsScreen
@@ -79,6 +82,7 @@ import com.nexus.app.features.projects.screens.*
 object Routes {
     const val BILLING_LOGS = "billing_logs"
     const val CHECKING = "checking"
+    const val LANDING = "landing"
     const val LOGIN = "login"
     const val REGISTER = "register"
     const val DASHBOARD = "dashboard"
@@ -175,6 +179,8 @@ fun AppNavHost(modifier: Modifier = Modifier) {
     val pendingLink by DeepLinks.pending.collectAsState()
     var restorationAttempt by rememberSaveable { mutableStateOf(0) }
     var restorationError by remember { mutableStateOf<String?>(null) }
+    var splashCompleted by rememberSaveable { mutableStateOf(false) }
+    var pendingRestoration by remember { mutableStateOf<SessionRestoration?>(null) }
     var loggingOut by rememberSaveable { mutableStateOf(false) }
     var editingAccount by remember { mutableStateOf(false) }
     var accountMenuOpen by remember { mutableStateOf(false) }
@@ -194,28 +200,37 @@ fun AppNavHost(modifier: Modifier = Modifier) {
     LaunchedEffect(restorationAttempt, lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             restorationError = null
-            when (authRepository.restoreClientSession()) {
-                SessionRestoration.SignedOut -> {
-                    if (session.state.value.signedOut) navController.resetTo(Routes.LOGIN)
-                }
-                is SessionRestoration.VerifiedClient, is SessionRestoration.CachedOfflineClient -> {
-                    if (session.state.value.user != null) navController.restoreAuthenticatedDestination()
-                }
-                is SessionRestoration.TemporarilyUnavailable -> {
-                    restorationError = "Can't restore your session right now. Check your connection and retry."
-                    navController.navigate(Routes.CHECKING) { launchSingleTop = true }
-                }
-            }
+            pendingRestoration = authRepository.restoreClientSession()
             awaitCancellation()
         }
     }
 
-    // Deep links: wait until restore has finished (route is a main screen or Login/Register).
+    // Apply the restoration outcome once the app-open logo animation has finished.
+    LaunchedEffect(pendingRestoration, splashCompleted) {
+        val result = pendingRestoration ?: return@LaunchedEffect
+        if (!splashCompleted) return@LaunchedEffect
+        when (result) {
+            SessionRestoration.SignedOut -> {
+                if (session.state.value.signedOut && route !in setOf(Routes.LANDING, Routes.LOGIN, Routes.REGISTER)) {
+                    navController.resetTo(if (route == Routes.CHECKING) Routes.LANDING else Routes.LOGIN)
+                }
+            }
+            is SessionRestoration.VerifiedClient, is SessionRestoration.CachedOfflineClient -> {
+                if (session.state.value.user != null) navController.restoreAuthenticatedDestination()
+            }
+            is SessionRestoration.TemporarilyUnavailable -> {
+                restorationError = "Can't restore your session right now. Check your connection and retry."
+                navController.navigate(Routes.CHECKING) { launchSingleTop = true }
+            }
+        }
+    }
+
+    // Deep links: wait until restore has finished (route is a main screen or Landing/Login/Register).
     LaunchedEffect(pendingLink, user, route) {
         val link = pendingLink ?: return@LaunchedEffect
         when {
             // Signed out: drop the link (it is not remembered across sign-in).
-            route == Routes.LOGIN || route == Routes.REGISTER -> DeepLinks.consume()
+            route == Routes.LANDING || route == Routes.LOGIN || route == Routes.REGISTER -> DeepLinks.consume()
             user != null && route in Routes.main -> {
                 val target = DeepLinks.routeFor(link)
                 if (target != null && target != route) navController.switchTab(target)
@@ -225,9 +240,9 @@ fun AppNavHost(modifier: Modifier = Modifier) {
     }
 
     // Durable state also handles expiry while no event collector is present.
-    LaunchedEffect(sessionState.signedOut, sessionState.generation, route) {
-        if (sessionState.signedOut && route != Routes.LOGIN && route != Routes.REGISTER) {
-            navController.resetTo(Routes.LOGIN)
+    LaunchedEffect(sessionState.signedOut, sessionState.generation, route, splashCompleted) {
+        if (splashCompleted && sessionState.signedOut && route !in setOf(Routes.LANDING, Routes.LOGIN, Routes.REGISTER)) {
+            navController.resetTo(if (route == Routes.CHECKING) Routes.LANDING else Routes.LOGIN)
         }
     }
 
@@ -336,6 +351,8 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 )
             }
         },
+        // Public auth screens paint edge to edge and handle safe drawing / keyboard insets themselves.
+        contentWindowInsets = if (route in setOf(Routes.LANDING, Routes.LOGIN, Routes.REGISTER)) WindowInsets(0, 0, 0, 0) else ScaffoldDefaults.contentWindowInsets,
         containerColor = NexusColors.SurfaceLight,
         modifier = Modifier.fillMaxSize().nestedScroll(appBarScroll.nestedScrollConnection)
     ) { paddingValues ->
@@ -363,26 +380,24 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                     popExitTransition = { ExitTransition.None }
                 ) {
                     composable(Routes.CHECKING) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            if (restorationError == null) {
-                                CircularProgressIndicator(color = NexusColors.PrimaryBlue)
-                            } else {
-                                Column(
-                                    Modifier.padding(24.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                                ) {
-                                    Text(restorationError!!, color = NexusColors.TextSecondary)
-                                    Button(shape = NexusButtonShape, onClick = { restorationAttempt++ }) { Text("Retry") }
-                                }
-                            }
-                        }
+                        ConverynSplashScreen(
+                            restorationError = restorationError,
+                            onRetry = { restorationAttempt++ },
+                            skipAnimation = splashCompleted,
+                            onAnimationFinished = { splashCompleted = true }
+                        )
+                    }
+                    composable(Routes.LANDING) {
+                        LandingScreen(
+                            onNavigateToLogin = { navController.navigate(Routes.LOGIN) },
+                            onNavigateToRegister = { navController.navigate(Routes.REGISTER) }
+                        )
                     }
                     composable(Routes.LOGIN) {
                         LoginScreen(
                             onLoggedIn = {
                                 signedIn()
-                                toast.show("Signed in", "Welcome back to EXP.", ToastKind.SUCCESS)
+                                toast.show("Signed in", "Welcome back to Converyn.", ToastKind.SUCCESS)
                             },
                             onNavigateToRegister = { navController.navigate(Routes.REGISTER) },
                             sessionNotice = notice

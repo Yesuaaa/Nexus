@@ -2,7 +2,6 @@ package com.nexus.app.features.auth.screens
 
 import com.nexus.app.core.components.NexusDialogButton
 import com.nexus.app.core.components.NexusAlertDialog
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.MailOutline
@@ -12,7 +11,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -35,17 +33,23 @@ fun LoginScreen(onLoggedIn: (AuthUser) -> Unit, onNavigateToRegister: () -> Unit
     AuthScreenLayout(modifier = modifier, registering = false,
         header = { AuthHeader() },
         action = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                    Text("Forgot password?", Modifier.clickable(enabled = !state.submitting) { recovery = true }, fontSize = 12.sp,
-                        lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF233D92))
+                    TextButton(
+                        onClick = { recovery = true },
+                        enabled = !state.submitting,
+                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 12.dp),
+                    ) {
+                        Text("Forgot password?", fontSize = 13.sp, lineHeight = 18.sp,
+                            fontWeight = FontWeight.SemiBold, color = AuthPalette.Blue)
+                    }
                 }
                 AuthButton(if (state.offline) "Retry" else "Sign In", state.submitting) { submitted = true; viewModel.submit { user -> submitted = false; onLoggedIn(user) } }
             }
         },
-        switchLink = { AuthSwitchLink("New to EXP?", "Create an account", !state.submitting, onNavigateToRegister) }
+        switchLink = { AuthSwitchLink("New to Converyn?", "Create an account", !state.submitting, onNavigateToRegister) }
     ) {
-        AuthHeading("Welcome Back", "Sign in to your EXP account.")
+        AuthHeading("Welcome Back", "Sign in to your Converyn client account.")
         Spacer(Modifier.height(22.dp))
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             AuthTextField(state.email, viewModel::onEmailChange, "Email address", "you@example.com", keyboardType = KeyboardType.Email,
@@ -59,6 +63,6 @@ fun LoginScreen(onLoggedIn: (AuthUser) -> Unit, onNavigateToRegister: () -> Unit
         sessionNotice?.let { Text(it, Modifier.padding(top = 8.dp), color = NexusColors.TextSecondary, fontSize = 13.sp) }
     }
     if (recovery) NexusAlertDialog(onDismissRequest = { recovery = false }, title = { Text("Forgot your password?") },
-        text = { Text("Please contact EXP Digital Solutions support for help recovering your account.") },
+        text = { Text("Please contact Converyn support for help recovering your account.") },
         confirmButton = { NexusDialogButton(onClick = { recovery = false }) { Text("Close") } })
 }
