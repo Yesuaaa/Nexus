@@ -45,7 +45,7 @@ export function ClientRowTable<T extends { id: string }>({
   const empty = items.length === 0 && !error
 
   return (
-    <>
+    <div className="@container min-w-0">
       <div
         className={
           empty
@@ -138,6 +138,6 @@ export function ClientRowTable<T extends { id: string }>({
           renderRow={renderMobileRow}
         />
       </div>
-    </>
+    </div>
   )
 }
