@@ -205,7 +205,11 @@ test("[NEX-017] client filters and searches projects from page two and opens a p
   ).toHaveCount(0)
   await main.getByRole("searchbox", { name: "Search projects" }).fill("missing")
   await expect(
-    main.getByText("No projects match", { exact: true }),
+    main
+      .getByText("No projects match your search or filters.", {
+        exact: true,
+      })
+      .filter({ visible: true }),
   ).toBeVisible()
   await main.getByRole("searchbox", { name: "Search projects" }).clear()
   await main
@@ -454,7 +458,11 @@ test("[NEX-017] project list and deliverable routes expose loading empty and err
   state.listMode = "empty"
   release()
   await expect(
-    page.getByRole("heading", { name: "No projects yet", exact: true }),
+    page
+      .getByText("No projects yet. Activated services will appear here.", {
+        exact: true,
+      })
+      .filter({ visible: true }),
   ).toBeVisible()
   state.listMode = "error"
   await page.reload()
