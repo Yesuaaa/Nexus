@@ -92,6 +92,9 @@ export function useLocalTable<T>(
 
   const viewKey = JSON.stringify(view)
   const [paging, setPaging] = useState({ viewKey, page: 1 })
+  if (paging.viewKey !== viewKey) {
+    setPaging({ viewKey, page: 1 })
+  }
   const requestedPage =
     controlledPage ?? (paging.viewKey === viewKey ? paging.page : 1)
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize))

@@ -1009,3 +1009,79 @@ test(
     )
   },
 )
+
+test(
+  "unpublishing an approved note hides it from the client and enforces non-member and validation guards",
+  { timeout: 120_000 },
+  async (t) => {
+    const { api, client, head, lead, project, staff } =
+      await createProjectFixture(t)
+    const createdNote = await api(
+      staff.id,
+      `/project-workspace/${project.id}/projects/${project.id}/notes`,
+      "POST",
+      { content: "Client-facing milestone note" },
+    )
+    assert.equal(createdNote.status, 201)
+    const noteWorkspace = (await createdNote.json()) as {
+      workstreams: {
+        id: string
+        notes: {
+          id: string
+          revisions: { id: string; status: string }[]
+        }[]
+      }[]
+    }
+    const note = noteWorkspace.workstreams.find(({ id }) => id === project.id)
+      ?.notes[0]
+    assert.ok(note)
+    const revisionId = note.revisions[0]!.id
+
+    const approved = await api(
+      lead.id,
+      `/project-workspace/${project.id}/projects/${project.id}/notes/${note.id}/revisions/${revisionId}/review`,
+      "PATCH",
+      { action: "APPROVE", clientVisible: true },
+    )
+    assert.equal(approved.status, 200)
+
+    const visibleBefore = await api(client.id, `/projects/${project.id}`)
+    assert.equal(visibleBefore.status, 200)
+    const beforeBody = (await visibleBefore.json()) as {
+      notes: { id: string; content: string }[]
+    }
+    assert.ok(beforeBody.notes.some((item) => item.id === revisionId))
+
+    const clientUnpublish = await api(
+      client.id,
+      `/project-workspace/${project.id}/projects/${project.id}/notes/${note.id}/revisions/${revisionId}/unpublish`,
+      "POST",
+    )
+    assert.equal(clientUnpublish.status, 403)
+
+    const unpublished = await api(
+      lead.id,
+      `/project-workspace/${project.id}/projects/${project.id}/notes/${note.id}/revisions/${revisionId}/unpublish`,
+      "POST",
+    )
+    assert.equal(unpublished.status, 200)
+
+    const visibleAfter = await api(client.id, `/projects/${project.id}`)
+    assert.equal(visibleAfter.status, 200)
+    const afterBody = (await visibleAfter.json()) as {
+      notes: { id: string; content: string }[]
+    }
+    assert.equal(
+      afterBody.notes.some((item) => item.id === revisionId),
+      false,
+    )
+
+    const invalidStatus = await api(
+      head.id,
+      `/project-workspace/${project.id}/status`,
+      "POST",
+      { action: "INVALID_ACTION" },
+    )
+    assert.equal(invalidStatus.status, 400)
+  },
+)

@@ -14,7 +14,7 @@ import {
   Plus,
   UsersRound,
 } from "lucide-react"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -255,7 +255,7 @@ export function ClientProjectPage({
                 aria-valuenow={progressPercent}
                 aria-valuemin={0}
                 aria-valuemax={100}
-                aria-label="Task progress"
+                aria-label="Overall project progress"
               >
                 <div
                   className="h-2 rounded-full bg-[#294c96] transition-[width] motion-reduce:transition-none"

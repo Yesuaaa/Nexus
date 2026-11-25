@@ -407,21 +407,26 @@ test(
       )
     }
     assert.equal(
-      (await request(admin, detailsPath(design.id, `group:${otherOnly.id}`)))
-        .status,
+      (
+        await request(
+          superadmin,
+          detailsPath(design.id, `group:${otherOnly.id}`),
+        )
+      ).status,
       404,
     )
     assert.equal(
       (
         await request(
-          admin,
+          superadmin,
           detailsPath(design.id, `ungrouped-project:${designProject.id}`),
         )
       ).status,
       404,
     )
     assert.equal(
-      (await request(admin, detailsPath(design.id, `legacy-bare-id`))).status,
+      (await request(superadmin, detailsPath(design.id, `legacy-bare-id`)))
+        .status,
       400,
     )
   },

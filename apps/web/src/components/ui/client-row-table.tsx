@@ -39,7 +39,7 @@ export function ClientRowTable<T extends { id: string }>({
   renderMobileRow: (item: T) => ReactNode
 }) {
   return (
-    <>
+    <div className="@container min-w-0">
       <div className="overflow-x-auto rounded-xl bg-[#e7edf3] p-1.5 @max-[900px]:hidden">
         <table
           className="w-full min-w-[920px] table-fixed border-separate border-spacing-y-2 text-left text-xs text-foreground"
@@ -92,6 +92,6 @@ export function ClientRowTable<T extends { id: string }>({
           renderRow={renderMobileRow}
         />
       </div>
-    </>
+    </div>
   )
 }

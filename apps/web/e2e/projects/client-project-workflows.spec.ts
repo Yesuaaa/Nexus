@@ -215,10 +215,6 @@ test("[NEX-017] client browses projects and edits brief and submits validated ch
   await main
     .getByRole("link", { name: "View Website launch", exact: true })
     .click()
-  await page
-    .getByRole("dialog", { name: "Project details", exact: true })
-    .getByRole("link", { name: "Open project", exact: true })
-    .click()
   await expect(page).toHaveURL(/\/projects\/nex017-project$/)
   await expect(
     page.getByRole("progressbar", { name: "Overall project progress" }),

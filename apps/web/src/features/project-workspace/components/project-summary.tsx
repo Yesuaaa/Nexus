@@ -166,112 +166,105 @@ export function ProjectSummary({
         wrapCaption
         hoverEffects={false}
       />
+      <OverviewPanel title="Project details" variant="table">
+        <MiniStats
+          label="Project details"
+          loading={false}
+          items={metadata}
+          columns={2}
+          variant="plain"
+          wrapValues
+        />
+      </OverviewPanel>
+
       <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <div className="grid min-w-0 gap-5">
-          <OverviewPanel title={attention.heading} variant="table">
-            <ItemList
-              loading={false}
-              rows={attention.items.map(({ id, label, section }) => ({
-                id,
-                label,
-                href: sectionHref(section),
-              }))}
-              limit={attention.items.length}
-              empty={
-                <span
-                  role="status"
-                  className="block rounded-lg border border-[#e3e9f1] bg-[#f5f7fa] px-4 py-3 text-[#60718c]"
-                >
-                  {readOnly
-                    ? "No outstanding oversight items"
-                    : "Nothing needs your attention"}
-                </span>
-              }
-            />
-          </OverviewPanel>
-
-          <OverviewPanel title="Project details" variant="table">
-            <MiniStats
-              label="Project details"
-              loading={false}
-              items={metadata}
-              columns={2}
-              variant="plain"
-              wrapValues
-            />
-          </OverviewPanel>
-        </div>
-
-        <div className="grid min-w-0 gap-5">
-          <OverviewPanel title="Project brief" variant="table">
-            {workspace.workstreams.length ? (
-              <div className="divide-y divide-[#edf0f4]">
-                {workspace.workstreams.map((stream) => (
-                  <article
-                    key={stream.id}
-                    className="py-3 first:pt-0 last:pb-0"
-                  >
-                    {workspace.workstreams.length > 1 && (
-                      <h3 className="m-0 mb-1 text-xs font-semibold">
-                        {stream.serviceName}
-                      </h3>
-                    )}
-                    <p className="m-0 whitespace-pre-wrap text-sm leading-6 text-[#65718a] [overflow-wrap:anywhere]">
-                      {stream.description?.trim() ||
-                        "No project goals have been provided."}
-                    </p>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <p className="m-0 text-xs leading-5 text-[#65718a]">
-                No project goals have been provided.
-              </p>
-            )}
-          </OverviewPanel>
-
-          <OverviewPanel
-            title="Assigned team"
-            variant="table"
-            action={
-              <Button asChild variant="outline" size="sm">
-                <Link href={sectionHref("team")}>View team</Link>
-              </Button>
+        <OverviewPanel title={attention.heading} variant="table">
+          <ItemList
+            loading={false}
+            rows={attention.items.map(({ id, label, section }) => ({
+              id,
+              label,
+              href: sectionHref(section),
+            }))}
+            limit={attention.items.length}
+            empty={
+              <span
+                role="status"
+                className="block rounded-lg border border-[#e3e9f1] bg-[#f5f7fa] px-4 py-3 text-[#60718c]"
+              >
+                {readOnly
+                  ? "No outstanding oversight items"
+                  : "Nothing needs your attention"}
+              </span>
             }
-          >
-            <p className="mt-0 mb-4 text-xs text-[#65718a]">
-              {`${staff.length} ${staff.length === 1 ? "person" : "people"} assigned`}
-            </p>
-            {staff.length ? (
-              <ul className="m-0 list-none divide-y divide-[#edf0f4] p-0">
-                {staff.map((person) => (
-                  <li key={person.id} className="py-3 first:pt-0 last:pb-0">
-                    <MemberIdentity
-                      member={{ fullName: person.fullName }}
-                      secondaryText={person.position || "Staff"}
-                      nameAdornment={
-                        person.isTeamLead ? (
-                          <Pill tone="brand">Team Lead</Pill>
-                        ) : undefined
-                      }
-                    />
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <EmptyState
-                title="No assigned personnel"
-                description={
-                  readOnly
-                    ? "No team members are listed in the available project data."
-                    : "The department head can approve staffing from Team."
-                }
-                size="sm"
-              />
-            )}
-          </OverviewPanel>
-        </div>
+          />
+        </OverviewPanel>
+
+        <OverviewPanel
+          title="Assigned team"
+          variant="table"
+          action={
+            <Button asChild variant="outline" size="sm">
+              <Link href={sectionHref("team")}>View team</Link>
+            </Button>
+          }
+        >
+          <p className="mt-0 mb-4 text-xs text-[#65718a]">
+            {`${staff.length} ${staff.length === 1 ? "person" : "people"} assigned`}
+          </p>
+          {staff.length ? (
+            <ul className="m-0 list-none divide-y divide-[#edf0f4] p-0">
+              {staff.map((person) => (
+                <li key={person.id} className="py-3 first:pt-0 last:pb-0">
+                  <MemberIdentity
+                    member={{ fullName: person.fullName }}
+                    secondaryText={person.position || "Staff"}
+                    nameAdornment={
+                      person.isTeamLead ? (
+                        <Pill tone="brand">Team Lead</Pill>
+                      ) : undefined
+                    }
+                  />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <EmptyState
+              title="No assigned personnel"
+              description={
+                readOnly
+                  ? "No team members are listed in the available project data."
+                  : "The department head can approve staffing from Team."
+              }
+              size="sm"
+            />
+          )}
+        </OverviewPanel>
       </div>
+
+      <OverviewPanel title="Project brief" variant="table">
+        {workspace.workstreams.length ? (
+          <div className="divide-y divide-[#edf0f4]">
+            {workspace.workstreams.map((stream) => (
+              <article key={stream.id} className="py-3 first:pt-0 last:pb-0">
+                {workspace.workstreams.length > 1 && (
+                  <h3 className="m-0 mb-1 text-xs font-semibold">
+                    {stream.serviceName}
+                  </h3>
+                )}
+                <p className="m-0 whitespace-pre-wrap text-sm leading-6 text-[#65718a] [overflow-wrap:anywhere]">
+                  {stream.description?.trim() ||
+                    "No project goals have been provided."}
+                </p>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="m-0 text-xs leading-5 text-[#65718a]">
+            No project goals have been provided.
+          </p>
+        )}
+      </OverviewPanel>
     </div>
   )
 }

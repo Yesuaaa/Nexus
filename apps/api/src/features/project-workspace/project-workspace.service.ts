@@ -4107,6 +4107,11 @@ export async function addProjectTask(
       throw new ServiceRequestsError(409, "This project has no task plan yet")
     const phase = plan.phases.find(({ id }) => id === phaseId)
     if (!phase) throw new ServiceRequestsError(404, "Project phase not found")
+    if (phase.tasks.length >= 50)
+      throw new ServiceRequestsError(
+        400,
+        "Add 1–20 named phases, with up to 50 named tasks per phase",
+      )
     const task = {
       id: randomUUID(),
       title,
