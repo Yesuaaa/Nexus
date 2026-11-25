@@ -22,7 +22,7 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      "flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background data-[placeholder]:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
+      "flex h-9 w-full min-w-0 items-center justify-between gap-2 whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background data-[placeholder]:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:min-w-0 [&>span]:line-clamp-1",
       className,
     )}
     {...props}
@@ -101,12 +101,11 @@ const SelectContent = React.forwardRef<
       <SelectPrimitive.Content
         ref={ref}
         className={cn(
-          "relative z-[130] flex min-w-[8rem] max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-lg border border-[#e1e4ea] bg-background text-foreground shadow-md origin-[var(--radix-select-content-transform-origin)]",
+          "relative z-[130] flex min-w-0 max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-lg border border-[#e1e4ea] bg-background text-foreground shadow-md origin-[var(--radix-select-content-transform-origin)]",
           selectContentHeightClass[maxHeight],
           position === "popper" &&
-            (fitOptions
-              ? "w-max min-w-[min(var(--radix-select-trigger-width),var(--radix-select-content-available-width))] max-w-[min(calc(100vw-16px),var(--radix-select-content-available-width))]"
-              : "w-[var(--radix-select-trigger-width)]"),
+            "w-[var(--radix-select-trigger-width)] max-w-[min(calc(100vw-16px),var(--radix-select-content-available-width))]",
+          fitOptions && "whitespace-normal",
           className,
         )}
         position={position}

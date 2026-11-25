@@ -1,3 +1,7 @@
+import {
+  publicServicesRouter,
+  serviceInquiriesRouter,
+} from "./features/public-services/public-services.controller.js"
 import cors from "cors"
 import { serviceLogContext } from "./features/service-operation-logs/log-context.js"
 import { serviceLogsRouter } from "./features/service-operation-logs/log-controller.js"
@@ -64,6 +68,8 @@ export function createApp(
     )
   }
   app.use(devErrorInterceptor)
+  app.use("/api/public", publicServicesRouter)
+  app.use("/api/service-inquiries", serviceInquiriesRouter)
   app.use(serviceLogContext)
   app.use("/api/service-operation-logs", serviceLogsRouter)
   app.use("/api/project-management-logs", projectLogsRouter)

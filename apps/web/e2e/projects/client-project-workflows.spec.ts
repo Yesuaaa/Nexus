@@ -177,7 +177,7 @@ async function projectFixture(page: Page, role: "USER" | "STAFF" = "USER") {
   return state
 }
 
-test("[NEX-017] client browses projects and edits brief and submits validated change and cancellation requests", async ({
+test("[NEX-017] client filters and searches projects from page two and opens a project directly", async ({
   page,
 }) => {
   const state = await projectFixture(page)
@@ -212,13 +212,40 @@ test("[NEX-017] client browses projects and edits brief and submits validated ch
     .getByRole("combobox", { name: "Filter projects by status" })
     .click()
   await page.getByRole("option", { name: "All Statuses", exact: true }).click()
+  const projectLink = main.getByRole("link", {
+    name: "View Website launch",
+    exact: true,
+  })
+  await expect(projectLink).toBeVisible()
+  const pagination = main.getByRole("navigation", { name: "My Projects pages" })
+  await pagination.getByRole("button", { name: "Page 2", exact: true }).click()
+  await expect(
+    main.getByRole("link", { name: "View Project 11", exact: true }),
+  ).toBeVisible()
   await main
-    .getByRole("link", { name: "View Website launch", exact: true })
-    .click()
+    .getByRole("searchbox", { name: "Search projects" })
+    .fill("Website launch")
+  await expect(projectLink).toBeVisible()
+  await main.getByRole("searchbox", { name: "Search projects" }).clear()
+  await expect(
+    pagination.getByRole("button", { name: "Page 1", exact: true }),
+  ).toHaveAttribute("aria-current", "page")
+  await expect(projectLink).toHaveAttribute(
+    "href",
+    `/projects/${state.project.id}`,
+  )
+  await projectLink.click()
   await expect(page).toHaveURL(/\/projects\/nex017-project$/)
   await expect(
-    page.getByRole("progressbar", { name: "Overall project progress" }),
+    page.getByRole("progressbar", { name: "Task progress", exact: true }),
   ).toHaveAttribute("aria-valuenow", "50")
+})
+
+test("[NEX-017] client edits brief and submits validated change and cancellation requests", async ({
+  page,
+}) => {
+  const state = await projectFixture(page)
+  await page.goto(`/projects/${state.project.id}`)
   await expect(
     page.getByRole("button", { name: "Accept request", exact: true }),
   ).toHaveCount(0)
@@ -334,19 +361,33 @@ test("[NEX-017] client opens shared files and reviews them with revision validat
   await dialog
     .getByRole("textbox", { name: /^What should be revised/ })
     .fill("Please improve the contrast")
+  const reviewPath = `/api/projects/${state.project.id}/deliverables/delivery-0/review`
+  const reviewResponse = () =>
+    page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === reviewPath &&
+        response.request().method() === "POST",
+    )
+  const failedReview = reviewResponse()
   await dialog
     .getByRole("button", { name: "Send revision request", exact: true })
     .click()
-  await expect
-    .soft(page.getByText("Couldn't save your response", { exact: true }))
-    .toBeVisible()
+  expect((await failedReview).status()).toBe(503)
+  const feedback = dialog.getByRole("alert")
+  await expect(feedback).toBeVisible()
+  await expect(feedback).toHaveText(
+    "Couldn't save your response. Review temporarily unavailable",
+  )
   await expect(
     dialog.getByRole("textbox", { name: /^What should be revised/ }),
   ).toHaveValue("Please improve the contrast")
+  const retriedReview = reviewResponse()
   await dialog
     .getByRole("button", { name: "Send revision request", exact: true })
     .click()
+  expect((await retriedReview).status()).toBe(200)
   await expect(dialog).toHaveCount(0)
+  await expect(feedback).toHaveCount(0)
   await expect(
     page.getByText("Revision requested", { exact: true }),
   ).toBeVisible()
@@ -364,11 +405,29 @@ test("[NEX-017] client opens shared files and reviews them with revision validat
     }),
   ).toBeVisible()
   await page.goto(`/projects/${state.project.id}/deliverables/delivery-1`)
-  await page
+  state.failReview = true
+  const approve = page.getByRole("button", {
+    name: "Approve deliverable",
+    exact: true,
+  })
+  const confirmation = page.getByRole("dialog", {
+    name: "Approve this deliverable?",
+    exact: true,
+  })
+  await approve.click()
+  await confirmation
     .getByRole("button", { name: "Approve deliverable", exact: true })
     .click()
-  await page
-    .getByRole("dialog", { name: "Approve this deliverable?", exact: true })
+  await expect(confirmation.getByRole("alert")).toContainText(
+    "Review temporarily unavailable",
+  )
+  await confirmation
+    .getByRole("button", { name: "Go back", exact: true })
+    .click()
+  await expect(confirmation).toHaveCount(0)
+  await approve.click()
+  await expect(confirmation.getByRole("alert")).toHaveCount(0)
+  await confirmation
     .getByRole("button", { name: "Approve deliverable", exact: true })
     .click()
   await expect(

@@ -167,6 +167,7 @@ test("Superadmin enters Project Management without Staff reads and retains modul
     menu.getByRole("link", { name: "Staff Workload", exact: true }),
   ).toHaveCount(0)
   await menu.getByRole("link", { name: "Calendar", exact: true }).click()
+  await expect(page).toHaveURL("/calendar")
   await expect(
     menu.getByText("Project Management", { exact: true }),
   ).toBeVisible()
@@ -174,8 +175,8 @@ test("Superadmin enters Project Management without Staff reads and retains modul
     name: "Project Workspace",
     exact: true,
   })
-  if ((await projectWorkspace.getAttribute("aria-expanded")) === "false")
-    await projectWorkspace.click()
+  await expect(projectWorkspace).toHaveAttribute("aria-expanded", "false")
+  await projectWorkspace.click()
   await menu
     .getByRole("link", { name: "Project Workspace overview", exact: true })
     .click()

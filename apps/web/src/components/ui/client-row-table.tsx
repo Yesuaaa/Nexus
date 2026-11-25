@@ -19,6 +19,8 @@ export function ClientRowTable<T extends { id: string }>({
   columns,
   rowClassName = "h-[66px] align-middle",
   emptyContent,
+  error,
+  onRetry,
   ariaBusy = false,
   onRowsSettled,
   renderRow,
@@ -33,6 +35,8 @@ export function ClientRowTable<T extends { id: string }>({
   columns: ClientRowTableColumn[]
   rowClassName?: string
   emptyContent: ReactNode
+  error?: ReactNode
+  onRetry?: () => void
   ariaBusy?: boolean
   onRowsSettled?: () => void
   renderRow: (item: T) => ReactNode
@@ -67,6 +71,8 @@ export function ClientRowTable<T extends { id: string }>({
             columns={columns.length}
             rowClassName={rowClassName}
             emptyContent={emptyContent}
+            error={error}
+            onRetry={onRetry}
             onRowsSettled={onRowsSettled}
             renderRow={renderRow}
           />
@@ -87,7 +93,25 @@ export function ClientRowTable<T extends { id: string }>({
           bodyRole="presentation"
           rowRole="listitem"
           rowClassName={() => "pb-3"}
-          emptyContent={emptyContent}
+          emptyContent={
+            error && onRetry ? (
+              <div
+                role="alert"
+                className="grid min-h-[150px] place-content-center gap-3 p-6 text-center text-xs text-[#65718a]"
+              >
+                <p className="m-0">{error}</p>
+                <button
+                  type="button"
+                  className="cursor-pointer rounded border-0 bg-transparent p-0 font-bold text-[#244993] focus-visible:outline-2 focus-visible:outline-ring"
+                  onClick={onRetry}
+                >
+                  Try again
+                </button>
+              </div>
+            ) : (
+              emptyContent
+            )
+          }
           onRowsSettled={onRowsSettled}
           renderRow={renderMobileRow}
         />

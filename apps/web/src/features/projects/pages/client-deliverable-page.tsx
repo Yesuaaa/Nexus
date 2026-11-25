@@ -46,6 +46,7 @@ export function ClientDeliverablePage({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [reviewError, setReviewError] = useState("")
   const [busy, setBusy] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [approveOpen, setApproveOpen] = useState(false)
@@ -128,6 +129,7 @@ export function ClientDeliverablePage({
   ) {
     if (busy) return
     setBusy(true)
+    setReviewError("")
     try {
       const updated = await reviewClientDeliverable(
         projectId,
@@ -145,9 +147,12 @@ export function ClientDeliverablePage({
             : "Revision request sent",
       })
     } catch (reason) {
+      const title = "Couldn't save your response"
+      const description = errorMessage(reason, "Please try again.")
+      setReviewError(`${title}. ${description}`)
       sileo.error({
-        title: "Couldn't save your response",
-        description: errorMessage(reason, "Please try again."),
+        title,
+        description,
       })
     } finally {
       setBusy(false)
@@ -365,15 +370,23 @@ export function ClientDeliverablePage({
             pendingLabel="Saving…"
             cancelLabel="Go back"
             pending={busy}
+            error={reviewError}
             destructive={false}
-            onClose={() => setApproveOpen(false)}
+            onClose={() => {
+              setReviewError("")
+              setApproveOpen(false)
+            }}
             onConfirm={() => void submitReview("APPROVED")}
           />
           <RequestDeliverableRevisionDialog
             key={revisionOpen ? "revision-open" : "revision-closed"}
             open={revisionOpen}
             busy={busy}
-            onOpenChange={setRevisionOpen}
+            error={reviewError}
+            onOpenChange={(open) => {
+              if (!open) setReviewError("")
+              setRevisionOpen(open)
+            }}
             onSubmit={(note) => void submitReview("REVISION_REQUESTED", note)}
           />
         </>

@@ -93,6 +93,7 @@ export type RoutePolicyId =
   | "employees"
   | "services"
   | "services-overview"
+  | "service-inquiries"
   | "calendar"
   | "service-requests"
   | "help"
@@ -227,6 +228,20 @@ export const routePolicies: readonly RoutePolicy[] = [
     },
   },
   ...administrativeModulePolicies(),
+  {
+    id: "service-inquiries",
+    match: { kind: "exact", path: "/service-inquiries" },
+    moduleId: "service-operations",
+    canAccess: (account) =>
+      canAccessServiceManagement(account) &&
+      hasPermission(account, Permissions.SERVICE_INQUIRIES_READ),
+    navigation: {
+      href: "/service-inquiries",
+      label: "Guest Inquiries",
+      location: "main",
+      order: 41,
+    },
+  },
   {
     id: "payroll-compensation",
     match: { kind: "exact", path: "/module/payroll/compensation" },

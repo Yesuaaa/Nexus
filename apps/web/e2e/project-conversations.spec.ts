@@ -203,6 +203,8 @@ for (const role of ["USER", "STAFF"] as const) {
   }) => {
     await projectChat(page, role)
     await page.goto(role === "USER" ? "/messages" : "/messages?scope=project")
+    if (role === "STAFF")
+      await expect(page.locator("#app-sidebar")).toHaveCount(0)
     const rail = page.getByRole("navigation", {
       name: "Conversations",
       exact: true,

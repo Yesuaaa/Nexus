@@ -363,22 +363,16 @@ for (const workspace of [
 
     await page.getByRole("link", { name: /^Messages/ }).click()
     await expect(page).toHaveURL(/\/messages\?mode=internal$/)
-    await expect(menu.getByText(workspace.title, { exact: true })).toBeVisible()
-    await expect(
-      menu.getByRole("link", { name: workspace.link, exact: true }),
-    ).toBeVisible()
-    await expect(
-      menu.getByRole("link", { name: workspace.hidden, exact: true }),
-    ).toHaveCount(0)
+    await expect(page.locator("#app-sidebar")).toHaveCount(0)
 
     await page.goto("/messages?mode=internal")
     await page.reload()
-    await expect(menu.getByText(workspace.title, { exact: true })).toBeVisible()
+    await expect(page.locator("#app-sidebar")).toHaveCount(0)
     await expect(
       page.getByRole("button", { name: "Notifications", exact: true }),
     ).toBeVisible()
 
-    await menu.getByRole("link", { name: "Calendar", exact: true }).click()
+    await page.goto("/calendar")
     await expect(page).toHaveURL(/\/calendar$/)
     await expect(
       menu.getByRole("link", { name: workspace.link, exact: true }),
@@ -410,15 +404,7 @@ for (const workspace of [
       .toBeNull()
 
     await page.goto("/messages?mode=internal")
-    await expect(
-      menu.getByRole("link", { name: "Switch Workspace", exact: true }),
-    ).toBeVisible()
-    await expect(menu.getByText(workspace.title, { exact: true })).toHaveCount(
-      0,
-    )
-    await expect(
-      menu.getByRole("link", { name: workspace.link, exact: true }),
-    ).toHaveCount(0)
+    await expect(page.locator("#app-sidebar")).toHaveCount(0)
   })
 }
 
@@ -430,8 +416,7 @@ test("management access loss clears People & HR context", async ({ page }) => {
   )
   await page.getByRole("link", { name: /^Messages/ }).click()
   await expect(page).toHaveURL(/\/messages\?mode=internal$/)
-  const menu = mainMenu(page)
-  await expect(menu.getByText("People & HR", { exact: true })).toBeVisible()
+  await expect(page.locator("#app-sidebar")).toHaveCount(0)
 
   await page.route("**/api/auth/me", (route) =>
     route.fulfill({ json: { user: accountFor("ADMIN", { permissions: [] }) } }),
@@ -439,16 +424,7 @@ test("management access loss clears People & HR context", async ({ page }) => {
   await page.evaluate(() =>
     window.dispatchEvent(new Event("nexus:account-updated")),
   )
-  await expect(menu.getByText("People & HR", { exact: true })).toHaveCount(0)
-  await expect(
-    menu.getByRole("button", { name: "Attendance", exact: true }),
-  ).toHaveCount(0)
-  await expect(
-    menu.getByRole("link", { name: "Employee Management" }),
-  ).toHaveCount(0)
-  await expect(
-    menu.getByRole("link", { name: "Switch Workspace", exact: true }),
-  ).toBeVisible()
+  await expect(page.locator("#app-sidebar")).toHaveCount(0)
   await page.goto("/employees")
   await expect(page).toHaveURL(/\/module$/)
   await expect(page.locator("#app-sidebar")).toHaveCount(0)
@@ -464,14 +440,7 @@ test("remembered module context is isolated by account", async ({ page }) => {
     sessionStorage.setItem("nexus.workspace.actor", "people-hr"),
   )
   await page.goto("/messages?mode=internal")
-  const menu = mainMenu(page)
-  await expect(
-    menu.getByRole("link", { name: "Switch Workspace", exact: true }),
-  ).toBeVisible()
-  await expect(menu.getByText("People & HR", { exact: true })).toHaveCount(0)
-  await expect(
-    menu.getByRole("link", { name: "Employee Management" }),
-  ).toHaveCount(0)
+  await expect(page.locator("#app-sidebar")).toHaveCount(0)
 })
 
 test("authorized deep links replace the previous module and browser history restores it", async ({

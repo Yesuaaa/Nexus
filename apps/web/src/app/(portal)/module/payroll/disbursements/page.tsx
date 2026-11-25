@@ -1,5 +1,7 @@
 "use client"
 
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
+
 import { useState } from "react"
 import {
   Ban,
@@ -563,6 +565,7 @@ export default function DisbursementsPage() {
                           onClick={() => openBatch(row.id)}
                         >
                           <Eye size={15} aria-hidden="true" />
+                          <HoverTooltip>View disbursement batch</HoverTooltip>
                         </Button>
                       </ResponsiveDataTableCell>
                     </ResponsiveDataTableRow>

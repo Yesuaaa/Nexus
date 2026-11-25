@@ -1,5 +1,7 @@
 "use client"
 
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
+
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Eye, Plus, UsersRound } from "lucide-react"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
@@ -278,6 +280,7 @@ export function WorkspaceTeam({
                         onClick={() => setDetailId(id)}
                       >
                         <Eye size={16} aria-hidden="true" />
+                        <HoverTooltip>View team member</HoverTooltip>
                       </button>
                     </ResponsiveDataTableCell>
                   </>

@@ -1,3 +1,4 @@
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { ClientRowTable } from "@/components/ui/client-row-table"
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import Link from "next/link"
@@ -118,6 +119,7 @@ function RequestActions({
       >
         <Eye size={15} aria-hidden="true" />
         {!compact && "View request"}
+        {compact && <HoverTooltip>View request</HoverTooltip>}
       </Button>
       {chatAvailable ? (
         <Button asChild variant="outline" className={buttonClass}>
@@ -205,12 +207,16 @@ export function ClientRequestsTable({
   onRowsSettled,
   emptyMessage,
   loading,
+  error,
+  onRetry,
 }: {
   viewKey: string
   quickKey: string
   onRowsSettled?: () => void
   emptyMessage: ReactNode
   loading: boolean
+  error?: string
+  onRetry?: () => void
   requests: ServiceRequestSummary[]
   onView: (request: ServiceRequestSummary) => void
   onCancelled: () => void
@@ -233,6 +239,8 @@ export function ClientRequestsTable({
         { className: "w-[140px]", label: "Actions" },
       ]}
       emptyContent={emptyMessage}
+      error={error}
+      onRetry={onRetry}
       ariaBusy={loading}
       onRowsSettled={onRowsSettled}
       renderRow={(request) => {

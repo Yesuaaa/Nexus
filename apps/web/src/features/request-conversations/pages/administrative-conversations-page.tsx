@@ -13,6 +13,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableErrorRow,
   TableHead,
   TableHeader,
   TableRow,
@@ -93,7 +94,8 @@ function ConversationList() {
   const data = result.error && !searchPending ? undefined : result.data?.data
   const searchLoading =
     searchPending || (result.loading && result.data?.search !== settledSearch)
-  const showTable = Boolean(data) || result.loading || searchLoading
+  const showTable =
+    Boolean(data) || result.loading || searchLoading || Boolean(result.error)
   return (
     <section aria-label="Business conversation metadata">
       <p className="mb-4 text-xs text-muted-foreground">{metadataNote}</p>
@@ -135,11 +137,6 @@ function ConversationList() {
           ]}
         />
       </div>
-      {result.error && !searchPending && (
-        <p role="alert">
-          {result.error} <Button onClick={result.retry}>Retry</Button>
-        </p>
-      )}
       {showTable && (
         <>
           <Table
@@ -199,6 +196,15 @@ function ConversationList() {
                     </TableCell>
                   </TableRow>
                 )}
+              </TableBody>
+            ) : result.error ? (
+              <TableBody>
+                <TableErrorRow
+                  message={result.error}
+                  onRetry={result.retry}
+                  colSpan={6}
+                  className="min-h-[170px]"
+                />
               </TableBody>
             ) : null}
           </Table>

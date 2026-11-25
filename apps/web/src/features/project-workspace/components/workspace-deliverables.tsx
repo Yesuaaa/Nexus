@@ -1,5 +1,7 @@
 "use client"
 
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
+
 import { FormInput, FormTextarea } from "@/components/ui/form-input"
 
 import {
@@ -132,14 +134,14 @@ function ActionIcon({
       type="button"
       id={id}
       aria-label={label}
-      title={label}
       disabled={disabled}
       variant={variant}
       size="sm"
-      className="size-8 p-0 max-[560px]:size-10"
+      className="group relative size-8 p-0 max-[560px]:size-10"
       onClick={onClick}
     >
       {children}
+      <HoverTooltip>{label}</HoverTooltip>
     </Button>
   )
 }

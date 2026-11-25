@@ -42,6 +42,7 @@ export function SidebarRowIcon({
 
 export function SidebarLink({
   href,
+  transitionTypes,
   label,
   icon,
   active = false,
@@ -49,6 +50,7 @@ export function SidebarLink({
   onNavigate,
 }: {
   href: string
+  transitionTypes?: string[]
   label: string
   icon?: SidebarIcon
   active?: boolean
@@ -58,6 +60,7 @@ export function SidebarLink({
   return (
     <Link
       href={href}
+      transitionTypes={transitionTypes}
       aria-current={active ? "page" : undefined}
       className={cn(
         "group relative",

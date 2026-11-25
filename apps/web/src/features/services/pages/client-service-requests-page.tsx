@@ -199,19 +199,9 @@ export function ClientServiceRequestsPage() {
             </Button>
           )}
         </div>
-        {list.error ? (
-          <div
-            role="alert"
-            className="grid min-h-64 place-content-center gap-4 rounded-lg border border-[#e1e4ea] p-6 text-center text-sm text-[#52627a]"
-          >
-            <p>{list.error}</p>
-            <Button variant="outline" onClick={retry}>
-              Try again
-            </Button>
-          </div>
-        ) : !list.hasLoaded ||
-          list.searchSkeleton ||
-          (list.loading && !list.hasCurrentData && !list.previewing) ? (
+        {!list.hasLoaded ||
+        list.searchSkeleton ||
+        (list.loading && !list.hasCurrentData && !list.previewing) ? (
           <ClientTableSkeleton
             label="your service requests"
             columns={6}
@@ -224,6 +214,8 @@ export function ClientServiceRequestsPage() {
             quickKey={query}
             onRowsSettled={list.onRowsSettled}
             loading={list.loading}
+            error={list.error}
+            onRetry={retry}
             emptyMessage={
               list.loading && list.previewing ? (
                 <span role="status">Searching…</span>

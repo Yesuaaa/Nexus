@@ -14,6 +14,26 @@ import {
   register,
 } from "../src/features/auth/api/auth-api.ts"
 
+test("[PG-001-F001-A001-T001] getToken returns null when sessionStorage access throws", (t) => {
+  const descriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "sessionStorage",
+  )
+  Object.defineProperty(globalThis, "sessionStorage", {
+    configurable: true,
+    get() {
+      throw new Error("Storage access blocked")
+    },
+  })
+  t.after(() => {
+    if (descriptor)
+      Object.defineProperty(globalThis, "sessionStorage", descriptor)
+    else delete globalThis.sessionStorage
+  })
+
+  assert.equal(getToken(), null)
+})
+
 for (const operation of ["login", "register"]) {
   test(`${operation} rejects malformed authentication responses before writing credentials`, async (t) => {
     const values = new Map()

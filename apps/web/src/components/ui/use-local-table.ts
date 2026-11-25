@@ -48,8 +48,8 @@ export function useTableSort<K extends string>(
 /**
  * Client-side pagination over already filtered and sorted rows: clamps the
  * page, slices the visible rows, and keeps the pagination footer in step
- * with the row animation. The page returns to 1 whenever `view` changes, so
- * filter and sort handlers don't need to reset it.
+ * with the row animation. Local pagination returns to 1 whenever `view`
+ * changes. For URL-backed pagination, the caller owns the requested page.
  *
  *   const sort = useTableSort<SortKey>("name", "asc")
  *   const filtered = useMemo(() => …, [items, query, sort.sortKey, sort.direction])
@@ -92,13 +92,19 @@ export function useLocalTable<T>(
 
   const viewKey = JSON.stringify(view)
   const [paging, setPaging] = useState({ viewKey, page: 1 })
-  if (paging.viewKey !== viewKey) {
-    setPaging({ viewKey, page: 1 })
-  }
-  const requestedPage =
-    controlledPage ?? (paging.viewKey === viewKey ? paging.page : 1)
+  const viewChanged = paging.viewKey !== viewKey
+  const requestedPage = controlledPage ?? (viewChanged ? 1 : paging.page)
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize))
-  const page = Math.min(requestedPage, totalPages)
+  const page = Number.isInteger(requestedPage)
+    ? Math.max(1, Math.min(requestedPage, totalPages))
+    : 1
+  const pending = loading || searchPending
+  if (
+    controlledPage === undefined &&
+    (viewChanged || (!pending && page !== paging.page))
+  ) {
+    setPaging({ viewKey, page })
+  }
   const total = rows.length
 
   const visible = useMemo(
@@ -109,7 +115,6 @@ export function useLocalTable<T>(
     () => ({ page, total, viewKey }),
     [page, total, viewKey],
   )
-  const pending = loading || searchPending
   const { footer: settled, onRowsSettled } = useTableFooter(
     tableResult,
     pending,

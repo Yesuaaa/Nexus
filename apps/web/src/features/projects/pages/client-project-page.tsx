@@ -1,5 +1,7 @@
 "use client"
 
+import { HoverTooltip } from "@/components/ui/hover-tooltip"
+
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import Link from "next/link"
 import { useState } from "react"
@@ -255,7 +257,7 @@ export function ClientProjectPage({
                 aria-valuenow={progressPercent}
                 aria-valuemin={0}
                 aria-valuemax={100}
-                aria-label="Overall project progress"
+                aria-label="Task progress"
               >
                 <div
                   className="h-2 rounded-full bg-[#294c96] transition-[width] motion-reduce:transition-none"
@@ -554,6 +556,7 @@ export function ClientProjectPage({
                       aria-label={`View ${deliverable.title}`}
                     >
                       <Eye size={16} aria-hidden="true" />
+                      <HoverTooltip>View deliverable</HoverTooltip>
                     </Link>
                   </li>
                 )

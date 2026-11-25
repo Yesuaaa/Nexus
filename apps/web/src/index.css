@@ -6,6 +6,8 @@
 @source not "./app/(portal)";
 @source "./components/ui";
 @source "./features/auth";
+@source "./features/landing";
+@source "./features/public-services";
 @source "./features/not-found";
 @source "./lib";
 
@@ -53,6 +55,14 @@ body {
 }
 .request-icon-float {
   animation: request-icon-float 2.8s ease-in-out infinite alternate;
+}
+@keyframes landing-service-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
 }
 @keyframes service-icon-float {
   from {

@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 
 type AuthLayoutProps = {
   centered?: boolean
+  clientSplit?: boolean
   language: string
   visual: ReactNode
   header: ReactNode
@@ -11,6 +12,7 @@ type AuthLayoutProps = {
 
 export function AuthLayout({
   centered = false,
+  clientSplit = false,
   language,
   visual,
   header,
@@ -20,12 +22,34 @@ export function AuthLayout({
   if (centered) {
     return (
       <main
-        className="relative flex h-[100vh] flex-col bg-background text-foreground"
+        className="relative min-h-svh overflow-hidden bg-[#f3f6fa] text-foreground"
         lang={language}
       >
-        <div className="absolute inset-x-0 top-0 z-10">{header}</div>
-        <section className="flex h-full min-h-0 items-center justify-center px-6 py-8">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle,_rgba(57,92,132,0.18)_1px,_transparent_1px)] bg-[length:18px_18px] opacity-70"
+        />
+        <div className="relative z-10 flex min-h-svh flex-col">
+          {header}
+          <section className="flex flex-1 items-center justify-center px-5 pt-4 pb-16 sm:px-6">
+            {children}
+          </section>
+          {footer}
+        </div>
+      </main>
+    )
+  }
+  if (clientSplit) {
+    return (
+      <main
+        className="grid h-screen min-h-0 grid-cols-[minmax(0,60%)_minmax(400px,40%)] overflow-hidden bg-background text-foreground max-[850px]:block"
+        lang={language}
+      >
+        {visual}
+        <section className="flex h-full min-h-0 min-w-0 flex-col overflow-y-auto bg-background">
+          {header}
           {children}
+          {footer}
         </section>
       </main>
     )

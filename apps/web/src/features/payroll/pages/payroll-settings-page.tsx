@@ -318,7 +318,7 @@ export function PayrollSettingsPage() {
                                     }
                                   >
                                     <Eye size={14} aria-hidden="true" />
-                                    <HoverTooltip side="top-end">
+                                    <HoverTooltip>
                                       View schedule details
                                     </HoverTooltip>
                                   </Button>
