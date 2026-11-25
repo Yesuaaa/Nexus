@@ -80,12 +80,13 @@ export const publicServicesService = {
       fingerprint,
     })
   },
-  async listInquiries(page: unknown, status: unknown) {
+  async listInquiries(page: unknown, status: unknown, query?: unknown) {
     return publicServicesRepository.listInquiries(
       pageInput(page),
       status === undefined || status === "ALL"
         ? undefined
         : statusInput(status),
+      searchInput(query),
     )
   },
   async review(id: unknown, actorId: string, body: unknown) {

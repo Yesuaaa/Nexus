@@ -95,6 +95,7 @@ function NavigationIcon({
     clients: Contact,
     departments: DepartmentIcon,
     services: ServiceIcon,
+    "service-inquiries": Inbox,
     "service-requests": ClipboardList,
     "module-service-operations": ClipboardList,
     calendar: CalendarDays,

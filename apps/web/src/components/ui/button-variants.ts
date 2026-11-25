@@ -18,6 +18,10 @@ export const buttonTones = {
   danger:
     "bg-[#bc3649] text-white hover:bg-[#a42f40] disabled:hover:bg-[#bc3649]",
 } as const
+export const conversationRowTones = {
+  selected: "bg-[#203f8c] text-white",
+  idle: "text-[#182235] hover:bg-[#e9eef5] hover:text-[#203a78]",
+} as const
 // Hover uses plain `hover:` (not `hover:enabled:`) so it also works on links;
 // the `disabled:hover:` reset keeps disabled raw <button>s from darkening.
 
@@ -31,6 +35,8 @@ export const buttonVariants = cva(
         outline:
           "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
         ghost: "bg-transparent hover:bg-accent hover:text-accent-foreground",
+        conversation: conversationRowTones.idle,
+        conversationSelected: conversationRowTones.selected,
         brand: buttonTones.brand,
         brandOutline: buttonTones.brandOutline,
         danger: buttonTones.danger,
@@ -43,6 +49,8 @@ export const buttonVariants = cva(
         boardAction: "h-8 w-8 p-0 text-xs",
         boardCard:
           "min-h-11 w-full flex-col items-start justify-start gap-1 whitespace-normal px-3 py-2 pr-10 text-left text-xs",
+        inboxRow:
+          "min-h-20 w-full items-start justify-start gap-3 whitespace-normal px-4 py-3 text-left text-xs",
         shortcutTile:
           "min-h-11 whitespace-normal px-2 py-2 text-center text-xs @min-[18rem]/shortcuts:min-h-20 @min-[18rem]/shortcuts:flex-col",
         shortcut:
