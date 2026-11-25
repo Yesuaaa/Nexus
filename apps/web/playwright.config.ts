@@ -31,15 +31,23 @@ export default defineConfig({
   ],
   webServer: process.env.NEXUS_E2E_BASE_URL
     ? undefined
-    : {
-        command: "pnpm build && node scripts/start.mjs",
-        url: "http://127.0.0.1:5273",
-        env: {
-          NODE_ENV: "production",
-          PORT: "5273",
-          HOSTNAME: "127.0.0.1",
+    : [
+        {
+          command: "node e2e/support/public-service-upstream.mjs",
+          url: "http://127.0.0.1:5274/api/public/services",
+          reuseExistingServer: false,
         },
-        reuseExistingServer: false,
-        timeout: 120_000,
-      },
+        {
+          command: "pnpm build && node scripts/start.mjs",
+          url: "http://127.0.0.1:5273",
+          env: {
+            NODE_ENV: "production",
+            PORT: "5273",
+            HOSTNAME: "127.0.0.1",
+            API_PROXY_TARGET: "http://127.0.0.1:5274",
+          },
+          reuseExistingServer: false,
+          timeout: 120_000,
+        },
+      ],
 })

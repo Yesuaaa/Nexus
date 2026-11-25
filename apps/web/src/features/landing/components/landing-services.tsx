@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type CSSProperties } from "react"
+import { useRef, useState, type CSSProperties, type PointerEvent } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { motion, useReducedMotion } from "framer-motion"
@@ -40,8 +40,21 @@ export function LandingServices() {
     },
   )
   const [selectedIndex, setSelectedIndex] = useState(0)
+  const pointerPosition = useRef<{ x: number; y: number } | null>(null)
   const services = resource.data?.services.slice(0, 5) ?? []
   const selected = services[selectedIndex]
+
+  function previewOnPointerMove(
+    event: PointerEvent<HTMLAnchorElement>,
+    index: number,
+  ) {
+    const { clientX: x, clientY: y } = event
+    const previous = pointerPosition.current
+    // Rows can move under a stationary pointer during scrolling.
+    if (previous?.x === x && previous.y === y) return
+    pointerPosition.current = { x, y }
+    if (index !== selectedIndex) setSelectedIndex(index)
+  }
 
   if (resource.loading)
     return (
@@ -134,17 +147,17 @@ export function LandingServices() {
           >
             <Link
               href={`/explore/services/${encodeURIComponent(service.id)}`}
-              onPointerMove={() => setSelectedIndex(index)}
+              onPointerMove={(event) => previewOnPointerMove(event, index)}
               onFocus={() => setSelectedIndex(index)}
-              className="group flex w-full cursor-pointer items-start gap-4 text-left transition-[color,translate] duration-500 ease-out hover:translate-x-2 focus-visible:translate-x-2 motion-reduce:translate-x-0 motion-reduce:transition-none"
+              className="group flex w-full cursor-pointer items-start gap-4 text-left"
             >
               <span
-                className={`pt-[0.45em] text-xs font-semibold transition-transform duration-500 ease-out group-hover:translate-x-2 group-focus-visible:translate-x-2 motion-reduce:translate-x-0 motion-reduce:transition-none ${selectedIndex === index ? "text-[#203f8c]" : "text-(color:--landing-muted)"}`}
+                className={`pointer-events-none pt-[0.45em] text-xs font-semibold transition-transform duration-500 ease-out group-hover:translate-x-4 group-focus-visible:translate-x-4 motion-reduce:translate-x-0 motion-reduce:transition-none ${selectedIndex === index ? "text-[#203f8c]" : "text-(color:--landing-muted)"}`}
               >
                 [{String(index + 1).padStart(2, "0")}]
               </span>
               <span
-                className={`text-[clamp(28px,5vw,68px)] leading-[1.12] font-medium tracking-[-0.055em] transition-colors motion-reduce:transition-none ${selectedIndex === index ? "text-[#203f8c]" : "text-(color:--landing-muted) group-hover:text-(color:--landing-ink)"}`}
+                className={`pointer-events-none text-[clamp(28px,5vw,68px)] leading-[1.12] font-medium tracking-[-0.055em] transition-[color,translate] duration-500 ease-out group-hover:translate-x-2 group-focus-visible:translate-x-2 motion-reduce:translate-x-0 motion-reduce:transition-none ${selectedIndex === index ? "text-[#203f8c]" : "text-(color:--landing-muted) group-hover:text-(color:--landing-ink)"}`}
               >
                 {service.name}
               </span>

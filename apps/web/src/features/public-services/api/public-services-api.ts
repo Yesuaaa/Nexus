@@ -1,8 +1,4 @@
-import type {
-  InquiryInput,
-  PublicService,
-  ServiceListing,
-} from "../model/types"
+import type { InquiryInput, ServiceListing } from "../model/types"
 
 export class PublicServiceError extends Error {
   constructor(
@@ -21,7 +17,9 @@ async function publicRequest<T>(
     ...options,
     cache: "no-store",
     credentials: "omit",
-    signal: options.signal ?? AbortSignal.timeout(25_000),
+    signal: options.signal
+      ? AbortSignal.any([options.signal, AbortSignal.timeout(25_000)])
+      : AbortSignal.timeout(25_000),
     headers: {
       ...(options.body ? { "Content-Type": "application/json" } : {}),
       ...options.headers,
@@ -52,13 +50,6 @@ export function listPublicServices(
   return publicRequest<ServiceListing>("/services?" + params.toString(), {
     signal,
   })
-}
-export async function getPublicService(id: string, signal?: AbortSignal) {
-  const result = await publicRequest<{ service: PublicService }>(
-    "/services/" + encodeURIComponent(id),
-    { signal },
-  )
-  return result.service
 }
 export function sendPublicInquiry(id: string, input: InquiryInput) {
   return publicRequest<{

@@ -13,7 +13,6 @@ import { LandingFooter } from "./landing-footer"
 import { ApproachCarousel } from "./approach-carousel"
 import { HeroHalftone } from "./hero-halftone"
 import { HeroStats } from "./hero-stats"
-import { LandingLoader } from "./landing-loader"
 import { LandingServices } from "./landing-services"
 import { LandingSmoothScroll } from "./landing-smooth-scroll"
 
@@ -133,109 +132,107 @@ const questions = [
 
 export function LandingPage() {
   return (
-    <LandingLoader>
-      <LandingMotion
-        className={`${sora.variable} [&_h1]:[font-family:var(--font-landing-heading),sans-serif] [&_h2]:[font-family:var(--font-landing-heading),sans-serif] [&_h3]:[font-family:var(--font-landing-heading),sans-serif]`}
+    <LandingMotion
+      className={`${sora.variable} [&_h1]:[font-family:var(--font-landing-heading),sans-serif] [&_h2]:[font-family:var(--font-landing-heading),sans-serif] [&_h3]:[font-family:var(--font-landing-heading),sans-serif]`}
+    >
+      <LandingSmoothScroll />
+      <a
+        className="fixed left-4 -top-20 z-100 [padding:12px_20px] bg-(--landing-paper) text-(color:--landing-ink) focus:top-4"
+        href="#main-content"
       >
-        <LandingSmoothScroll />
-        <a
-          className="fixed left-4 -top-20 z-100 [padding:12px_20px] bg-(--landing-paper) text-(color:--landing-ink) focus:top-4"
-          href="#main-content"
-        >
-          Skip to content
-        </a>
-        <LandingHeader />
+        Skip to content
+      </a>
+      <LandingHeader />
 
-        <main id="main-content">
-          <PinnedHero>
-            <section className={heroClass} aria-labelledby="hero-heading">
-              <div className={heroCopyClass} data-reveal>
-                <h1 id="hero-heading">
-                  CREATIVE IDEAS.
-                  <br />
-                  <span className="whitespace-nowrap !text-inherit">
-                    CONNECTED GROWTH.
-                  </span>
-                </h1>
-                <p>
-                  Bring your brand to life through creative content, digital
-                  marketing, and web experiences designed around your goals.
-                </p>
-                <div className={heroActionsClass}>
-                  <Link href="/explore/services" className={buttonPrimaryClass}>
-                    Create an Account to Start Your Inquiry
-                  </Link>
-                  <Link href="/login" className={buttonSecondaryClass}>
-                    Sign in
-                  </Link>
-                </div>
-              </div>
-              <HeroHalftone />
-              <HeroStats />
-            </section>
-          </PinnedHero>
-
-          <div className="relative z-10 bg-(--landing-paper)">
-            <ServiceMarquee />
-
-            <section
-              id="expertise"
-              className="mx-auto min-h-[100vh] max-w-[1360px] px-12 max-[1101px]:px-8 max-[761px]:px-6"
-              aria-label="Services"
-            >
-              <LandingServices />
-            </section>
-          </div>
-
-          <ApproachCarousel />
-
-          <div className="relative z-10 bg-(--landing-paper)">
-            <div className="relative isolate overflow-hidden">
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0"
-              >
-                <HeroHalftone background />
-              </div>
-              <section
-                id="faq"
-                className={faqClass}
-                aria-labelledby="faq-heading"
-              >
-                <h2 id="faq-heading" data-reveal className="!max-w-none">
-                  <span className="block whitespace-nowrap !text-inherit">
-                    A LITTLE MORE
-                  </span>
-                  <span className="block !text-[#203f8c]">CLARITY.</span>
-                </h2>
-                <LandingFaq items={questions} />
-              </section>
-            </div>
-
-            <div className="mx-auto max-w-[1360px] px-12 max-[1101px]:px-8 max-[761px]:px-6">
-              <section
-                id="contact"
-                className={contactClass}
-                aria-labelledby="contact-heading"
-                data-reveal
-              >
-                <div className="relative z-10">
-                  <ContactHeading />
-                </div>
-                <Link
-                  href="/register"
-                  className={`${buttonLightClass} relative z-10`}
-                >
-                  Start a conversation
-                  <ArrowUpRight size={20} aria-hidden="true" />
+      <main id="main-content">
+        <PinnedHero>
+          <section className={heroClass} aria-labelledby="hero-heading">
+            <div className={heroCopyClass} data-reveal>
+              <h1 id="hero-heading">
+                CREATIVE IDEAS.
+                <br />
+                <span className="whitespace-nowrap !text-inherit">
+                  CONNECTED GROWTH.
+                </span>
+              </h1>
+              <p>
+                Bring your brand to life through creative content, digital
+                marketing, and web experiences designed around your goals.
+              </p>
+              <div className={heroActionsClass}>
+                <Link href="/explore/services" className={buttonPrimaryClass}>
+                  Explore services
                 </Link>
-              </section>
+                <Link href="/login" className={buttonSecondaryClass}>
+                  Sign in
+                </Link>
+              </div>
             </div>
-          </div>
-        </main>
+            <HeroHalftone />
+            <HeroStats />
+          </section>
+        </PinnedHero>
 
-        <LandingFooter />
-      </LandingMotion>
-    </LandingLoader>
+        <div className="relative z-10 bg-(--landing-paper)">
+          <ServiceMarquee />
+
+          <section
+            id="expertise"
+            className="mx-auto min-h-[100vh] max-w-[1360px] px-12 max-[1101px]:px-8 max-[761px]:px-6"
+            aria-label="Services"
+          >
+            <LandingServices />
+          </section>
+        </div>
+
+        <ApproachCarousel />
+
+        <div className="relative z-10 bg-(--landing-paper)">
+          <div className="relative isolate overflow-hidden">
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0"
+            >
+              <HeroHalftone background />
+            </div>
+            <section
+              id="faq"
+              className={faqClass}
+              aria-labelledby="faq-heading"
+            >
+              <h2 id="faq-heading" data-reveal className="!max-w-none">
+                <span className="block whitespace-nowrap !text-inherit">
+                  A LITTLE MORE
+                </span>
+                <span className="block !text-[#203f8c]">CLARITY.</span>
+              </h2>
+              <LandingFaq items={questions} />
+            </section>
+          </div>
+
+          <div className="mx-auto max-w-[1360px] px-12 max-[1101px]:px-8 max-[761px]:px-6">
+            <section
+              id="contact"
+              className={contactClass}
+              aria-labelledby="contact-heading"
+              data-reveal
+            >
+              <div className="relative z-10">
+                <ContactHeading />
+              </div>
+              <Link
+                href="/register"
+                className={`${buttonLightClass} relative z-10`}
+              >
+                Start a conversation
+                <ArrowUpRight size={20} aria-hidden="true" />
+              </Link>
+            </section>
+          </div>
+        </div>
+      </main>
+
+      <LandingFooter />
+    </LandingMotion>
   )
 }

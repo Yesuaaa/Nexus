@@ -2,17 +2,16 @@
 
 ## Scope and visitor journey
 
-Converyn's public catalog is at /explore/services. The existing signed-in /services route and its booking workflow are unchanged.
+Converyn's public catalog is at `/explore/services`. Search and pagination are part of the URL, so going back from a service restores the catalog view.
 
 1. Browse or search active services without signing in.
-2. Open /explore/services/:id for descriptions, benefits, public plans/prices, and customer preparation requirements.
-3. Choose "Inquire about this service" to open /explore/services/:id/inquire with the service prefilled.
-4. Submit name, email, contact number, subject, requirements, and an acknowledgement. A receipt confirms pending company review, not a booking or agreement.
-5. Administrators review the independent inquiry in /service-inquiries and record follow-up.
+2. Open `/explore/services/:id` for details rendered by the web server. A missing or inactive service returns 404. A temporary upstream failure offers a retry.
+3. Choose the inquiry action to open `/register?service=:id`. The legacy inquiry URL redirects there, and switching to sign-in preserves the service ID.
+4. After authentication, clients enter the existing request flow for the selected service. If another request draft exists, the client is prompted before switching services. Unavailable services cannot be started.
 
-Discovery and inquiry submission do not create an account, booking, appointment, staff/team assignment, project, invoice, or payment obligation. No email is automatically sent. Follow-up is recorded by authorized personnel using the visitor's contact details.
+Opening the request flow does not submit a request. Clients choose a package and enter their requirements in the existing signed-in flow before submitting for review.
 
-The header's Services item and landing-page service/conversation CTAs open the public catalog. Footer items remain hover-only text. The Contact navigation item opens the homepage contact section. That section's conversation CTA opens the catalog so the visitor can choose a service. Catalog cards offer both View details and Inquire, while service details link to the selected service's inquiry form.
+The separate guest inquiry POST endpoint and its administrative inbox remain available for existing callers and records. The public pages no longer display a guest inquiry form. The sections below document that API and its data rules.
 
 ## Public data policy
 
@@ -22,7 +21,7 @@ There is no department publication setting, so internal departments are delibera
 
 ## API
 
-All requests are same-origin through Next's existing /api proxy. Public endpoints require no Bearer token and have no cookie session.
+Browser requests are same-origin through Next's existing `/api` proxy. The server-rendered detail page reads the same public API through the configured `API_PROXY_TARGET`. Public endpoints require no Bearer token and have no cookie session.
 
 | Endpoint                                         | Purpose                                                                    |
 | ------------------------------------------------ | -------------------------------------------------------------------------- |
@@ -68,7 +67,7 @@ The portal route policy and Service Management link mirror the server permission
 Migration: apps/api/prisma/migrations/20261115120000_public_service_inquiries/migration.sql.
 Prisma client generation was run. On 2026-11-15, the additive inquiry migration was applied successfully to the configured Supabase database using prisma migrate deploy. The deployment action first refused unrelated pending migrations; only 20261115120000_public_service_inquiries was pending and applied.
 
-No format, lint, typecheck, build, unit, integration, or regression commands were run, per the user's instruction. Implementation is not a claim of passing verification. The successful migration command confirms the schema change only; it is not an application runtime or end-to-end verification.
+At the time of the original migration, format, lint, typecheck, build, and test commands were deferred. The migration result records the schema change only.
 
 ## Local development route recovery
 

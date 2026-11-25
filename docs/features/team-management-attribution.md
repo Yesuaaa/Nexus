@@ -2,7 +2,7 @@
 
 Developed: 2026-11-15.
 
-All three existing Team mutation endpoints now attribute their authenticated administrator and actual Team/Employee/User effects within their existing transactions. This follows the [original 26-endpoint audit](administrative-mutation-attribution-audit.md), [foundation](administrative-attribution-persistence-foundation.md), [Employee attribution](employee-update-head-attribution.md), [Department deletion](department-deletion-attribution.md), and [member attribution](department-member-attribution.md).
+All three existing Team mutation endpoints now attribute their authenticated administrator and actual Team/Employee/User effects within their existing transactions. This follows the [original 26-endpoint audit](administrative-mutation-attribution-audit.md), [foundation](administrative-attribution-persistence-foundation.md), [Employee attribution](employee-update-head-attribution.md), [Department deletion](department-deletion-attribution.md), and [Smember attribution](department-member-attribution.md).
 
 This implements Team attribution only. No schema, migration, action/origin enum, permission grant, operational identity, account lifecycle feature, new business cascade, history API/UI, Diagnostics or System Logs is introduced. Existing Department/Employee/Account/Client workflows and private records retain their authorization. No broader authorization, concurrency or browser-backlog remediation is attempted.
 
