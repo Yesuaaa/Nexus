@@ -8,7 +8,6 @@ import {
   Eye,
   Plus,
   RefreshCw,
-  Search,
 } from "lucide-react"
 import { PageHeader, PageHeaderButton } from "@/components/layout/page-header"
 import { contentClass } from "@/components/layout/styles"
@@ -23,6 +22,7 @@ import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Pill } from "@/components/ui/pill"
 import {
+  DataTableEmptyRow,
   ResponsiveDataTable,
   ResponsiveDataTableBody,
   ResponsiveDataTableCell,
@@ -460,32 +460,11 @@ export function PayrollRunsPage({
                 ]}
               />
             ) : list.rows.length === 0 ? (
-              <ResponsiveDataTableRow>
-                <ResponsiveDataTableCell aria-colspan={7} className="p-3">
-                  <EmptyState
-                    icon={list.previewing ? Search : CalendarRange}
-                    size="sm"
-                    title={
-                      hasFilters ? "No payroll runs match" : "No draft runs yet"
-                    }
-                    description={
-                      hasFilters
-                        ? "Adjust the search or filters to see other runs."
-                        : "Generate periods from the configured schedule, then create a draft run for one of them."
-                    }
-                    action={
-                      !hasFilters && canManage && !approvals ? (
-                        <Button
-                          variant="outline"
-                          onClick={() => setPanelMode("generate")}
-                        >
-                          Generate periods
-                        </Button>
-                      ) : undefined
-                    }
-                  />
-                </ResponsiveDataTableCell>
-              </ResponsiveDataTableRow>
+              <DataTableEmptyRow colSpan={7}>
+                {hasFilters
+                  ? "No payroll runs match your search or filters."
+                  : "No draft runs yet."}
+              </DataTableEmptyRow>
             ) : (
               list.rows.map((run) => {
                 const calculation = approvals
@@ -1700,18 +1679,10 @@ function PayrollRunDetailsPanel({
                                 }
                               />
                             ) : items.rows.length === 0 ? (
-                              <ResponsiveDataTableRow>
-                                <ResponsiveDataTableCell
-                                  aria-colspan={employeeColumnCount}
-                                  className="p-3"
-                                >
-                                  <EmptyState
-                                    size="sm"
-                                    title="No employee results"
-                                    description="No employees were included in this calculation revision."
-                                  />
-                                </ResponsiveDataTableCell>
-                              </ResponsiveDataTableRow>
+                              <DataTableEmptyRow colSpan={employeeColumnCount}>
+                                No employee results in this calculation
+                                revision.
+                              </DataTableEmptyRow>
                             ) : (
                               items.rows.map((item) => (
                                 <ResponsiveDataTableRow

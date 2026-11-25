@@ -58,6 +58,7 @@ export function WorkspaceListTable({
   viewKey,
   quickKey,
   searching = false,
+  emptyMessage,
   onRowsSettled,
   archiveView,
   onChanged,
@@ -75,6 +76,7 @@ export function WorkspaceListTable({
   viewKey: string
   quickKey: string
   searching?: boolean
+  emptyMessage?: string
   onRowsSettled?: () => void
   archiveView: boolean
   onChanged: () => void
@@ -148,11 +150,14 @@ export function WorkspaceListTable({
             onRowsSettled={onRowsSettled}
             defaultRowHeight={58}
             className="relative min-w-0 overflow-x-clip"
+            emptyHeight={170}
             emptyContent={
               loading ? (
                 <span role="status">
                   {searching ? "Searching…" : "Refreshing project workspaces…"}
                 </span>
+              ) : emptyMessage ? (
+                emptyMessage
               ) : archiveView ? (
                 "No archived projects match these filters."
               ) : (

@@ -197,6 +197,7 @@ for (const width of [1440, 390]) {
       .getByRole("region", { name: "Project list" })
       .getByRole("table")
     await page.clock.install()
+    await page.clock.pauseAt(new Date())
     await search.fill("Beta")
     await expect(projectTable).toHaveAttribute("aria-busy", "true")
     await expect(projectTable.getByRole("status")).toHaveText(

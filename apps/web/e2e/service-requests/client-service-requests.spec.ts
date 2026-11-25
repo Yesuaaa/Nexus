@@ -177,7 +177,11 @@ for (const width of [1440, 390]) {
       .getByRole("searchbox", { name: "Search service requests" })
       .fill("unmatched")
     await expect(
-      page.getByRole("heading", { name: "No matching requests" }),
+      page
+        .getByText("No service requests match your search or filters.", {
+          exact: true,
+        })
+        .filter({ visible: true }),
     ).toBeVisible()
     await expect(
       page.getByRole("link", { name: "New Service Request", exact: true }),
@@ -188,6 +192,7 @@ for (const width of [1440, 390]) {
 test("request history retries errors and shows the first-request empty state", async ({
   page,
 }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
   await session(page)
   let unavailable = true
   await page.route("**/api/client/service-requests?*", (route) => {
@@ -218,11 +223,21 @@ test("request history retries errors and shows the first-request empty state", a
   )
   unavailable = false
   await page.getByRole("button", { name: "Try again", exact: true }).click()
+  const table = page.getByRole("table", { name: "Your service requests" })
   await expect(
-    page.getByRole("heading", { name: "No service requests yet" }),
+    table.getByText(
+      "No service requests yet. Browse services to get started.",
+      { exact: true },
+    ),
   ).toBeVisible()
   await expect(
-    page.getByRole("link", { name: "Browse services", exact: true }),
+    table.getByRole("columnheader", {
+      name: "Service and package",
+      exact: true,
+    }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("link", { name: "New Service Request", exact: true }),
   ).toHaveAttribute("href", "/services")
 })
 

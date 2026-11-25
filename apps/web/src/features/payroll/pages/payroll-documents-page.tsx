@@ -24,6 +24,7 @@ import {
 import { EmptyState } from "@/components/ui/empty-state"
 import {
   DataTableErrorRow,
+  DataTableEmptyRow,
   ResponsiveDataTable,
   ResponsiveDataTableBody,
   ResponsiveDataTableCell,
@@ -323,11 +324,13 @@ function RecordTable({
   columnClassNames,
   tableClassName,
   responsive,
+  emptyMessage = "No records to show.",
 }: {
   headings: string[]
   children: ReactNode
   loading: boolean
   empty: boolean
+  emptyMessage?: string
   alignments?: Record<string, "center" | "right">
   columnClassNames?: Record<string, string>
   tableClassName?: string
@@ -367,14 +370,9 @@ function RecordTable({
               colSpan={headings.length}
             />
           ) : empty ? (
-            <ResponsiveDataTableRow>
-              <ResponsiveDataTableCell
-                aria-colspan={headings.length}
-                className="grid min-h-[90px] place-content-center p-6 text-center text-xs text-[#65718a]"
-              >
-                <span role="status">{responsive.emptyMessage}</span>
-              </ResponsiveDataTableCell>
-            </ResponsiveDataTableRow>
+            <DataTableEmptyRow colSpan={headings.length}>
+              {responsive.emptyMessage}
+            </DataTableEmptyRow>
           ) : (
             children
           )}
@@ -419,11 +417,9 @@ function RecordTable({
           {empty ? (
             <TableRow>
               <TableCell colSpan={headings.length} className="p-0">
-                <EmptyState
-                  title="No records to show."
-                  size="sm"
-                  role="status"
-                />
+                <div className="grid min-h-[170px] place-content-center p-6 text-center text-xs text-[#7183a2]">
+                  <span role="status">{emptyMessage}</span>
+                </div>
               </TableCell>
             </TableRow>
           ) : (
@@ -1458,21 +1454,6 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
 
   const RecordRow = staff ? ResponsiveDataTableRow : TableRow
   const RecordCell = staff ? ResponsiveDataTableCell : TableCell
-  const emptyPayslips = Boolean(
-    staff &&
-    slips.data &&
-    slips.data.total === 0 &&
-    !slips.loading &&
-    !slips.error,
-  )
-  const emptyConcerns = Boolean(
-    staff &&
-    requests.data &&
-    requests.data.total === 0 &&
-    !requests.loading &&
-    !requestSearchPending &&
-    !requests.error,
-  )
   const selectedDetails =
     requestDetail.data?.id === selected?.id ? requestDetail.data : selected
   const selectedRequestDescription = selectedDetails?.messages.find(
@@ -1663,186 +1644,178 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
           </div>
         )}
         {!staff && slips.error && <Alert className="mb-3">{slips.error}</Alert>}
-        {emptyPayslips ? (
-          <EmptyState
-            title="No payslips available"
-            description="Your published payslips will appear here once they're available."
-            size="md"
-            role="status"
-          />
-        ) : (
-          <RecordTable
-            headings={[
-              "Payroll period",
-              ...(!staff ? ["Employee", "Revision"] : []),
-              "Reference",
-              "Net pay",
-              "Publication",
-              staff ? "Actions" : "Details",
-            ]}
-            alignments={{
-              Revision: "right",
-              "Net pay": "right",
-              Actions: "center",
-              Details: "center",
-            }}
-            columnClassNames={
-              staff
-                ? undefined
-                : {
-                    "Payroll period": "w-[15%]",
-                    Employee: "w-[21%]",
-                    Revision: "w-[9%]",
-                    Reference: "w-[18%]",
-                    "Net pay": "w-[13%]",
-                    Publication: "w-[16%]",
-                    Details: "w-20",
-                  }
-            }
-            tableClassName={staff ? undefined : "table-fixed min-w-[680px]"}
-            responsive={
-              staff
-                ? {
-                    label: "My payslips",
-                    grid: staffPayslipGrid,
-                    emptyMessage: "No payslips available.",
-                    error: slips.error,
-                    retry: slips.retry,
-                  }
-                : undefined
-            }
-            loading={slips.loading || payslipSearchPending}
-            empty={!slips.error && !slips.data?.rows.length}
-          >
-            {slips.data?.rows.map((row) => (
-              <RecordRow
-                key={row.id}
+        <RecordTable
+          headings={[
+            "Payroll period",
+            ...(!staff ? ["Employee", "Revision"] : []),
+            "Reference",
+            "Net pay",
+            "Publication",
+            staff ? "Actions" : "Details",
+          ]}
+          alignments={{
+            Revision: "right",
+            "Net pay": "right",
+            Actions: "center",
+            Details: "center",
+          }}
+          columnClassNames={
+            staff
+              ? undefined
+              : {
+                  "Payroll period": "w-[15%]",
+                  Employee: "w-[21%]",
+                  Revision: "w-[9%]",
+                  Reference: "w-[18%]",
+                  "Net pay": "w-[13%]",
+                  Publication: "w-[16%]",
+                  Details: "w-20",
+                }
+          }
+          tableClassName={staff ? undefined : "table-fixed min-w-[680px]"}
+          responsive={
+            staff
+              ? {
+                  label: "My payslips",
+                  grid: staffPayslipGrid,
+                  emptyMessage: "No payslips available.",
+                  error: slips.error,
+                  retry: slips.retry,
+                }
+              : undefined
+          }
+          loading={slips.loading || payslipSearchPending}
+          emptyMessage="No payslips available."
+          empty={!slips.error && !slips.data?.rows.length}
+        >
+          {slips.data?.rows.map((row) => (
+            <RecordRow
+              key={row.id}
+              className={
+                staff ? staffPayslipGrid + " " + staffTableRow : undefined
+              }
+            >
+              <RecordCell>
+                {staff && (
+                  <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                    Payroll period
+                  </span>
+                )}
+                {row.period.cutoffLabel}
+              </RecordCell>
+              {!staff && (
+                <>
+                  <RecordCell>
+                    <span
+                      className="block truncate font-medium"
+                      title={row.employeeName}
+                    >
+                      {row.employeeName}
+                    </span>
+                    <span
+                      className="block truncate text-muted-foreground"
+                      title={row.employeeNumber}
+                    >
+                      {row.employeeNumber}
+                    </span>
+                  </RecordCell>
+                  <RecordCell className="text-right tabular-nums">
+                    {row.revision}
+                  </RecordCell>
+                </>
+              )}
+              <RecordCell className={staff ? "break-all" : undefined}>
+                {staff && (
+                  <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                    Reference
+                  </span>
+                )}
+                {staff ? (
+                  row.reference
+                ) : (
+                  <span className="block truncate" title={row.reference}>
+                    {row.reference}
+                  </span>
+                )}
+              </RecordCell>
+              <RecordCell
+                className={staff ? undefined : "text-right tabular-nums"}
+              >
+                {staff && (
+                  <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                    Net pay
+                  </span>
+                )}
+                {staff ? money(row, row.net) : formatPayrollMoney(row.net)}
+              </RecordCell>
+              <RecordCell>
+                {staff && (
+                  <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                    Publication
+                  </span>
+                )}
+                {!staff ? (
+                  <div className="grid justify-items-start gap-1">
+                    <Pill tone={row.publishedAt ? "success" : "info"}>
+                      {row.publishedAt ? "Published" : "Generated"}
+                    </Pill>
+                    {row.publishedAt && (
+                      <span className="text-muted-foreground">
+                        {timestamp(row.publishedAt)}
+                      </span>
+                    )}
+                  </div>
+                ) : row.publishedAt ? (
+                  timestamp(row.publishedAt)
+                ) : (
+                  <Pill tone="neutral">Generated</Pill>
+                )}
+              </RecordCell>
+              <RecordCell
                 className={
-                  staff ? staffPayslipGrid + " " + staffTableRow : undefined
+                  staff ? "flex flex-wrap items-center gap-2" : "text-center"
                 }
               >
-                <RecordCell>
-                  {staff && (
-                    <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                      Payroll period
-                    </span>
-                  )}
-                  {row.period.cutoffLabel}
-                </RecordCell>
-                {!staff && (
-                  <>
-                    <RecordCell>
-                      <span
-                        className="block truncate font-medium"
-                        title={row.employeeName}
-                      >
-                        {row.employeeName}
-                      </span>
-                      <span
-                        className="block truncate text-muted-foreground"
-                        title={row.employeeNumber}
-                      >
-                        {row.employeeNumber}
-                      </span>
-                    </RecordCell>
-                    <RecordCell className="text-right tabular-nums">
-                      {row.revision}
-                    </RecordCell>
-                  </>
+                {staff && (
+                  <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                    Actions
+                  </span>
                 )}
-                <RecordCell className={staff ? "break-all" : undefined}>
-                  {staff && (
-                    <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                      Reference
-                    </span>
-                  )}
-                  {staff ? (
-                    row.reference
-                  ) : (
-                    <span className="block truncate" title={row.reference}>
-                      {row.reference}
-                    </span>
-                  )}
-                </RecordCell>
-                <RecordCell
-                  className={staff ? undefined : "text-right tabular-nums"}
-                >
-                  {staff && (
-                    <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                      Net pay
-                    </span>
-                  )}
-                  {staff ? money(row, row.net) : formatPayrollMoney(row.net)}
-                </RecordCell>
-                <RecordCell>
-                  {staff && (
-                    <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                      Publication
-                    </span>
-                  )}
-                  {!staff ? (
-                    <div className="grid justify-items-start gap-1">
-                      <Pill tone={row.publishedAt ? "success" : "info"}>
-                        {row.publishedAt ? "Published" : "Generated"}
-                      </Pill>
-                      {row.publishedAt && (
-                        <span className="text-muted-foreground">
-                          {timestamp(row.publishedAt)}
-                        </span>
-                      )}
-                    </div>
-                  ) : row.publishedAt ? (
-                    timestamp(row.publishedAt)
-                  ) : (
-                    <Pill tone="neutral">Generated</Pill>
-                  )}
-                </RecordCell>
-                <RecordCell
-                  className={
-                    staff ? "flex flex-wrap items-center gap-2" : "text-center"
-                  }
-                >
-                  {staff && (
-                    <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                      Actions
-                    </span>
-                  )}
-                  {staff ? (
-                    <div className="flex flex-wrap justify-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setSlip(row)}
-                      >
-                        View
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void download(row)}
-                      >
-                        Download PDF
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex justify-center">
-                      <Button
-                        type="button"
-                        variant="rowAction"
-                        size={null}
-                        aria-label={`View payslip for ${row.employeeName}, ${row.period.cutoffLabel}, revision ${row.revision}`}
-                        onClick={() => setSlip(row)}
-                      >
-                        <Eye size={14} aria-hidden="true" />
-                        <HoverTooltip>View payslip details</HoverTooltip>
-                      </Button>
-                    </div>
-                  )}
-                </RecordCell>
-              </RecordRow>
-            ))}
-          </RecordTable>
-        )}
+                {staff ? (
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setSlip(row)}
+                    >
+                      View
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void download(row)}
+                    >
+                      Download PDF
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex justify-center">
+                    <Button
+                      type="button"
+                      variant="rowAction"
+                      size={null}
+                      aria-label={`View payslip for ${row.employeeName}, ${row.period.cutoffLabel}, revision ${row.revision}`}
+                      onClick={() => setSlip(row)}
+                    >
+                      <Eye size={14} aria-hidden="true" />
+                      <HoverTooltip>View payslip details</HoverTooltip>
+                    </Button>
+                  </div>
+                )}
+              </RecordCell>
+            </RecordRow>
+          ))}
+        </RecordTable>
         <Pages
           result={
             slips.loading ||
@@ -1913,156 +1886,144 @@ export function PayrollDocumentsPage({ staff = false }: { staff?: boolean }) {
         {!staff && requests.error && (
           <Alert className="mb-3">{requests.error}</Alert>
         )}
-        {emptyConcerns ? (
-          <EmptyState
-            title={
-              concernFiltersActive
-                ? "No concerns match those filters"
-                : "No payroll concerns"
-            }
-            description={
-              concernFiltersActive
-                ? "Try changing your search, concern type, or status."
-                : "You haven't raised any payroll concerns yet."
-            }
-            size="md"
-            role="status"
-          />
-        ) : (
-          <RecordTable
-            headings={[
-              ...(!staff ? ["Employee"] : []),
-              staff ? "Concern type" : "Type",
-              "Status",
-              staff ? "Date created" : "Created",
-              "Actions",
-            ]}
-            alignments={{ Actions: "center" }}
-            responsive={
-              staff
-                ? {
-                    label: "Payroll concerns",
-                    grid: staffRequestGrid,
-                    emptyMessage: concernFiltersActive
-                      ? "No concerns match your search or filters."
-                      : "No payroll concerns.",
-                    error: requests.error,
-                    retry: requests.retry,
-                  }
-                : undefined
-            }
-            loading={requests.loading || requestSearchPending}
-            empty={!requests.error && !requests.data?.rows.length}
-          >
-            {requests.data?.rows.map((row) => (
-              <RecordRow
-                key={row.id}
+        <RecordTable
+          headings={[
+            ...(!staff ? ["Employee"] : []),
+            staff ? "Concern type" : "Type",
+            "Status",
+            staff ? "Date created" : "Created",
+            "Actions",
+          ]}
+          alignments={{ Actions: "center" }}
+          responsive={
+            staff
+              ? {
+                  label: "Payroll concerns",
+                  grid: staffRequestGrid,
+                  emptyMessage: concernFiltersActive
+                    ? "No concerns match your search or filters."
+                    : "No payroll concerns.",
+                  error: requests.error,
+                  retry: requests.retry,
+                }
+              : undefined
+          }
+          loading={requests.loading || requestSearchPending}
+          emptyMessage={
+            concernFiltersActive
+              ? "No concerns match your search or filters."
+              : "No payroll concerns."
+          }
+          empty={!requests.error && !requests.data?.rows.length}
+        >
+          {requests.data?.rows.map((row) => (
+            <RecordRow
+              key={row.id}
+              className={
+                staff ? staffRequestGrid + " " + staffTableRow : undefined
+              }
+            >
+              {!staff && <RecordCell>{row.employee.fullName}</RecordCell>}
+              <RecordCell>
+                {staff && (
+                  <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                    Concern type
+                  </span>
+                )}
+                {humanizeEnum(row.type)}
+              </RecordCell>
+              <RecordCell>
+                {staff && (
+                  <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                    Status
+                  </span>
+                )}
+                <Pill tone="neutral">{humanizeEnum(row.status)}</Pill>
+              </RecordCell>
+              <RecordCell>
+                {staff && (
+                  <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                    Date created
+                  </span>
+                )}
+                {timestamp(row.createdAt)}
+              </RecordCell>
+              <RecordCell
                 className={
-                  staff ? staffRequestGrid + " " + staffTableRow : undefined
+                  staff ? "flex flex-wrap items-center gap-2" : "text-center"
                 }
               >
-                {!staff && <RecordCell>{row.employee.fullName}</RecordCell>}
-                <RecordCell>
-                  {staff && (
+                {staff ? (
+                  <>
                     <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                      Concern type
+                      Actions
                     </span>
-                  )}
-                  {humanizeEnum(row.type)}
-                </RecordCell>
-                <RecordCell>
-                  {staff && (
-                    <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                      Status
-                    </span>
-                  )}
-                  <Pill tone="neutral">{humanizeEnum(row.status)}</Pill>
-                </RecordCell>
-                <RecordCell>
-                  {staff && (
-                    <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                      Date created
-                    </span>
-                  )}
-                  {timestamp(row.createdAt)}
-                </RecordCell>
-                <RecordCell
-                  className={
-                    staff ? "flex flex-wrap items-center gap-2" : "text-center"
-                  }
-                >
-                  {staff ? (
-                    <>
-                      <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                        Actions
-                      </span>
-                      <RowActionsMenu
-                        triggerLabel={`Actions for payroll concern ${row.id}`}
-                        menuLabel={`Payroll concern actions for ${row.id}`}
-                        items={[
-                          {
-                            action: "view",
-                            label: (
-                              <RowActionLabel icon={Eye}>
-                                View concern
-                              </RowActionLabel>
-                            ),
-                          },
-                          ...(row.status === "OPEN"
-                            ? [
-                                {
-                                  action: "edit" as const,
-                                  label: (
-                                    <RowActionLabel icon={Pencil}>
-                                      Edit concern
-                                    </RowActionLabel>
-                                  ),
-                                },
-                                {
-                                  action: "delete" as const,
-                                  label: (
-                                    <RowActionLabel icon={Trash2}>
-                                      Delete concern
-                                    </RowActionLabel>
-                                  ),
-                                  className:
-                                    "text-destructive focus:text-destructive",
-                                },
-                              ]
-                            : []),
-                        ]}
-                        onAction={(action) => {
-                          if (action === "view") {
-                            resetForm()
-                            setCreate(false)
-                            setSelected(row)
-                          } else if (action === "edit") {
-                            startEdit(row)
-                          } else {
-                            setWithdrawalError("")
-                            setWithdrawal(row)
-                          }
-                        }}
-                      />
-                    </>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        resetForm()
-                        setCreate(false)
-                        setSelected(row)
+                    <RowActionsMenu
+                      triggerLabel={`Actions for payroll concern ${row.id}`}
+                      menuLabel={`Payroll concern actions for ${row.id}`}
+                      items={[
+                        {
+                          action: "view",
+                          label: (
+                            <RowActionLabel icon={Eye}>
+                              View concern
+                            </RowActionLabel>
+                          ),
+                        },
+                        ...(row.status === "OPEN"
+                          ? [
+                              {
+                                action: "edit" as const,
+                                label: (
+                                  <RowActionLabel icon={Pencil}>
+                                    Edit concern
+                                  </RowActionLabel>
+                                ),
+                              },
+                              {
+                                action: "delete" as const,
+                                label: (
+                                  <RowActionLabel icon={Trash2}>
+                                    Delete concern
+                                  </RowActionLabel>
+                                ),
+                                className:
+                                  "text-destructive focus:text-destructive",
+                              },
+                            ]
+                          : []),
+                      ]}
+                      onAction={(action) => {
+                        if (action === "view") {
+                          resetForm()
+                          setCreate(false)
+                          setSelected(row)
+                        } else if (action === "edit") {
+                          startEdit(row)
+                        } else {
+                          setWithdrawalError("")
+                          setWithdrawal(row)
+                        }
                       }}
-                    >
-                      View request
-                    </Button>
-                  )}
-                </RecordCell>
-              </RecordRow>
-            ))}
-          </RecordTable>
-        )}
+                    />
+                  </>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      resetForm()
+                      setCreate(false)
+                      setSelected(row)
+                    }}
+                  >
+                    View request
+                  </Button>
+                )}
+              </RecordCell>
+            </RecordRow>
+          ))}
+        </RecordTable>
         <Pages
           result={
             requests.loading ||

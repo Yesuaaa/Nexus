@@ -177,7 +177,11 @@ test("[P22-WEB-002] search, status filters, and update sorting follow the client
   ).toBeVisible()
   await search.fill("distinctive brief phrase")
   await expect(
-    main.getByText("No projects match", { exact: true }),
+    main
+      .getByText("No projects match your search or filters.", {
+        exact: true,
+      })
+      .filter({ visible: true }),
   ).toBeVisible()
 
   await search.clear()
@@ -248,7 +252,11 @@ test("[P22-WEB-003] returning to an earlier list view starts at its first page",
   await selectOption(page, "Filter projects by status", "Completed")
   await main.getByRole("searchbox", { name: "Search projects" }).fill("missing")
   await expect(
-    main.getByText("No projects match", { exact: true }),
+    main
+      .getByText("No projects match your search or filters.", {
+        exact: true,
+      })
+      .filter({ visible: true }),
   ).toBeVisible()
   await main.getByRole("searchbox", { name: "Search projects" }).clear()
   await selectOption(page, "Filter projects by status", "All Statuses")
@@ -357,4 +365,40 @@ test("[P22-WEB-007] project list supports keyboard search and responsive layouts
     { width: 768, mobileListVisible: true, desktopTableVisible: false },
     { width: 390, mobileListVisible: true, desktopTableVisible: false },
   ])
+})
+
+test("[P22-WEB-008] empty project list and filtered empty state keep table column headers visible", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await clientList(page, [])
+  await page.goto("/projects")
+  const main = page.getByRole("main", { name: "My projects" })
+  const table = main.getByRole("table", { name: "My projects" })
+  await expect(
+    table.getByText("No projects yet. Activated services will appear here.", {
+      exact: true,
+    }),
+  ).toBeVisible()
+  for (const column of [
+    "Project",
+    "Service and deliverables",
+    "Progress",
+    "Status",
+    "Last updated",
+    "Actions",
+  ]) {
+    await expect(
+      table.getByRole("columnheader", { name: column, exact: true }),
+    ).toBeVisible()
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(
+    main
+      .getByRole("list", { name: "My projects" })
+      .getByText("No projects yet. Activated services will appear here.", {
+        exact: true,
+      }),
+  ).toBeVisible()
 })
