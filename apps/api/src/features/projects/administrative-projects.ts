@@ -14,7 +14,7 @@ import {
   hasAdministrativeCapability,
 } from "../auth/auth.capabilities.js"
 import { readWorkPlan } from "../project-workspace/templates.js"
-import { renameProjectWorkspaceAdministratively } from "../project-workspace/project-workspace.service.js"
+import { renameProjectWorkspaceAdministratively } from "../project-workspace/workspace-rename.service.js"
 
 const selection = {
   id: true,
