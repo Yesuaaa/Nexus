@@ -10,7 +10,9 @@ PG-019 46/46 and its 22 controls, Stage 3 Attendance reconciliation, PG-004-D-00
 
 The complete assertion and fixture mappings are preserved in the approved existing baseline and the execution case matrix. No earlier discovery file was rewritten.
 
-## Verification-recovery preservation evidence
+## Verification-recovery preservation evidence (pre-async checkpoint)
+
+The remaining-contract notes in this historical section describe the interim state and are superseded by the final async preservation evidence below.
 
 - **Current task-entry baseline:** branch `293-test-full-system-audit-for-verifying-recent-changes`, HEAD `a367b8af813328c7dd75002faa8bd81eeb0d8863`; task-entry index and worktree were clean. This HEAD is one commit after the previously reported `6d8485e25287e9e958298eaa9f3594c03ab94149`; the intervening commit contains the PG-020 implementation and documentation. No user changes were overwritten.
 - **Client-navigation identity:** the `for (const width of [1440, 390])` loop and title `clients have direct navigation without a workspace selector at ${width}px` remain unchanged, so both 1440px and 390px registrations retain their identity.
@@ -21,6 +23,17 @@ The complete assertion and fixture mappings are preserved in the approved existi
 - **Remaining contract proof:** A011-T002 is now recorded PARTIAL. Its assertions prove the periodic in-flight guard and that scheduled reads stop after unmount; they do not observe an aborted network request or prove late-response suppression. The source `AbortController` call is not counted as runtime proof. No extra unapproved case was added.
 - No test declaration was removed, skipped, disabled, or renamed. No retry/timeout was increased. No production, schema, migration, or rewrite file changed.
 
-## Expression preservation check
+## Expression preservation check (pre-async checkpoint)
 
-A TypeScript AST comparison against HEAD checked original expect/assert call expressions and multiplicity, normalizing whitespace and the authorized account-menu label correction. Dashboard: 24 original expressions, 51 current, zero missing. Workflow notifications: 37 original expressions, 38 current, zero missing. This checks preservation, not runtime correctness; new expect.poll assertions are additional. The initial sandbox attempt could not spawn read-only git; authorized rerun succeeded.
+A TypeScript AST comparison at the prior checkpoint checked original expect/assert call expressions and multiplicity, normalizing whitespace and the authorized account-menu label correction. Dashboard: 24 original expressions, 51 current at that checkpoint, zero missing. Workflow notifications: 37 original expressions, 38 current, zero missing. These are historical counts before the final A011-T002 assertion additions, not current totals. This checks preservation, not runtime correctness. The initial sandbox attempt could not spawn read-only git; authorized rerun succeeded.
+
+## Final asynchronous assertion-preservation evidence (2026-11-26)
+
+- **A011-T002 assertion inventory:** TypeScript AST inspection counts 4 expect call sites in the task-entry declaration and 20 in the final declaration; the four original call sites remain verbatim and 16 are additive. This scoped count supersedes no other historical page assertion totals.
+- **Declaration identity:** [PG-020-F001-A011-T002] periodic refresh guards pending work and stops on unmount remains the single registered declaration for this approved case. No duplicate test was introduced.
+- **History and fingerprints:** the one intervening commit since recovery HEAD a367b8af813328c7dd75002faa8bd81eeb0d8863 is e4e057e80c83d9bf5e329bff04f42285f1c64326 (test(PAGE-020): add tests, unit tests, and qa documentation update). The task-entry Git blob for the Dashboard spec is 0c309f56234dd45339fdbc393eef971509e8a19f; the final formatted file SHA-256 is DFA29B15FA0A54F0F4A39248767F6618E88F72A715D07AD3AC04B40394F66529.
+- **Original assertions:** comparison with task-entry HEAD confirms all four original call sites remain verbatim: expect.poll(() => reads).toBe(1), expect.poll(() => reads).toBe(2), and two expect(reads).toBe(2) assertions. They continue to prove initial load, timer refresh, in-flight overlap suppression, and no further scheduled reads after unmount.
+- **Additive assertions:** synthetic Client A/B session fixtures; notification GET method and Bearer context; pending signal observation; abort event and browser ERR_ABORTED; controlled stale response release; API response-body parse observation; Client B notice/count retention; and absence of the Client A sentinel. These additions do not alter the approved expected result or remove the timer cleanup coverage.
+- **Fixture and security boundary:** all records are synthetic and browser API responses are controlled. The actual pending fetch receives the production-created signal and is observed to abort. The later synthetic response is injected at the app-facing fetch seam to exercise stale-session suppression after the real request was cancelled; it is not represented as a response delivered by the server after cancellation. Existing negative authorization tests and the real Next rewrite integration fixture/config were not changed.
+- **Settings:** worker count was one and retries remained zero for focused Playwright executions. No skip, fixme, only, timeout increase, or retry inflation was introduced.
+- **Scope:** only apps/web/e2e/dashboard/dashboard.spec.ts is test-source-changed for this checkpoint. No production source, API implementation, schema, migration, authorization logic, or unrelated test file changed. The seven Phase 2.1 reports and approved case specification remain unchanged.

@@ -7,6 +7,38 @@ import {
 
 configureRegressionTest()
 
+type NotificationResponse = {
+  notifications: {
+    id: string
+    requestId: string
+    summary: string
+    type: string
+    entityId: string | null
+    createdAt: string
+    readAt: string | null
+  }[]
+  unreadCount: number
+}
+
+type NotificationFetchRecord = {
+  signalPresent: boolean
+  aborted: boolean
+  abortEvents: number
+  deferredResponse: boolean
+  lateResponseReleased: boolean
+  responseBodyParsed: boolean
+}
+
+type NotificationFetchControl = {
+  requests: NotificationFetchRecord[]
+  deferNextNotificationResponse: boolean
+  releaseLateNotificationResponse?: (payload: NotificationResponse) => void
+}
+
+type WindowWithNotificationFetchControl = Window & {
+  __pg020NotificationFetchControl?: NotificationFetchControl
+}
+
 for (const role of ["SUPERADMIN", "ADMIN", "STAFF", "USER"] as const) {
   test(
     role === "USER"
@@ -418,7 +450,72 @@ test("[PG-020-F001-A011-T002] periodic refresh guards pending work and stops on 
   page,
 }) => {
   await page.clock.install()
-  await restoreSession(page, "USER")
+  const clientA = accountFor("USER", {
+    id: "client-a",
+    email: "client-a@example.test",
+    fullName: "Client A",
+  })
+  const clientB = accountFor("USER", {
+    id: "client-b",
+    email: "client-b@example.test",
+    fullName: "Client B",
+  })
+  let activeAccount = clientA
+  let accessToken = "test-session"
+  await restoreSession(page, "USER", {
+    account: clientA,
+    accessToken: () => accessToken,
+  })
+
+  await page.route("**/api/auth/login", async (route) => {
+    const body = route.request().postDataJSON() as { email?: string }
+    expect(body.email).toBe(clientB.email)
+    activeAccount = clientB
+    accessToken = "client-b-session"
+    await route.fulfill({
+      json: {
+        token: accessToken,
+        refreshToken: "client-b-refresh",
+        user: clientB,
+        expiresIn: 900,
+      },
+    })
+  })
+  await page.route("**/api/auth/me", async (route) => {
+    expect(route.request().headers().authorization).toBe(
+      `Bearer ${accessToken}`,
+    )
+    await route.fulfill({ json: { user: activeAccount } })
+  })
+
+  const clientALateResponse: NotificationResponse = {
+    notifications: [
+      {
+        id: "client-a-late-notice",
+        requestId: "request-a",
+        summary: "Client A stale notification sentinel",
+        type: "PROJECT_ACTIVATED",
+        entityId: "project-a",
+        createdAt: "2026-11-26T00:00:00.000Z",
+        readAt: null,
+      },
+    ],
+    unreadCount: 9,
+  }
+  const clientBResponse: NotificationResponse = {
+    notifications: [
+      {
+        id: "client-b-current-notice",
+        requestId: "request-b",
+        summary: "Client B current notification",
+        type: "PROJECT_ACTIVATED",
+        entityId: "project-b",
+        createdAt: "2026-11-26T00:01:00.000Z",
+        readAt: null,
+      },
+    ],
+    unreadCount: 2,
+  }
   let reads = 0
   let release: () => void = () => {}
   const gate = new Promise<void>((resolve) => {
@@ -426,21 +523,203 @@ test("[PG-020-F001-A011-T002] periodic refresh guards pending work and stops on 
   })
   await page.route("**/api/request-workflows/notifications", async (route) => {
     reads++
-    if (reads > 1) await gate
-    await route
-      .fulfill({ json: { notifications: [], unreadCount: 0 } })
-      .catch(() => {})
+    expect(route.request().method()).toBe("GET")
+    expect(route.request().headers().authorization).toBe(
+      `Bearer ${accessToken}`,
+    )
+    if (reads === 2) {
+      await gate
+      try {
+        await route.fulfill({ json: clientALateResponse })
+      } catch {
+        // The browser has already cancelled this intercepted request.
+      }
+      return
+    }
+    await route.fulfill({
+      json:
+        activeAccount.id === clientB.id
+          ? clientBResponse
+          : { notifications: [], unreadCount: 0 },
+    })
   })
+
+  await page.addInitScript(() => {
+    const control: NotificationFetchControl = {
+      requests: [],
+      deferNextNotificationResponse: false,
+    }
+    ;(
+      window as WindowWithNotificationFetchControl
+    ).__pg020NotificationFetchControl = control
+    const nativeFetch = window.fetch.bind(window)
+    window.fetch = (input, init) => {
+      const requestUrl = input instanceof Request ? input.url : String(input)
+      if (
+        new URL(requestUrl, window.location.href).pathname !==
+        "/api/request-workflows/notifications"
+      ) {
+        return nativeFetch(input, init)
+      }
+
+      const signal =
+        init?.signal ?? (input instanceof Request ? input.signal : null)
+      const record: NotificationFetchRecord = {
+        signalPresent: signal !== null,
+        aborted: signal?.aborted ?? false,
+        abortEvents: 0,
+        deferredResponse: false,
+        lateResponseReleased: false,
+        responseBodyParsed: false,
+      }
+      control.requests.push(record)
+      signal?.addEventListener(
+        "abort",
+        () => {
+          record.aborted = true
+          record.abortEvents++
+        },
+        { once: true },
+      )
+
+      const networkRequest = nativeFetch(input, init)
+      if (!control.deferNextNotificationResponse) return networkRequest
+
+      control.deferNextNotificationResponse = false
+      record.deferredResponse = true
+      void networkRequest.catch(() => {})
+      return new Promise<Response>((resolve) => {
+        control.releaseLateNotificationResponse = (payload) => {
+          record.lateResponseReleased = true
+          const response = new Response(JSON.stringify(payload), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+          const readJson = response.json.bind(response)
+          Object.defineProperty(response, "json", {
+            value: async () => {
+              record.responseBodyParsed = true
+              return readJson()
+            },
+          })
+          resolve(response)
+        }
+      })
+    }
+  })
+
   try {
     await page.goto("/dashboard")
     await expect.poll(() => reads).toBe(1)
+    await page.evaluate(() => {
+      const control = (window as WindowWithNotificationFetchControl)
+        .__pg020NotificationFetchControl
+      if (!control)
+        throw new Error("Notification fetch observer was not installed")
+      control.deferNextNotificationResponse = true
+    })
     await page.clock.fastForward(30_000)
     await expect.poll(() => reads).toBe(2)
+    const pendingRequest = await page.evaluate(() => {
+      const control = (window as WindowWithNotificationFetchControl)
+        .__pg020NotificationFetchControl
+      return control?.requests[1] ?? null
+    })
+    expect(pendingRequest).toMatchObject({
+      signalPresent: true,
+      aborted: false,
+      abortEvents: 0,
+      deferredResponse: true,
+      lateResponseReleased: false,
+    })
     await page.clock.fastForward(90_000)
     expect(reads).toBe(2)
-    await page.goto("/login")
+
+    const abortedRequest = page.waitForEvent(
+      "requestfailed",
+      (request) =>
+        new URL(request.url()).pathname ===
+          "/api/request-workflows/notifications" && request.method() === "GET",
+    )
+    await page.getByRole("button", { name: "Account menu" }).click()
+    await page.getByRole("menuitem", { name: "Log out", exact: true }).click()
+    await expect(page).toHaveURL(/\/login$/)
+    await expect(
+      page.getByRole("button", { name: "Sign In", exact: true }),
+    ).toBeVisible()
+
+    const failedRequest = await abortedRequest
+    expect(failedRequest.failure()?.errorText).toContain("ERR_ABORTED")
+    const abortedObservation = await page.evaluate(() => {
+      const control = (window as WindowWithNotificationFetchControl)
+        .__pg020NotificationFetchControl
+      return control?.requests[1] ?? null
+    })
+    expect(abortedObservation).toMatchObject({
+      signalPresent: true,
+      aborted: true,
+      abortEvents: 1,
+      deferredResponse: true,
+      lateResponseReleased: false,
+      responseBodyParsed: false,
+    })
+
+    release()
     await page.clock.fastForward(60_000)
     expect(reads).toBe(2)
+
+    await page.getByLabel("Email address", { exact: true }).fill(clientB.email)
+    await page
+      .getByLabel("Password", { exact: true })
+      .fill("SyntheticPassword123!")
+    await page.getByRole("button", { name: "Sign In", exact: true }).click()
+    await expect(page).toHaveURL(/\/dashboard$/)
+    await expect(
+      page.getByRole("button", {
+        name: "Notifications, 2 unread",
+        exact: true,
+      }),
+    ).toBeVisible()
+
+    await page.getByRole("button", { name: /^Notifications/ }).click()
+    await expect(
+      page.getByRole("menuitem", { name: /Client B current notification/ }),
+    ).toBeVisible()
+    await page.evaluate((payload) => {
+      const control = (window as WindowWithNotificationFetchControl)
+        .__pg020NotificationFetchControl
+      if (!control?.releaseLateNotificationResponse) {
+        throw new Error("The held Client A response was not registered")
+      }
+      control.releaseLateNotificationResponse(payload)
+    }, clientALateResponse)
+    await page.evaluate(
+      () => new Promise<void>((resolve) => queueMicrotask(resolve)),
+    )
+
+    const releasedObservation = await page.evaluate(() => {
+      const control = (window as WindowWithNotificationFetchControl)
+        .__pg020NotificationFetchControl
+      return control?.requests[1] ?? null
+    })
+    expect(releasedObservation).toMatchObject({
+      aborted: true,
+      lateResponseReleased: true,
+      responseBodyParsed: false,
+    })
+    await expect(
+      page.getByRole("menuitem", { name: /Client B current notification/ }),
+    ).toBeVisible()
+    await expect(
+      page.getByText("Client A stale notification sentinel", { exact: true }),
+    ).toHaveCount(0)
+    await page.keyboard.press("Escape")
+    await expect(
+      page.getByRole("button", {
+        name: "Notifications, 2 unread",
+        exact: true,
+      }),
+    ).toBeVisible()
   } finally {
     release()
     await page.unrouteAll({ behavior: "ignoreErrors" })
