@@ -86,6 +86,8 @@ Support authorized future modules and changed requirements. Extend registration,
 
 ## Public service discovery and guest inquiries
 
+Public service details are server rendered from the public API. The public inquiry action carries the selected service through registration or sign-in into the existing client request flow. The separate guest inquiry endpoint remains available for existing callers, and the public pages do not show a guest form.
+
 The public Services module is implemented in source under API features/public-services and web features/public-services, with public routes at /explore/services and an authenticated administrative inbox at /service-inquiries. A new independent ServiceInquiry entity stores visitor correspondence; it is not ServiceRequest or a booking. Dedicated read/manage permissions are granted only to ADMIN and SUPERADMIN. Service Management and portal navigation link to the inquiry inbox.
 
 Public responses omit private prices, internal consultation flags/notes, departments, and employee data. New inquiries require an active service and start PENDING. Submission uses unique retry keys, transactional duplicate checks, sender limits, a honeypot, and process-local IP rate limits. Review uses optimistic version checks. No booking, project, assignment, or payment is created by these endpoints.

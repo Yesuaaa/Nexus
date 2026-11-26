@@ -2,6 +2,7 @@ import type { Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { isUniqueConflict } from "../../lib/errors.js"
 import { HttpError } from "../../shared/http-error.js"
+import { containsText } from "../../shared/query/pagination.js"
 import type {
   InquiryStatus,
   validateInquiry,
@@ -103,8 +104,8 @@ export const publicServicesRepository = {
       ...(query
         ? {
             OR: [
-              { name: { contains: query, mode: "insensitive" } },
-              { description: { contains: query, mode: "insensitive" } },
+              { name: containsText(query) },
+              { description: containsText(query) },
             ],
           }
         : {}),

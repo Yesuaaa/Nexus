@@ -2,6 +2,7 @@
 
 import Image from "next/image"
 import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
 import { gsap } from "gsap"
 import { useHoverLabel } from "@/components/ui/use-hover-label"
@@ -23,10 +24,8 @@ import {
   Headphones,
 } from "lucide-react"
 import { useAsyncResource } from "@/lib/use-async-resource"
-import {
-  getPublicService,
-  listPublicServices,
-} from "../api/public-services-api"
+import { listPublicServices } from "../api/public-services-api"
+import { withInquiryService } from "../model/service-inquiry-link"
 import { priceLabel, type PublicService } from "../model/types"
 import styles from "../components/public-services.module.css"
 
@@ -184,7 +183,6 @@ function PublicServiceCard({
               src={service.imageUrl}
               alt=""
               fill
-              loading="eager"
               sizes="(max-width: 760px) 100vw, 33vw"
               unoptimized
               className={styles.coverImage}
@@ -230,10 +228,23 @@ function PublicServiceCard({
   )
 }
 
+const catalogPath = "/explore/services"
+
+function catalogHref(query: string, page = 1) {
+  const params = new URLSearchParams()
+  if (query) params.set("q", query)
+  if (page > 1) params.set("page", String(page))
+  return params.size ? `${catalogPath}?${params}` : catalogPath
+}
+
 export function PublicServicesPage() {
-  const [search, setSearch] = useState("")
-  const [query, setQuery] = useState("")
-  const [page, setPage] = useState(1)
+  const router = useRouter()
+  const params = useSearchParams()
+  const query = (params.get("q") ?? "").trim().slice(0, 120)
+  const requestedPage = params.get("page") ?? ""
+  const page = /^[1-9][0-9]{0,4}$/.test(requestedPage)
+    ? Number(requestedPage)
+    : 1
   const resource = useAsyncResource(
     (signal) => listPublicServices(query, page, signal),
     [query, page],
@@ -261,23 +272,26 @@ export function PublicServicesPage() {
         className="relative left-1/2 mb-5 h-px w-screen -translate-x-1/2 bg-[#d7d6d2]"
       />
       <form
+        action={catalogPath}
         className="flex items-center gap-3 max-[540px]:flex-wrap"
         role="search"
         onSubmit={(event) => {
           event.preventDefault()
-          setQuery(search.trim())
-          setPage(1)
+          const search = new FormData(event.currentTarget).get("q")
+          if (typeof search === "string")
+            router.push(catalogHref(search.trim()), { scroll: false })
         }}
       >
         <SearchField
+          key={query}
           id="service-search"
+          name="q"
           label="Search services"
           fullWidth
           containerClassName="!w-full !min-w-0 !flex-1 max-[1050px]:!w-full"
           maxLength={120}
           placeholder="Search services by name or description"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          defaultValue={query}
         />
         <button
           type="submit"
@@ -285,18 +299,14 @@ export function PublicServicesPage() {
         >
           Search
         </button>
-        {(query || search) && (
-          <button
-            type="button"
+        {(query || page > 1) && (
+          <Link
+            href={catalogPath}
+            scroll={false}
             className={`${styles.secondary} !min-h-[34px] !px-4 !py-2`}
-            onClick={() => {
-              setSearch("")
-              setQuery("")
-              setPage(1)
-            }}
           >
             Clear
-          </button>
+          </Link>
         )}
       </form>
       {resource.loading ? (
@@ -328,27 +338,29 @@ export function PublicServicesPage() {
             ))}
           </div>
           <nav className={styles.pagination} aria-label="Service pages">
-            <button
-              type="button"
-              disabled={page <= 1}
-              onClick={() => setPage(page - 1)}
-              className={styles.secondary}
-            >
-              <ArrowLeft size={16} />
-              Previous
-            </button>
+            {page > 1 && (
+              <Link
+                href={catalogHref(query, page - 1)}
+                scroll={false}
+                className={styles.secondary}
+              >
+                <ArrowLeft size={16} />
+                Previous
+              </Link>
+            )}
             <span>
               Page {page} of {pages}
             </span>
-            <button
-              type="button"
-              disabled={page >= pages}
-              onClick={() => setPage(page + 1)}
-              className={styles.secondary}
-            >
-              Next
-              <ArrowRight size={16} />
-            </button>
+            {page < pages && (
+              <Link
+                href={catalogHref(query, page + 1)}
+                scroll={false}
+                className={styles.secondary}
+              >
+                Next
+                <ArrowRight size={16} />
+              </Link>
+            )}
           </nav>
         </>
       )}
@@ -356,37 +368,54 @@ export function PublicServicesPage() {
   )
 }
 
-export function PublicServiceDetails({ id }: { id: string }) {
-  const resource = useAsyncResource(
-    (signal) => getPublicService(id, signal),
-    [id],
-  )
-  const { data: service, loading } = resource
-  if (loading) return <PublicState loading message="Opening service details…" />
-  if (resource.error || !service)
-    return (
-      <>
-        <Link href="/explore/services" className={styles.back}>
-          <ArrowLeft size={16} />
-          All services
-        </Link>
-        <PublicState
-          message={resource.error || "This service is unavailable."}
-          onRetry={resource.retry}
-        />
-      </>
-    )
+export function PublicServiceDetails({
+  service,
+}: {
+  service: PublicService | null
+}) {
+  const router = useRouter()
   return (
     <>
-      <Link href="/explore/services" className={styles.back}>
+      <Link
+        href={catalogPath}
+        className={styles.back}
+        data-service-back-link
+        onNavigate={(event) => {
+          if (window.history.length <= 1) return
+          event.preventDefault()
+          router.back()
+        }}
+      >
         <ArrowLeft size={16} />
-        All services
+        Go Back
       </Link>
+      {!service ? (
+        <div className={styles.state} role="alert">
+          <p>Service details are temporarily unavailable.</p>
+          <button
+            type="button"
+            className={styles.secondary}
+            onClick={() => router.refresh()}
+          >
+            Try again
+          </button>
+        </div>
+      ) : (
+        <ServiceDetailContent service={service} />
+      )}
+    </>
+  )
+}
+
+function ServiceDetailContent({ service }: { service: PublicService }) {
+  const inquiryHref = withInquiryService("/register", service.id)
+  return (
+    <>
       <div className={styles.detailHero}>
         <div className={styles.detailCopy}>
           <h1>{service.name}</h1>
           <p className={styles.description}>{service.description}</p>
-          {!loading && service.keyBenefits.length > 0 && (
+          {service.keyBenefits.length > 0 && (
             <div className="mt-7 border-t border-[#121214]/15">
               {service.keyBenefits.map((benefit, index) => (
                 <details
@@ -421,7 +450,7 @@ export function PublicServiceDetails({ id }: { id: string }) {
               </span>
             )}
           <Link
-            href="/register"
+            href={inquiryHref}
             data-service-inquiry-link
             className={`${styles.primary} mt-6 !border-[#203f8c] !bg-[#203f8c]`}
           >
@@ -438,7 +467,7 @@ export function PublicServiceDetails({ id }: { id: string }) {
           large
         />
       </div>
-      {!loading && !!service.packages.length && (
+      {!!service.packages.length && (
         <section
           className={styles.detailSection}
           aria-labelledby="plans-heading"
@@ -463,7 +492,11 @@ export function PublicServiceDetails({ id }: { id: string }) {
                     </li>
                   ))}
                 </ul>
-                <Link href="/register" className={styles.secondary}>
+                <Link
+                  href={inquiryHref}
+                  data-service-inquiry-link
+                  className={styles.secondary}
+                >
                   Discuss this service
                   <ArrowUpRight size={16} />
                 </Link>
@@ -472,7 +505,7 @@ export function PublicServiceDetails({ id }: { id: string }) {
           </div>
         </section>
       )}
-      {!loading && !!service.clientRequirements.length && (
+      {!!service.clientRequirements.length && (
         <section
           className={styles.detailSection}
           aria-labelledby="requirements-heading"

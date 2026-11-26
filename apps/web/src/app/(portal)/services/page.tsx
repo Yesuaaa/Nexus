@@ -1,16 +1,13 @@
 import { ModuleTransition } from "@/components/layout/module-transition"
 import { ServicesPage } from "@/features/services/pages/services-page"
+import { parseInquiryService } from "@/features/public-services/model/service-inquiry-link"
 
-export default async function Page({
-  searchParams,
-}: {
-  searchParams: Promise<{ service?: string | string[] }>
-}) {
-  const { service } = await searchParams
-  const serviceId = typeof service === "string" ? service : undefined
+export default async function Page({ searchParams }: PageProps<"/services">) {
   return (
     <ModuleTransition>
-      <ServicesPage key={serviceId} serviceId={serviceId} />
+      <ServicesPage
+        inquiryService={parseInquiryService((await searchParams).service)}
+      />
     </ModuleTransition>
   )
 }

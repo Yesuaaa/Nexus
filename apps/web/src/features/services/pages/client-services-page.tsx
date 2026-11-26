@@ -86,7 +86,11 @@ function ServiceCardSkeleton() {
   )
 }
 
-export function ClientServicesPage({ serviceId }: { serviceId?: string } = {}) {
+export function ClientServicesPage({
+  inquiryService,
+}: {
+  inquiryService?: string
+}) {
   const focusConfirmation = useCallback(
     (element: HTMLHeadingElement | null) => {
       element?.focus()
@@ -160,16 +164,17 @@ export function ClientServicesPage({ serviceId }: { serviceId?: string } = {}) {
         setError("")
         if (!hydrated.current) {
           hydrated.current = true
-          const requestedService = availableServices.find(
-            (item) => item.id === serviceId,
+          const draft = readServiceDraft(sessionStorage, account.id)
+          const requested = availableServices.find(
+            (item) => item.id === inquiryService,
           )
-          if (requestedService) {
-            setPackageService(requestedService)
+          if (
+            requested &&
+            !availableServices.some((item) => item.id === draft?.serviceId)
+          ) {
+            setPackageService(requested)
             setCurrentStep(2)
           }
-          const draft = requestedService
-            ? null
-            : readServiceDraft(sessionStorage, account.id)
           if (draft) {
             const service = availableServices.find(
               (item) => item.id === draft.serviceId,
@@ -215,9 +220,10 @@ export function ClientServicesPage({ serviceId }: { serviceId?: string } = {}) {
               }
             } else {
               clearServiceDraft(sessionStorage, account.id)
-              setDraftNotice(
-                "Your saved service is no longer available. Choose another service to start a new request.",
-              )
+              if (!requested)
+                setDraftNotice(
+                  "Your saved service is no longer available. Choose another service to start a new request.",
+                )
             }
           }
         }
@@ -236,7 +242,7 @@ export function ClientServicesPage({ serviceId }: { serviceId?: string } = {}) {
     return () => {
       active = false
     }
-  }, [revision, account.id, serviceId])
+  }, [revision, account.id, inquiryService])
 
   useEffect(() => {
     if (!draftReady || !packageService || submittedRequest) return
@@ -297,6 +303,9 @@ export function ClientServicesPage({ serviceId }: { serviceId?: string } = {}) {
   }, [departmentId, search, services])
 
   const pageCount = Math.max(1, Math.ceil(filteredServices.length / pageSize))
+  const requestedService = services.find(
+    (service) => service.id === inquiryService,
+  )
   const currentPage = Math.min(page, pageCount)
   const pageStart = (currentPage - 1) * pageSize
   const visibleServices = filteredServices.slice(
@@ -510,6 +519,31 @@ export function ClientServicesPage({ serviceId }: { serviceId?: string } = {}) {
           Step {currentStep} of 4
         </span>
       </div>
+      {inquiryService &&
+        !loading &&
+        !error &&
+        !submittedRequest &&
+        (requestedService ? (
+          packageService?.id !== requestedService.id && (
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-4"
+              onClick={() =>
+                packageService
+                  ? setPendingService(requestedService)
+                  : applyService(requestedService)
+              }
+            >
+              Continue inquiry for {requestedService.name}
+            </Button>
+          )
+        ) : (
+          <p className="mt-4 text-sm text-muted-foreground" role="status">
+            This service is no longer available. You can browse the available
+            services.
+          </p>
+        ))}
       {draftNotice && !submittedRequest && (
         <p
           role="status"

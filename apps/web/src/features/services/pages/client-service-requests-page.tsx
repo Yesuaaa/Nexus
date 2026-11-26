@@ -16,7 +16,6 @@ import {
 import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
 import { ClientTableSkeleton } from "@/components/ui/client-table-skeleton"
-import { EmptyState } from "@/components/ui/empty-state"
 import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { KpiCards } from "@/components/ui/kpi-cards"
 import { usePaginatedList } from "@/components/ui/use-paginated-list"
@@ -227,27 +226,10 @@ export function ClientServiceRequestsPage({
             emptyMessage={
               list.loading && list.previewing ? (
                 <span role="status">Searching…</span>
+              ) : filtered ? (
+                "No service requests match your search or filters."
               ) : (
-                <EmptyState
-                  headingLevel={2}
-                  icon={ClipboardList}
-                  title={
-                    filtered
-                      ? "No matching requests"
-                      : "No service requests yet"
-                  }
-                  description={
-                    filtered
-                      ? "Try a different search or status filter."
-                      : "Explore our services and tell us what you need."
-                  }
-                  action={
-                    <Button asChild variant="outline" className="text-xs">
-                      <Link href="/services">Browse services</Link>
-                    </Button>
-                  }
-                  className="border-0 p-0"
-                />
+                "No service requests yet. Browse services to get started."
               )
             }
             onView={(request) => {

@@ -128,9 +128,9 @@ const faqAnswerTextClass = [
 ].join(" ")
 
 const navigation = [
+  { label: "About", href: "/about" },
   { label: "Services", href: "/explore/services" },
-  { label: "Flow", href: "/#approach" },
-  { label: "Connect with Us", href: "/#contact" },
+  { label: "Projects", href: "/explore/projects" },
 ]
 
 const contactHeadingLines = [
@@ -474,6 +474,7 @@ export function PinnedHero({ children }: { children: ReactNode }) {
   return (
     <div
       ref={heroRef}
+      data-pinned-hero
       className="sticky top-(--hero-sticky-top,0px) z-0 motion-reduce:relative motion-reduce:top-auto"
     >
       <div ref={contentRef}>{children}</div>

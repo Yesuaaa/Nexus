@@ -72,6 +72,7 @@ export type RoutePolicyId =
   | "attendance-adjustments"
   | "attendance-settings"
   | "attendance-my-legacy"
+  | "attendance-dashboard-legacy"
   | "attendance-records-legacy"
   | "attendance-settings-legacy"
   | "dashboard"
@@ -459,6 +460,12 @@ export const routePolicies: readonly RoutePolicy[] = [
     match: { kind: "exact", path: "/attendance/my" },
     moduleId: "attendance-monitoring",
     canAccess: canAccessPersonalAttendance,
+  },
+  {
+    id: "attendance-dashboard-legacy",
+    match: { kind: "exact", path: "/attendance/dashboard" },
+    moduleId: "attendance-monitoring",
+    canAccess: canManageAttendance,
   },
   {
     id: "attendance-records-legacy",

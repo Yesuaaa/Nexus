@@ -1,4 +1,5 @@
 import { Globe2, ArrowUpRight } from "lucide-react"
+import Link from "next/link"
 
 const footerClass = [
   "mt-22 [border-top:1px_solid_var(--landing-line)] bg-[color-mix(in_srgb,var(--landing-ink)_3%,var(--landing-paper))]",
@@ -6,7 +7,7 @@ const footerClass = [
 ].join(" ")
 
 const footerColumnsClass = [
-  "grid grid-cols-[1.15fr_0.8fr_0.8fr_1.2fr] gap-12 items-start",
+  "grid grid-cols-[1.15fr_0.8fr_1.2fr] gap-12 items-start",
   "max-[1101px]:gap-7.5",
   "max-[851px]:grid-cols-[1.2fr_1fr_1fr] max-[851px]:gap-8.75",
   "max-[761px]:grid-cols-[1fr_1fr] max-[761px]:[gap:38px_24px]",
@@ -26,7 +27,7 @@ const footerLinksClass = [
 ].join(" ")
 
 const footerItemClass = [
-  "inline-flex items-center gap-3.5 text-(color:--landing-muted) text-[13px] leading-[1.6] cursor-default [transition:color_250ms]",
+  "inline-flex items-center gap-3.5 text-(color:--landing-muted) text-[13px] leading-[1.6] [transition:color_250ms]",
   "[&>_svg]:[transition:transform_350ms]",
   "hover:text-(color:--landing-blue)",
   "[&:hover_>_svg]:[transform:translate(2px,-2px)]",
@@ -50,16 +51,12 @@ const footerBottomClass = [
   "max-[761px]:mt-8.75 max-[761px]:flex-col max-[761px]:items-start max-[761px]:gap-3.5 max-[761px]:text-[10px]",
 ].join(" ")
 
-const socialAccounts = [
-  "Facebook",
-  "Instagram",
-  "LinkedIn",
-  "YouTube",
-  "TikTok",
-  "Google",
+const footerPages = [
+  { label: "About Converyn", href: "/" },
+  { label: "Services", href: "/explore/services" },
+  { label: "Flow", href: "/#approach" },
+  { label: "Contact", href: "/#contact" },
 ]
-
-const footerPages = ["About Converyn", "Services", "Insights", "Contact"]
 
 export function LandingFooter() {
   return (
@@ -76,33 +73,19 @@ export function LandingFooter() {
             </p>
           </div>
 
-          <div className={footerLinksClass}>
-            <h2>Find us online</h2>
-            <ul>
-              {socialAccounts.map((account) => (
-                <li key={account}>
-                  <span className={footerItemClass}>
-                    {account}
-                    <ArrowUpRight size={14} aria-hidden="true" />
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className={footerLinksClass}>
+          <nav className={footerLinksClass} aria-label="Footer navigation">
             <h2>Explore Converyn</h2>
             <ul>
               {footerPages.map((page) => (
-                <li key={page}>
-                  <span className={footerItemClass}>
-                    {page}
+                <li key={page.href}>
+                  <Link href={page.href} className={footerItemClass}>
+                    {page.label}
                     <ArrowUpRight size={14} aria-hidden="true" />
-                  </span>
+                  </Link>
                 </li>
               ))}
             </ul>
-          </div>
+          </nav>
 
           <div className={footerLegalClass}>
             <h2>A note on ownership</h2>
@@ -111,9 +94,6 @@ export function LandingFooter() {
               respective owners. Their use does not imply ownership,
               endorsement, sponsorship, or affiliation.
             </p>
-            <span className="mt-6 text-[11px] text-(color:--landing-muted)">
-              Terms &amp; Privacy
-            </span>
           </div>
         </div>
         <div className={footerBottomClass}>

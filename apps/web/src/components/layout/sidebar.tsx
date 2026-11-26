@@ -1,6 +1,6 @@
 "use client"
 
-import { useId, useState, type ComponentType } from "react"
+import { useId, useState } from "react"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import {
@@ -16,6 +16,7 @@ import {
   Inbox,
   MessageSquareText,
   MessagesSquare,
+  MoveLeft,
   Settings,
   UsersRound,
   WalletCards,
@@ -46,11 +47,22 @@ import {
 } from "@/features/workspaces/model/route-policy"
 import { attendanceNavigation } from "@/features/attendance/model/navigation"
 import { useWorkspaceModuleId } from "@/features/workspaces/providers/workspace-provider"
-import { HoverTooltip } from "@/components/ui/hover-tooltip"
+import {
+  ProjectWorkspaceSidebarLinks,
+  StaffProjectSidebarLinks,
+} from "@/features/projects/components/client-project-sidebar-links"
 import { Pill } from "@/components/ui/pill"
-import { Button } from "@/components/ui/button"
 
 import { focusRing, iconButtonClass } from "./styles"
+import {
+  SidebarLink,
+  SidebarRowIcon as RowIcon,
+  SidebarTooltip as CollapsedTooltip,
+  sidebarActiveRowClass as activeRowClass,
+  sidebarCollapsedRowClass as collapsedRowClass,
+  sidebarRowClass as rowClass,
+  type SidebarIcon as NavIcon,
+} from "./sidebar-link"
 import {
   AccountsIcon,
   CloseIcon,
@@ -67,54 +79,29 @@ const accessLabels: Record<Account["role"], string> = {
   SUPERADMIN: "SUPERADMIN ACCESS",
 }
 
-const rowClass =
-  "flex h-9 w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-lg border-0 bg-transparent px-2.5 text-left text-[13px] font-medium whitespace-nowrap text-[#3b4658] no-underline transition-colors duration-150 hover:bg-[#f3f5f8] hover:text-[#182235] motion-reduce:transition-none"
-const activeRowClass =
-  "bg-[#eef2f9] font-semibold text-[#203f8c] hover:bg-[#eef2f9] hover:text-[#203f8c]"
-/** Icon-only square in the collapsed desktop sidebar (full row in the drawer). */
-const collapsedRowClass =
-  "size-10 justify-center justify-self-center gap-0 p-0 max-[767px]:h-9 max-[767px]:w-full max-[767px]:justify-start max-[767px]:gap-2.5 max-[767px]:px-2.5"
-
-const navLinkClass = `group relative ${rowClass} ${focusRing}`
-const collapsedNavLinkClass = collapsedRowClass
-
-function CollapsedTooltip({ children }: { children: string }) {
-  return <HoverTooltip side="right">{children}</HoverTooltip>
-}
-
-function NavigationIcon({
-  policyId,
-  active,
-}: {
-  policyId: RoutePolicyId
-  active: boolean
-}) {
-  const icons: Partial<Record<RoutePolicyId, NavIcon>> = {
-    dashboard: DashboardIcon,
-    accounts: AccountsIcon,
-    clients: Contact,
-    departments: DepartmentIcon,
-    services: ServiceIcon,
-    "service-inquiries": Inbox,
-    "service-requests": ClipboardList,
-    "module-service-operations": ClipboardList,
-    calendar: CalendarDays,
-    projects: FolderKanban,
-    "project-workspace": FolderKanban,
-    "request-inbox": Inbox,
-    help: CircleHelp,
-    employees: UsersRound,
-    "staff-workload": Gauge,
-    "staff-my-payroll": WalletCards,
-    "administrative-workload": Gauge,
-    "service-operation-logs": History,
-    "project-management-logs": History,
-    "people-hr-logs": History,
-    "workforce-compliance-logs": History,
-    "attendance-audit": History,
-  }
-  const icon = icons[policyId]
-  return icon ? <RowIcon icon={icon} active={active} /> : null
+const navigationIcons: Partial<Record<RoutePolicyId, NavIcon>> = {
+  dashboard: DashboardIcon,
+  accounts: AccountsIcon,
+  clients: Contact,
+  departments: DepartmentIcon,
+  services: ServiceIcon,
+  "service-inquiries": Inbox,
+  "service-requests": ClipboardList,
+  "module-service-operations": ClipboardList,
+  calendar: CalendarDays,
+  projects: FolderKanban,
+  "project-workspace": FolderKanban,
+  "request-inbox": Inbox,
+  help: CircleHelp,
+  employees: UsersRound,
+  "staff-workload": Gauge,
+  "staff-my-payroll": WalletCards,
+  "administrative-workload": Gauge,
+  "service-operation-logs": History,
+  "project-management-logs": History,
+  "people-hr-logs": History,
+  "workforce-compliance-logs": History,
+  "attendance-audit": History,
 }
 
 function SidebarNavigationLink({
@@ -149,39 +136,23 @@ function SidebarNavigationLink({
       : undefined
 
   return (
-    <Link
+    <SidebarLink
       href={href}
       transitionTypes={transitionTypes}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        navLinkClass,
-        collapsed && collapsedNavLinkClass,
-        active && activeRowClass,
-      )}
-      onClick={onNavigate}
-    >
-      <NavigationIcon policyId={policy.id} active={active} />
-      <span
-        className={cn(
-          "min-w-0 truncate",
-          collapsed && "sr-only max-[767px]:not-sr-only",
-        )}
-      >
-        {label}
-      </span>
-      {collapsed && <CollapsedTooltip>{label}</CollapsedTooltip>}
-    </Link>
+      label={label}
+      icon={navigationIcons[policy.id]}
+      active={active}
+      collapsed={collapsed}
+      onNavigate={onNavigate}
+    />
   )
 }
-
-type NavIcon = ComponentType<{ className?: string; strokeWidth?: number }>
 
 /** A module with an Overview (cards & stats) and its main data table. */
 type NavGroup = {
   kind: "group"
   label: string
   icon: NavIcon
-  defaultHref?: string
   visible: (account: Account) => boolean
   links: {
     href: string
@@ -266,6 +237,7 @@ function payrollModuleGroup(visible: (account: Account) => boolean): NavGroup {
     ],
   }
 }
+
 const administrativeRequestsPath = "/module/service-operations"
 
 function requestGroup(account: Account): NavGroup {
@@ -298,18 +270,6 @@ function requestGroup(account: Account): NavGroup {
     visible: () => links.length > 0,
     links,
   }
-}
-
-function RowIcon({ icon: Icon, active }: { icon: NavIcon; active: boolean }) {
-  return (
-    <Icon
-      className={cn(
-        "size-[18px] flex-none",
-        active ? "text-[#203f8c]" : "text-[#6b778c]",
-      )}
-      strokeWidth={1.75}
-    />
-  )
 }
 
 type RowProps = {
@@ -355,54 +315,27 @@ function GroupDisclosure({
   )
   return (
     <div className="min-w-0">
-      {group.defaultHref ? (
-        <div className="flex items-center">
-          <Link
-            href={group.defaultHref}
-            onClick={onNavigate}
-            className={cn(navLinkClass, groupActive && activeRowClass)}
-          >
-            <RowIcon icon={group.icon} active={groupActive} />
-            <span className="min-w-0 truncate">{group.label}</span>
-          </Link>
-          <Button
-            variant="ghost"
-            size="boardAction"
-            type="button"
-            aria-label={`${open ? "Collapse" : "Expand"} ${group.label}`}
-            aria-expanded={open}
-            aria-controls={panelId}
-            onClick={onToggle}
-          >
-            <ChevronDown
-              className={cn("size-3.5", open && "rotate-180")}
-              aria-hidden="true"
-            />
-          </Button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={panelId}
-          onClick={onToggle}
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={onToggle}
+        className={cn(
+          rowClass,
+          focusRing,
+          groupActive && "text-[#203f8c] hover:text-[#203f8c]",
+        )}
+      >
+        <RowIcon icon={group.icon} active={groupActive} />
+        <span className="min-w-0 flex-1 truncate">{group.label}</span>
+        <ChevronDown
           className={cn(
-            rowClass,
-            focusRing,
-            groupActive && "text-[#203f8c] hover:text-[#203f8c]",
+            "size-3.5 flex-none text-[#9aa4b5] transition-transform duration-200 motion-reduce:transition-none",
+            open && "rotate-180",
           )}
-        >
-          <RowIcon icon={group.icon} active={groupActive} />
-          <span className="min-w-0 flex-1 truncate">{group.label}</span>
-          <ChevronDown
-            className={cn(
-              "size-3.5 flex-none text-[#9aa4b5] transition-transform duration-200 motion-reduce:transition-none",
-              open && "rotate-180",
-            )}
-            aria-hidden="true"
-          />
-        </button>
-      )}
+          aria-hidden="true"
+        />
+      </button>
       <div
         id={panelId}
         inert={!open}
@@ -493,13 +426,6 @@ function GroupFlyout({
         <DropdownMenuLabel className="px-2 pt-1.5 pb-1 text-[11px] font-semibold text-[#8a94a6]">
           {group.label}
         </DropdownMenuLabel>
-        {group.defaultHref && (
-          <DropdownMenuItem asChild>
-            <Link href={group.defaultHref} onClick={onNavigate}>
-              Open {group.label}
-            </Link>
-          </DropdownMenuItem>
-        )}
         {group.links.map((link) => {
           const active = isGroupLinkActive(link, pathname)
           if (link.disabled)
@@ -777,6 +703,26 @@ export function Sidebar({
   const searchParams = useSearchParams()
   const mainNavigation = getNavigationPolicies(account, "main")
   const isClient = account.role === "USER"
+  const staffWorkspaceMatch =
+    account.role === "STAFF" &&
+    pathname !== "/project-workspace/overview" &&
+    pathname !== "/project-workspace/new"
+      ? pathname.match(/^\/project-workspace\/([^/]+)$/)
+      : null
+  const staffProjectId = staffWorkspaceMatch?.[1]
+    ? decodeURIComponent(staffWorkspaceMatch[1])
+    : null
+  const administrativeProjectId =
+    account.role === "SUPERADMIN" && pathname === "/module/project-management"
+      ? searchParams.get("project")
+      : null
+  const projectBackQuery = new URLSearchParams(searchParams.toString())
+  projectBackQuery.delete("tab")
+  const projectBackHref = staffProjectId
+    ? `/project-workspace${projectBackQuery.size ? `?${projectBackQuery}` : ""}`
+    : administrativeProjectId
+      ? "/module/project-management"
+      : null
   const activeModuleId = useWorkspaceModuleId()
   const dashboardPolicy = mainNavigation.find(
     (policy) => policy.id === "dashboard",
@@ -895,97 +841,73 @@ export function Sidebar({
           >
             {accessLabels[account.role]}
           </p>
-          {dashboardPolicy && (
-            <SidebarNavigationLink
-              policy={dashboardPolicy}
-              account={account}
-              pathname={pathname}
+          {projectBackHref ? (
+            <SidebarLink
+              href={projectBackHref}
+              label="Back to projects"
+              icon={MoveLeft}
               collapsed={collapsed}
               onNavigate={onCloseDrawer}
-              labelOverride={isClient ? undefined : "Switch Workspace"}
             />
+          ) : (
+            dashboardPolicy && (
+              <SidebarNavigationLink
+                policy={dashboardPolicy}
+                account={account}
+                pathname={pathname}
+                collapsed={collapsed}
+                onNavigate={onCloseDrawer}
+                labelOverride={isClient ? undefined : "Switch Workspace"}
+              />
+            )
           )}
 
           {activeModuleId && (
-            <>
-              <p className={sectionLabelClass}>
-                {workspaceModuleLabels[activeModuleId]}
-              </p>
-              {workspaceNavigation.map(renderPolicy)}
-              {activeModuleId === "project-management" &&
-                canAccessProjectWorkspace(account) && (
-                  <Link
-                    href="/messages?scope=project"
-                    aria-current={
-                      pathname === "/messages" &&
-                      searchParams.get("scope") === "project" &&
-                      searchParams.get("mode") !== "internal" &&
-                      !searchParams.has("request")
-                        ? "page"
-                        : undefined
-                    }
-                    className={cn(
-                      navLinkClass,
-                      collapsed && collapsedNavLinkClass,
-                      projectMessagesActive && activeRowClass,
-                    )}
-                    onClick={onCloseDrawer}
-                  >
-                    <RowIcon
-                      icon={MessagesSquare}
-                      active={projectMessagesActive}
-                    />
-                    <span
-                      className={cn(
-                        "min-w-0 truncate",
-                        collapsed && "sr-only max-[767px]:not-sr-only",
-                      )}
-                    >
-                      Project Messages
-                    </span>
-                    {collapsed && (
-                      <CollapsedTooltip>Project Messages</CollapsedTooltip>
-                    )}
-                  </Link>
-                )}
-              {activeModuleId === "service-operations" &&
-                canAccessRequestInbox(account) && (
-                  <Link
-                    href="/messages?scope=service"
-                    aria-current={
-                      pathname === "/messages" &&
-                      searchParams.get("scope") === "service" &&
-                      searchParams.get("mode") !== "internal" &&
-                      !searchParams.has("project")
-                        ? "page"
-                        : undefined
-                    }
-                    className={cn(
-                      navLinkClass,
-                      collapsed && collapsedNavLinkClass,
-                      serviceMessagesActive && activeRowClass,
-                    )}
-                    onClick={onCloseDrawer}
-                  >
-                    <RowIcon
-                      icon={MessageSquareText}
-                      active={serviceMessagesActive}
-                    />
-                    <span
-                      className={cn(
-                        "min-w-0 truncate",
-                        collapsed && "sr-only max-[767px]:not-sr-only",
-                      )}
-                    >
-                      Service Messages
-                    </span>
-                    {collapsed && (
-                      <CollapsedTooltip>Service Messages</CollapsedTooltip>
-                    )}
-                  </Link>
-                )}
-            </>
+            <p className={sectionLabelClass}>
+              {workspaceModuleLabels[activeModuleId]}
+            </p>
           )}
+          {staffProjectId ? (
+            <StaffProjectSidebarLinks
+              projectId={staffProjectId}
+              collapsed={collapsed}
+              onNavigate={onCloseDrawer}
+              showBackLink={false}
+            />
+          ) : administrativeProjectId ? (
+            <ProjectWorkspaceSidebarLinks
+              projectBaseHref={pathname}
+              backHref="/module/project-management"
+              collapsed={collapsed}
+              onNavigate={onCloseDrawer}
+              showBackLink={false}
+            />
+          ) : (
+            workspaceNavigation.map(renderPolicy)
+          )}
+          {!projectBackHref &&
+            activeModuleId === "project-management" &&
+            canAccessProjectWorkspace(account) && (
+              <SidebarLink
+                href="/messages?scope=project"
+                label="Project Messages"
+                icon={MessagesSquare}
+                active={projectMessagesActive}
+                collapsed={collapsed}
+                onNavigate={onCloseDrawer}
+              />
+            )}
+          {activeModuleId === "service-operations" &&
+            canAccessRequestInbox(account) && (
+              <SidebarLink
+                href="/messages?scope=service"
+                label="Service Messages"
+                icon={MessageSquareText}
+                active={serviceMessagesActive}
+                collapsed={collapsed}
+                onNavigate={onCloseDrawer}
+              />
+            )}
 
           {systemToolNavigation.length > 0 && (
             <div
@@ -1014,34 +936,14 @@ export function Sidebar({
                 />
               ))}
               {!isClient && (
-                <Link
+                <SidebarLink
                   href="/messages?mode=internal"
-                  aria-current={
-                    pathname === "/messages" &&
-                    searchParams.get("mode") === "internal"
-                      ? "page"
-                      : undefined
-                  }
-                  className={cn(
-                    navLinkClass,
-                    collapsed && collapsedNavLinkClass,
-                    internalMessagesActive && activeRowClass,
-                  )}
-                  onClick={onCloseDrawer}
-                >
-                  <RowIcon icon={UsersRound} active={internalMessagesActive} />
-                  <span
-                    className={cn(
-                      "min-w-0 truncate",
-                      collapsed && "sr-only max-[767px]:not-sr-only",
-                    )}
-                  >
-                    Internal Messages
-                  </span>
-                  {collapsed && (
-                    <CollapsedTooltip>Internal Messages</CollapsedTooltip>
-                  )}
-                </Link>
+                  label="Internal Messages"
+                  icon={UsersRound}
+                  active={internalMessagesActive}
+                  collapsed={collapsed}
+                  onNavigate={onCloseDrawer}
+                />
               )}
             </>
           )}

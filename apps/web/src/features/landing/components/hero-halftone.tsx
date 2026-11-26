@@ -185,6 +185,7 @@ export function HeroHalftone({ background = false }: { background?: boolean }) {
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)")
     const wideLayout = window.matchMedia("(min-width: 761px)")
+    const curtain = canvas.closest("[data-pinned-hero]")?.nextElementSibling
     let width = 0
     let height = 0
     let grid: ReturnType<typeof makeGrid> | undefined
@@ -218,13 +219,25 @@ export function HeroHalftone({ background = false }: { background?: boolean }) {
     }
 
     function updatePlayback() {
-      if (frame) window.cancelAnimationFrame(frame)
+      // Intersection alone cannot tell when the next section covers the sticky hero.
+      const canAnimate =
+        visible &&
+        !document.hidden &&
+        !reducedMotion.matches &&
+        (!curtain || curtain.getBoundingClientRect().top > 0)
+      if (canAnimate) {
+        if (!frame) frame = window.requestAnimationFrame(tick)
+        return
+      }
+      if (!frame) return
+      window.cancelAnimationFrame(frame)
       frame = 0
       lastPaint = 0
+    }
+
+    function updateMotionPreference() {
       paint()
-      if (visible && !document.hidden && !reducedMotion.matches) {
-        frame = window.requestAnimationFrame(tick)
-      }
+      updatePlayback()
     }
 
     function resize() {
@@ -258,14 +271,17 @@ export function HeroHalftone({ background = false }: { background?: boolean }) {
     resize()
     sizeObserver.observe(canvas)
     visibilityObserver.observe(canvas)
-    reducedMotion.addEventListener("change", updatePlayback)
+    if (curtain)
+      window.addEventListener("scroll", updatePlayback, { passive: true })
+    reducedMotion.addEventListener("change", updateMotionPreference)
     document.addEventListener("visibilitychange", updatePlayback)
 
     return () => {
       window.cancelAnimationFrame(frame)
       sizeObserver.disconnect()
       visibilityObserver.disconnect()
-      reducedMotion.removeEventListener("change", updatePlayback)
+      window.removeEventListener("scroll", updatePlayback)
+      reducedMotion.removeEventListener("change", updateMotionPreference)
       document.removeEventListener("visibilitychange", updatePlayback)
     }
   }, [background])

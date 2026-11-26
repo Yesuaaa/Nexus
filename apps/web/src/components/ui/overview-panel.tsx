@@ -1,4 +1,7 @@
 import { useId, type ReactNode } from "react"
+import { ArrowRight } from "lucide-react"
+import Link from "next/link"
+import { focusRing } from "@/components/layout/styles"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ProgressMeter } from "@/components/ui/stat-strip"
 import { cn } from "@/lib/utils"
@@ -14,16 +17,16 @@ export function OverviewPanel({
   description,
   action,
   titleClassName,
-  className,
   variant = "default",
+  className,
   children,
 }: {
   title: string
   description?: string
   action?: ReactNode
   titleClassName?: string
+  variant?: "default" | "table" | "compact" | "highlight"
   className?: string
-  variant?: "default" | "compact" | "highlight"
   children: ReactNode
 }) {
   const headingId = useId()
@@ -31,7 +34,11 @@ export function OverviewPanel({
     <section
       aria-labelledby={headingId}
       className={cn(
-        "min-w-0 rounded-xl border border-[#eceef1] p-5 max-[560px]:p-4",
+        "min-w-0 border",
+        variant === "table" ? "rounded-lg" : "rounded-xl",
+        variant === "table"
+          ? "overflow-hidden border-[#e8ebef] bg-background"
+          : "border-[#eceef1] p-5 max-[560px]:p-4",
         variant === "compact" &&
           "bg-background p-4 shadow-[0_1px_3px_rgb(30_55_80_/_4%)]",
         variant === "highlight" &&
@@ -39,12 +46,22 @@ export function OverviewPanel({
         className,
       )}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div
+        className={cn(
+          "flex justify-between gap-3",
+          variant === "table"
+            ? "min-h-[39px] items-center border-b border-[#dfe6eb] bg-[#e8eef2] px-4"
+            : "items-start",
+        )}
+      >
         <div className="min-w-0">
           <h2
             id={headingId}
             className={cn(
-              "m-0 text-sm font-semibold text-[#101d35]",
+              "m-0 font-semibold",
+              variant === "table"
+                ? "text-xs text-foreground"
+                : "text-sm text-[#101d35]",
               titleClassName,
             )}
           >
@@ -58,7 +75,13 @@ export function OverviewPanel({
         </div>
         {action}
       </div>
-      <div className={variant === "default" ? "mt-4" : "mt-3"}>{children}</div>
+      <div
+        className={
+          variant === "table" ? "p-4" : variant === "default" ? "mt-4" : "mt-3"
+        }
+      >
+        {children}
+      </div>
     </section>
   )
 }
@@ -146,7 +169,8 @@ export function BreakdownList({
 export type ItemRow = {
   id: string
   label: string
-  note: string
+  note?: string
+  href?: string
   tone?: "warning" | "danger" | "muted"
 }
 
@@ -189,14 +213,31 @@ export function ItemList({
         {shown.map((row) => (
           <li
             key={row.id}
-            className="flex items-center justify-between gap-3 text-xs"
+            className="flex min-w-0 items-center justify-between gap-3 text-xs"
           >
-            <span className="min-w-0 truncate font-medium text-[#182235]">
-              {row.label}
-            </span>
-            <span className={cn("shrink-0", noteTones[row.tone ?? "muted"])}>
-              {row.note}
-            </span>
+            {row.href ? (
+              <Link
+                href={row.href}
+                className={cn(
+                  "flex min-h-8 min-w-0 flex-1 items-center justify-between gap-3 rounded-md font-medium text-[#203f8c] underline-offset-2 hover:underline",
+                  focusRing,
+                )}
+              >
+                <span className="min-w-0 [overflow-wrap:anywhere]">
+                  {row.label}
+                </span>
+                <ArrowRight size={14} className="shrink-0" aria-hidden="true" />
+              </Link>
+            ) : (
+              <span className="min-w-0 truncate font-medium text-[#182235]">
+                {row.label}
+              </span>
+            )}
+            {row.note && (
+              <span className={cn("shrink-0", noteTones[row.tone ?? "muted"])}>
+                {row.note}
+              </span>
+            )}
           </li>
         ))}
       </ul>
@@ -223,12 +264,14 @@ export function MiniStats({
   label,
   columns = 4,
   variant = "boxed",
+  wrapValues = false,
 }: {
   items: MiniStat[]
   loading: boolean
   label: string
   columns?: 2 | 4
   variant?: "boxed" | "plain"
+  wrapValues?: boolean
 }) {
   const boxed = variant === "boxed"
   return (
@@ -265,7 +308,8 @@ export function MiniStats({
             </dt>
             <dd
               className={cn(
-                "m-0 mt-1 truncate text-base font-semibold tabular-nums",
+                "m-0 mt-1 text-base font-semibold tabular-nums",
+                wrapValues ? "[overflow-wrap:anywhere]" : "truncate",
                 attention ? "text-[#805316]" : "text-[#101d35]",
               )}
             >

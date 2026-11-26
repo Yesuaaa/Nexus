@@ -48,6 +48,7 @@ export function ClientDeliverablePage({
   const [error, setError] = useState("")
   const [reviewError, setReviewError] = useState("")
   const [busy, setBusy] = useState(false)
+  const [downloading, setDownloading] = useState(false)
   const [approveOpen, setApproveOpen] = useState(false)
   const [revisionOpen, setRevisionOpen] = useState(false)
   const previewRef = useRef<string | null>(null)
@@ -158,6 +159,21 @@ export function ClientDeliverablePage({
     }
   }
 
+  async function handleDownload(target: ProjectDeliverable) {
+    if (downloading) return
+    setDownloading(true)
+    try {
+      await downloadClientDeliverable(projectId, target)
+    } catch (reason) {
+      sileo.error({
+        title: "Couldn't download file",
+        description: errorMessage(reason, "Please try again."),
+      })
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   return (
     <main className={`${contentClass} p-6 max-[767px]:p-4`}>
       {loading ? (
@@ -216,9 +232,8 @@ export function ClientDeliverablePage({
                   type="button"
                   variant="outline"
                   className="h-8 px-3 text-xs"
-                  onClick={() =>
-                    void downloadClientDeliverable(projectId, deliverable)
-                  }
+                  disabled={downloading}
+                  onClick={() => void handleDownload(deliverable)}
                 >
                   <Download size={15} aria-hidden="true" /> Download
                 </Button>
@@ -245,9 +260,8 @@ export function ClientDeliverablePage({
                       type="button"
                       variant="brand"
                       className="mt-4"
-                      onClick={() =>
-                        void downloadClientDeliverable(projectId, deliverable)
-                      }
+                      disabled={downloading}
+                      onClick={() => void handleDownload(deliverable)}
                     >
                       <Download size={15} aria-hidden="true" /> Download file
                     </Button>

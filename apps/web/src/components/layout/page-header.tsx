@@ -39,6 +39,7 @@ export const compactHeaderActionClass =
  */
 export function PageHeader({
   title,
+  meta,
   description,
   actions,
   headingId,
@@ -48,7 +49,8 @@ export function PageHeader({
   className,
 }: {
   title: ReactNode
-  description: ReactNode
+  meta?: ReactNode
+  description?: ReactNode
   actions?: ReactNode
   headingId?: string
   tone?: keyof typeof descriptionTones
@@ -70,27 +72,36 @@ export function PageHeader({
       )}
     >
       <div className={cn("min-w-0", compact && "max-[560px]:contents")}>
-        <h1
-          id={headingId}
-          tabIndex={headingId ? -1 : undefined}
+        <div
           className={cn(
-            "m-0 leading-[1.25] font-[650] tracking-[-0.03em] text-foreground",
-            titleSize === "small" ? "text-xl" : "text-[clamp(21px,2vw,25px)]",
+            "flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2",
             compact && "max-[560px]:col-start-1 max-[560px]:row-start-1",
           )}
         >
-          {title}
-        </h1>
-        <p
-          className={cn(
-            "mt-[5px] mb-0 text-xs leading-[1.45]",
-            descriptionTones[tone],
-            compact &&
-              "max-[560px]:col-span-2 max-[560px]:row-start-2 max-[560px]:mt-0",
-          )}
-        >
-          {description}
-        </p>
+          <h1
+            id={headingId}
+            tabIndex={headingId ? -1 : undefined}
+            className={cn(
+              "m-0 min-w-0 leading-[1.25] font-[650] tracking-[-0.03em] text-foreground [overflow-wrap:anywhere]",
+              titleSize === "small" ? "text-xl" : "text-[clamp(21px,2vw,25px)]",
+            )}
+          >
+            {title}
+          </h1>
+          {meta}
+        </div>
+        {description && (
+          <p
+            className={cn(
+              "mt-[5px] mb-0 text-xs leading-[1.45]",
+              descriptionTones[tone],
+              compact &&
+                "max-[560px]:col-span-2 max-[560px]:row-start-2 max-[560px]:mt-0",
+            )}
+          >
+            {description}
+          </p>
+        )}
       </div>
       {actions && (
         <div

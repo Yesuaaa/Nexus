@@ -17,12 +17,15 @@ export type StatStripItem = {
   meter?: ReactNode
   /** Optional destination for a supported KPI drill-down. */
   href?: string
+  /** Optional accessible name for a drill-down link. */
+  ariaLabel?: string
+  /** Marks only this item unavailable when sibling metrics are loaded. */
+  unavailable?: boolean
 }
 
 /**
- * A single bordered strip of headline stats separated by hairline dividers.
- * Dividers come from a 1px grid gap over a border-colored background, so
- * they follow any responsive column count.
+ * Headline metrics in a continuous strip. A 1px grid gap draws dividers at
+ * every responsive column count.
  */
 export function StatStrip({
   items,
@@ -30,16 +33,22 @@ export function StatStrip({
   pending,
   unavailable,
   columns = 4,
-  className,
+  compact = false,
+  wrapCaption = false,
+  hoverEffects = true,
   wrapLabels = false,
+  className,
 }: {
   items: StatStripItem[]
   label: string
   pending: boolean
   unavailable: boolean
   columns?: 2 | 4
-  className?: string
+  compact?: boolean
+  wrapCaption?: boolean
+  hoverEffects?: boolean
   wrapLabels?: boolean
+  className?: string
 }) {
   return (
     <section
@@ -55,7 +64,8 @@ export function StatStrip({
     >
       {items.map((item) => {
         const Icon = item.icon
-        const href = !pending && !unavailable ? item.href : undefined
+        const itemUnavailable = unavailable || item.unavailable === true
+        const href = !pending && !itemUnavailable ? item.href : undefined
         const content = (
           <>
             <div className="flex min-w-0 items-center gap-2.5">
@@ -72,7 +82,7 @@ export function StatStrip({
                 className={cn(
                   "m-0 text-xs font-medium text-[#65718a]",
                   wrapLabels ? "break-words" : "truncate",
-                  href && "group-hover:text-[#203f8c]",
+                  href && hoverEffects && "group-hover:text-[#203f8c]",
                 )}
               >
                 {item.label}
@@ -86,35 +96,49 @@ export function StatStrip({
               </div>
             ) : (
               <div className="grid gap-1.5">
-                <p className="m-0 text-[26px] leading-none font-semibold tracking-[-0.03em] text-foreground tabular-nums">
-                  {unavailable ? "—" : item.value}
-                </p>
-                {!unavailable && item.meter}
                 <p
                   className={cn(
-                    "m-0 truncate text-[11px]",
-                    unavailable
+                    "m-0 leading-none font-semibold tracking-[-0.03em] text-foreground tabular-nums",
+                    compact ? "text-xl" : "text-[26px]",
+                  )}
+                >
+                  {itemUnavailable ? "—" : item.value}
+                </p>
+                {!itemUnavailable && item.meter}
+                <p
+                  className={cn(
+                    "m-0 text-[11px]",
+                    compact || wrapCaption
+                      ? "whitespace-normal leading-4"
+                      : "truncate",
+                    itemUnavailable
                       ? "text-[#65718a]"
                       : (item.captionTone ?? "text-[#65718a]"),
                   )}
                 >
-                  {unavailable ? "Data unavailable" : item.caption}
+                  {itemUnavailable ? "Data unavailable" : item.caption}
                 </p>
               </div>
             )}
           </>
         )
-        const surfaceClass =
-          "flex min-w-0 flex-col gap-3 bg-background px-5 py-4"
+        const surfaceClass = cn(
+          "flex min-h-full min-w-0 flex-col bg-background",
+          compact ? "gap-2.5 px-4 py-3.5" : "gap-3 px-5 py-4",
+        )
         return (
           <article key={item.label}>
             {href ? (
               <Link
                 href={href}
-                aria-label={`View ${item.label.toLowerCase()} projects in Project Workspace Management`}
+                aria-label={
+                  item.ariaLabel ??
+                  `View ${item.label.toLowerCase()} projects in Project Workspace Management`
+                }
                 className={cn(
                   surfaceClass,
-                  "group min-h-full rounded-[10px] no-underline hover:bg-[#f8fafb] focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#203f8c]",
+                  "group no-underline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#203f8c]",
+                  hoverEffects && "hover:bg-[#f8fafb]",
                 )}
               >
                 {content}

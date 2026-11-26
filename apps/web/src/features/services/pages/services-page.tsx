@@ -20,11 +20,11 @@ const ClientServicesPage = dynamic(
   { loading: ServicesLoading },
 )
 
-export function ServicesPage({ serviceId }: { serviceId?: string } = {}) {
+export function ServicesPage({ inquiryService }: { inquiryService?: string }) {
   const account = usePortalAccount()
 
   return account.role === "USER" ? (
-    <ClientServicesPage serviceId={serviceId} />
+    <ClientServicesPage key={inquiryService} inquiryService={inquiryService} />
   ) : (
     <ServiceManagementPage />
   )

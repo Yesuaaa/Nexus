@@ -4,6 +4,7 @@ import {
   uploadProjectDeliverable,
   reviewProjectDeliverable,
   sendProjectDeliverableToClient,
+  escalateProjectDeliverable,
 } from "../../src/features/project-workspace/project-workspace.service.js"
 import { assertPhase2Target } from "./showcase-phase2-foundation.js"
 import { assertShowcaseRealtimeDisabled } from "./showcase-realtime.js"
@@ -88,17 +89,27 @@ export async function seedFeaturedDeliverables(
     project.client.accountDeletedAt
   )
     throw new Error("The expected featured showcase project is required")
-  const actorId = showcaseId("user", 2)
+  const actorId = showcaseId("user", 3)
   const actor = project.staff.find(
-    (member) => member.employeeId === showcaseId("employee", 0),
+    (member) => member.employeeId === showcaseId("employee", 1),
+  )?.employee
+  const lead = project.staff.find(
+    (member) =>
+      member.employeeId === showcaseId("employee", 0) && member.isTeamLead,
   )?.employee
   if (
     !actor ||
     actor.user?.id !== actorId ||
-    actor.user.email !== "team1@showcase.invalid" ||
+    actor.user.email !== "team2@showcase.invalid" ||
     !actor.user.isActive ||
     actor.user.accountDeletedAt ||
-    actor.status !== "ACTIVE"
+    actor.status !== "ACTIVE" ||
+    !lead ||
+    lead.user?.id !== showcaseId("user", 2) ||
+    lead.user.email !== "team1@showcase.invalid" ||
+    !lead.user.isActive ||
+    lead.user.accountDeletedAt ||
+    lead.status !== "ACTIVE"
   )
     throw new Error("The expected fictional contributor is unavailable")
   for (const [index, example] of examples.entries()) {
@@ -113,7 +124,7 @@ export async function seedFeaturedDeliverables(
     if (
       milestone.workflowFile &&
       (milestone.workflowFile.uploadId !== uploadId ||
-        milestone.workflowFile.uploaderId !== actorId ||
+        ![actorId, lead.user.id].includes(milestone.workflowFile.uploaderId) ||
         milestone.workflowFile.sha256 !== expectedHash ||
         milestone.workflowFile.name !== example.name)
     )
@@ -156,8 +167,29 @@ export async function seedFeaturedDeliverables(
       state = "IN_REVIEW"
     }
     if (state === "IN_REVIEW" && example.final !== "IN_REVIEW") {
+      let reviewerId = lead.user.id
+      if (milestone.workflowFile?.uploaderId === lead.user.id) {
+        const submission = await prisma.projectDeliverableSubmission.findUnique(
+          {
+            where: { workflowFileId: milestone.workflowFile.id },
+            select: { status: true },
+          },
+        )
+        if (submission?.status === "IN_REVIEW")
+          await escalateProjectDeliverable(
+            lead.user.id,
+            workspaceId,
+            projectId,
+            milestone.id,
+          )
+        else if (submission?.status !== "ESCALATED")
+          throw new Error(
+            "The existing deliverable submission is not awaiting review",
+          )
+        reviewerId = headId
+      }
       await reviewProjectDeliverable(
-        headId,
+        reviewerId,
         workspaceId,
         projectId,
         milestone.id,

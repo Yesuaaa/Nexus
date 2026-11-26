@@ -15,7 +15,6 @@ import { ManagementViewToggle } from "@/components/layout/management-view-toggle
 import { contentClass } from "@/components/layout/styles"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { EmptyState } from "@/components/ui/empty-state"
 import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { KpiCards } from "@/components/ui/kpi-cards"
 import { KpiDistributionChart } from "@/components/ui/kpi-distribution-chart"
@@ -439,7 +438,7 @@ function StaffProjectWorkspacePage() {
               Try again
             </Button>
           </Alert>
-        ) : loading || searchPending || filtered.length > 0 ? (
+        ) : (
           <WorkspaceListTable
             workspaces={filtered}
             loading={loading || searchPending}
@@ -450,66 +449,26 @@ function StaffProjectWorkspacePage() {
             quickKey={settledSearch}
             archiveView={view === "archive"}
             directoryState={directoryState}
-            onChanged={refresh}
-          />
-        ) : search.trim() || status !== "all" ? (
-          <EmptyState
-            size="lg"
-            icon={BriefcaseBusiness}
-            title="No projects match those filters"
-            description={
-              resultsTruncated
-                ? "No loaded projects match. Some assigned projects may be outside the first 200 results."
-                : "Try changing the search or status filter."
+            emptyMessage={
+              search.trim() || status !== "all"
+                ? resultsTruncated
+                  ? "No loaded projects match. Some assigned projects may be outside the first 200 results."
+                  : "No projects match those filters."
+                : projectCounts.total === 0
+                  ? "No assigned projects yet."
+                  : view === "archive" && archivedCount === 0
+                    ? "Archive is empty."
+                    : view === "archive" &&
+                        archivedWorkspaceCount === 0 &&
+                        archivedCount > 0 &&
+                        !resultsTruncated
+                      ? "No fully archived workspaces. Completed or cancelled projects inside an active workspace remain listed with that workspace."
+                      : view === "active" && openCount === 0
+                        ? "No active projects."
+                        : resultsTruncated
+                          ? "Some projects may be outside the first 200 loaded results."
+                          : undefined
             }
-          />
-        ) : projectCounts.total === 0 ? (
-          <EmptyState
-            size="lg"
-            icon={BriefcaseBusiness}
-            title="No assigned projects yet"
-            description="Projects assigned to you will appear here."
-          />
-        ) : view === "archive" && archivedCount === 0 ? (
-          <EmptyState
-            size="lg"
-            icon={BriefcaseBusiness}
-            title="Archive is empty"
-            description="Completed and cancelled projects will appear here."
-          />
-        ) : view === "archive" &&
-          archivedWorkspaceCount === 0 &&
-          archivedCount > 0 &&
-          !resultsTruncated ? (
-          <EmptyState
-            size="lg"
-            icon={BriefcaseBusiness}
-            title="No fully archived workspaces"
-            description="Completed or cancelled projects inside an active workspace remain listed with that workspace."
-          />
-        ) : view === "active" && openCount === 0 ? (
-          <EmptyState
-            size="lg"
-            icon={BriefcaseBusiness}
-            title="No active projects"
-            description="All completed and cancelled projects are available in Archive."
-          />
-        ) : resultsTruncated ? (
-          <EmptyState
-            size="lg"
-            icon={BriefcaseBusiness}
-            title="Projects are outside the loaded results"
-            description="The Staff list currently loads up to 200 assigned projects. Some projects may be missing from this view."
-          />
-        ) : (
-          <WorkspaceListTable
-            workspaces={filtered}
-            loading={loading || searchPending}
-            animateRows={false}
-            viewKey={JSON.stringify([search, view, status, sort])}
-            quickKey={search}
-            archiveView={view === "archive"}
-            directoryState={directoryState}
             onChanged={refresh}
           />
         )}

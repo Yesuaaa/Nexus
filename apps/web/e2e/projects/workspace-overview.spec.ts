@@ -144,10 +144,10 @@ test("overview shows authorized project progress and navigates to work", async (
     path: testInfo.outputPath("overview-mobile.png"),
     fullPage: true,
   })
-  await page.getByRole("button", { name: "View work" }).first().click()
+  await page.getByRole("link", { name: "View work" }).first().click()
   await expect(
-    page.getByRole("tab", { name: "Work", exact: true }),
-  ).toHaveAttribute("aria-selected", "true")
+    page.getByRole("link", { name: "Work", exact: true }),
+  ).toHaveAttribute("aria-current", "page")
 })
 
 test("empty optional sections remain honest", async ({ page }) => {

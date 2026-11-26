@@ -21,7 +21,7 @@ export function ModulePage() {
       <PageHeader
         title="Module"
         description="Select a module to continue. Only workspaces available to your account are shown."
-        className="justify-center text-center max-[560px]:items-center [&>div>h1]:text-[clamp(28px,3vw,36px)] [&>div>p]:text-sm"
+        className="justify-center text-center max-[560px]:items-center [&>div]:w-full [&>div>div]:justify-center [&>div>div>h1]:text-[clamp(28px,3vw,36px)] [&>div>p]:text-sm"
       />
 
       {modules.length === 0 ? (

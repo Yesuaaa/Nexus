@@ -370,6 +370,34 @@ export function getConversationStreamAccess(userId: string, id: string) {
   })
 }
 
+/**
+ * What the owning client sees before a department accepts the request, when no
+ * conversation exists yet. Null when this is not such a request.
+ */
+export async function getWaitingConversation(userId: string, id: string) {
+  const request = await getPrisma()!.serviceRequest.findFirst({
+    where: {
+      id,
+      clientId: userId,
+      client: { ...activeAccount, role: "USER" },
+      conversationId: null,
+      acceptedDepartmentId: null,
+      status: { notIn: [...archivedStatuses] },
+    },
+    select: { id: true },
+  })
+  if (!request) return null
+  return {
+    archived: false,
+    selectedBookingId: null,
+    conversation: null,
+    canSend: false,
+    messages: [],
+    meetings: [],
+    nextCursor: null,
+  }
+}
+
 export async function getConversationAccess(
   userId: string,
   id: string,

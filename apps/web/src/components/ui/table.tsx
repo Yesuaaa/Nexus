@@ -10,7 +10,7 @@ const Table = React.forwardRef<
     <table
       ref={ref}
       className={cn(
-        "w-full caption-bottom text-xs",
+        "w-full table-fixed caption-bottom text-xs [&_td]:break-words",
         density === "compact" &&
           "[&_td]:px-3 [&_td]:py-2.5 [&_th]:h-9 [&_th]:px-3",
         className,

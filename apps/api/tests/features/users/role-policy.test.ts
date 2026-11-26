@@ -32,6 +32,8 @@ test("fixed roles have the expected permissions", () => {
     Permission.DEPARTMENTS_DELETE,
     Permission.SERVICES_READ,
     Permission.SERVICES_MANAGE,
+    Permission.SERVICE_INQUIRIES_READ,
+    Permission.SERVICE_INQUIRIES_MANAGE,
     Permission.CLIENTS_READ,
     Permission.CLIENTS_CREATE,
     Permission.EMPLOYEES_READ,

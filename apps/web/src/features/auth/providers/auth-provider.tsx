@@ -1,6 +1,12 @@
 "use client"
 
-import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react"
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react"
 import { usePathname } from "next/navigation"
 import dynamic from "next/dynamic"
 import { gsap } from "gsap"
@@ -26,7 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     origin: string
     start: () => void
   } | null>(null)
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (moduleReveal.current && pathname !== moduleReveal.current.origin)
       moduleReveal.current.start()
   }, [pathname])
@@ -49,11 +55,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const destination = new URL(link.href, window.location.href)
     const page = link.closest<HTMLElement>("[data-landing-page]")
     const landing = pathname === "/" ? page : null
+    const isPublicNavigation = Boolean(link.closest("header, footer"))
     const publicServicesPage =
-      /^\/explore\/services(?:\/|$)/.test(pathname) &&
-      (link.closest("header") ||
+      (/^\/explore\/(?:services|projects)(?:\/|$)/.test(pathname) ||
+        pathname === "/about") &&
+      (isPublicNavigation ||
         link.hasAttribute("data-service-card-link") ||
-        link.hasAttribute("data-service-inquiry-link"))
+        link.hasAttribute("data-service-inquiry-link") ||
+        link.hasAttribute("data-service-back-link"))
         ? page
         : null
     const authPage =
@@ -64,8 +73,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const isWorkspaceLink =
       pathname === "/module" &&
       link.matches('a[aria-label^="Open "][aria-label$=" workspace"]')
-    const isLandingHeaderLink = Boolean(
-      (landing || publicServicesPage) && link.closest("header"),
+    const isLandingSectionLink = Boolean(
+      landing && isPublicNavigation && destination.hash,
     )
     const samePage = destination.pathname === pathname
     if (
@@ -77,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (
       (!landing && !publicServicesPage && !authPage && !isWorkspaceLink) ||
       destination.origin !== window.location.origin ||
-      (samePage && !isLandingHeaderLink) ||
+      (samePage && !isLandingSectionLink) ||
       (link.target && link.target !== "_self") ||
       link.hasAttribute("download")
     )
@@ -89,13 +98,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       link.closest<HTMLElement>("main")?.parentElement
     if (!shell || moduleReveal.current) return
     const app = event.currentTarget
-    app.inert = true
+    const waitForPublicPage = Boolean(
+      !samePage && (landing || publicServicesPage || authPage),
+    )
+    if (!waitForPublicPage) app.inert = true
     const point = event.detail === 0 ? link.getBoundingClientRect() : null
     const x = point ? point.left + point.width / 2 : event.clientX
     const y = point ? point.top + point.height / 2 : event.clientY
     const overlay = document.createElement("div")
     overlay.style.cssText =
       "position:fixed;inset:0;z-index:100;overflow:hidden;touch-action:none"
+    if (waitForPublicPage) overlay.style.visibility = "hidden"
     overlay.setAttribute("aria-hidden", "true")
     const snapshot = shell.cloneNode(true) as HTMLElement
     snapshot.inert = true
@@ -150,6 +163,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const start = () => {
       if (animation) return
+      overlay.style.visibility = ""
+      app.inert = true
       animation = gsap.to(progress, {
         value: 1,
         duration: 1.1,

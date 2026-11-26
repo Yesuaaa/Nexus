@@ -9,6 +9,13 @@ import {
   UsersRound,
 } from "lucide-react"
 import { Avatar } from "@/components/ui/avatar"
+import Link from "next/link"
+import { usePortalAccount } from "@/features/auth/providers/account-context"
+import {
+  getProjectOverviewAttention,
+  summarizeProjectOverview,
+  type ProjectOverviewSection,
+} from "../model/project-overview-summary"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
 import { OverviewPanel } from "@/components/ui/overview-panel"
@@ -22,17 +29,22 @@ import { taskStatusLabels, taskStatusTones } from "../model/task-status"
 
 export function ProjectSummary({
   workspace,
-  onViewTeam,
-  onViewDeliverables,
-  onViewWork,
-  onViewActivity,
+  sectionHref,
+  departmentName,
+  readOnly = false,
 }: {
   workspace: ProjectWorkspaceDetail
-  onViewTeam: () => void
-  onViewDeliverables: () => void
-  onViewWork: () => void
-  onViewActivity: () => void
+  sectionHref: (section: ProjectOverviewSection) => string
+  departmentName?: string | null
+  readOnly?: boolean
 }) {
+  const account = usePortalAccount()
+  const summary = summarizeProjectOverview(workspace)
+  const attention = getProjectOverviewAttention(
+    workspace,
+    account.id,
+    account.role,
+  )
   const { formatDate, formatDateOnly, formatDateTime, timeZone } =
     useDatePreferences()
   const phases = workspace.workstreams.flatMap((stream) =>
@@ -41,9 +53,10 @@ export function ProjectSummary({
   const tasks = phases.flatMap((phase) =>
     phase.tasks.map((task) => ({ ...task, stream: phase.stream })),
   )
-  const completed = tasks.filter((task) => task.status === "DONE").length
-  const percent = tasks.length
-    ? Math.round((completed / tasks.length) * 100)
+  const completed = summary.tasks.completed
+  const totalTasks = summary.tasks.total
+  const percent = totalTasks
+    ? Math.round((completed / totalTasks) * 100)
     : 0
   const completedPhases = phases.filter(
     (phase) =>
@@ -98,9 +111,9 @@ export function ProjectSummary({
   const recent = [...workspace.activity]
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
     .slice(0, 5)
-  const action = (label: string, onClick: () => void) => (
-    <Button type="button" variant="ghost" size="sm" onClick={onClick}>
-      {label}
+  const action = (label: string, section: ProjectOverviewSection) => (
+    <Button asChild variant="ghost" size="sm">
+      <Link href={sectionHref(section)}>{label}</Link>
     </Button>
   )
   return (
@@ -114,16 +127,16 @@ export function ProjectSummary({
         items={[
           {
             label: "Overall progress",
-            value: tasks.length ? `${percent}%` : "—",
-            caption: `${completed} of ${tasks.length} tasks complete`,
+            value: totalTasks ? `${percent}%` : "—",
+            caption: `${completed} of ${totalTasks} tasks complete`,
             icon: CheckCircle2,
             tone: "bg-[#edf3fc] text-[#294c96]",
-            ...(tasks.length
+            ...(totalTasks
               ? {
                   meter: (
                     <ProgressMeter
                       value={completed}
-                      max={tasks.length}
+                      max={totalTasks}
                       label="Overall task progress"
                       colorClass="bg-[#294c96]"
                     />
@@ -158,7 +171,7 @@ export function ProjectSummary({
         <OverviewPanel
           title="Phase progress"
           variant="compact"
-          action={action("View work", onViewWork)}
+          action={action("View work", "work")}
         >
           {phases.length ? (
             <ul className="m-0 grid list-none gap-4 p-0">
@@ -222,6 +235,10 @@ export function ProjectSummary({
                 .map((stream) => stream.serviceName)
                 .join(", ") || "Not specified"}
             </dd>
+            <dt className="text-[#65718a]">Department</dt>
+            <dd className="m-0">
+              {departmentName ?? account.department?.name ?? "Unavailable"}
+            </dd>
             <dt className="text-[#65718a]">Status</dt>
             <dd className="m-0">
               <Pill tone={statusTone(workspace.status)}>
@@ -267,7 +284,7 @@ export function ProjectSummary({
         <OverviewPanel
           title="Upcoming tasks"
           variant="compact"
-          action={action("View work", onViewWork)}
+          action={action("View work", "work")}
         >
           {upcoming.length ? (
             <ul className="m-0 list-none divide-y divide-[#edf0f4] p-0">
@@ -316,7 +333,7 @@ export function ProjectSummary({
         <OverviewPanel
           title="Assigned team"
           variant="compact"
-          action={action("View team", onViewTeam)}
+          action={action("View team", "team")}
         >
           {staff.length ? (
             <ul className="m-0 list-none divide-y divide-[#edf0f4] p-0">
@@ -345,7 +362,7 @@ export function ProjectSummary({
           title="Recent activity"
           variant="compact"
           className="lg:col-span-2"
-          action={action("View all activity", onViewActivity)}
+          action={action("View all activity", "activity")}
         >
           {recent.length ? (
             <ol className="m-0 list-none divide-y divide-[#edf0f4] p-0">
@@ -394,8 +411,44 @@ export function ProjectSummary({
           )}
         </OverviewPanel>
       </div>
+      <OverviewPanel title={attention.heading} variant="compact">
+        {attention.items.length ? (
+          <ul className="m-0 list-none space-y-2 p-0">
+            {attention.items.map((item) => (
+              <li key={item.id}>
+                <Link
+                  href={sectionHref(item.section)}
+                  className="text-xs text-[#294c96]"
+                >
+                  {item.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="m-0 text-xs text-[#65718a]">
+            {readOnly
+              ? "No items need oversight."
+              : "No items need your attention."}
+          </p>
+        )}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {action(
+            summary.notes.available
+              ? `Project notes (${summary.notes.total})`
+              : "Project notes unavailable",
+            "notes",
+          )}
+          {action(
+            summary.requests.available
+              ? `Client requests (${summary.requests.total})`
+              : "Client requests unavailable",
+            "requests",
+          )}
+        </div>
+      </OverviewPanel>
       <div className="flex justify-end">
-        {action("View deliverables", onViewDeliverables)}
+        {action("View deliverables", "deliverables")}
       </div>
     </div>
   )

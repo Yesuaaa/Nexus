@@ -5,7 +5,7 @@ import { Activity, CheckCircle2, FilePenLine, UsersRound } from "lucide-react"
 import { SearchField } from "@/components/ui/search-field"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
-import { FilterSelect } from "@/components/ui/filter-select"
+import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import type { ProjectWorkspaceDetail } from "../api/project-workspace-api"
 
 function category(type: string) {
@@ -57,7 +57,7 @@ export function WorkspaceActivity({
       <p className="mt-1 mb-4 text-xs text-[#65718a]">
         Changes to project details, work plans, tasks, and staffing.
       </p>
-      <div className="mb-4 flex flex-wrap gap-2.5">
+      <div className={`mb-4 ${filterBarClass}`}>
         <SearchField
           label="Search activity"
           placeholder="Search activity..."

@@ -1,13 +1,158 @@
-"use client"
-import { AnimatedTableBody } from "@/components/ui/animated-table-body"
-import { TaskRowActions } from "./task-row-actions"
+﻿"use client"
 
 import { CheckCircle2, ChevronRight, Circle, Flag, Layers3 } from "lucide-react"
+import { focusRing } from "@/components/layout/styles"
+import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { Button } from "@/components/ui/button"
-import { pillToneClass } from "@/components/ui/pill"
-import { ProgressMeter } from "@/components/ui/stat-strip"
-import type { ProjectWorkspaceDetail } from "../api/project-workspace-api"
+import { EmptyState } from "@/components/ui/empty-state"
+import { OverviewPanel } from "@/components/ui/overview-panel"
+import { Pill } from "@/components/ui/pill"
+import {
+  ResponsiveDataTable,
+  ResponsiveDataTableCell,
+  ResponsiveDataTableColumnHeader,
+  ResponsiveDataTableHeader,
+} from "@/components/ui/responsive-data-table"
+import { ProgressMeter, StatStrip } from "@/components/ui/stat-strip"
+import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
+import { cn } from "@/lib/utils"
+import type {
+  ProjectWorkspaceDetail,
+  ProjectWorkPlan,
+} from "../api/project-workspace-api"
 import { taskStatusLabels, taskStatusTones } from "../model/task-status"
+import { TaskRowActions } from "./task-row-actions"
+
+type Workstream = ProjectWorkspaceDetail["workstreams"][number]
+type Phase = ProjectWorkPlan["phases"][number]
+
+const taskGrid =
+  "grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(90px,.7fr)_minmax(92px,.8fr)_64px] items-center gap-3 @max-[540px]:grid-cols-[minmax(0,1fr)_auto]"
+
+function PhaseTasks({
+  phase,
+  stream,
+  workspaceId,
+  onUpdated,
+  busy,
+  readOnly,
+}: {
+  phase: Phase
+  stream: Workstream
+  workspaceId: string
+  onUpdated: (workspace: ProjectWorkspaceDetail) => void
+  busy: boolean
+  readOnly: boolean
+}) {
+  const { formatDateOnly } = useDatePreferences()
+  const labels = ["Task", "Assigned staff", "Status", "Due", "Actions"]
+  const rowGrid = cn(
+    taskGrid,
+    readOnly &&
+      "@min-[541px]:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(90px,.7fr)_minmax(92px,.8fr)]",
+  )
+
+  return (
+    <ResponsiveDataTable
+      label={`${phase.title} tasks`}
+      className="rounded-none border-0"
+    >
+      <ResponsiveDataTableHeader
+        className="@max-[540px]:sr-only"
+        rowClassName={rowGrid}
+      >
+        {(readOnly ? labels.slice(0, -1) : labels).map((label) => (
+          <ResponsiveDataTableColumnHeader key={label}>
+            {label}
+          </ResponsiveDataTableColumnHeader>
+        ))}
+      </ResponsiveDataTableHeader>
+      <AnimatedSlotGridBody
+        items={phase.tasks}
+        getKey={(task) => task.id}
+        viewKey={phase.id}
+        animateRows={false}
+        autoRowHeight
+        rowClassName={(_task, _index, isLast) =>
+          cn(
+            rowGrid,
+            "min-h-[52px] px-4 py-2.5 text-xs hover:bg-[#f8fafd]",
+            !isLast && "border-b border-[#eceef1]",
+          )
+        }
+        emptyContent="No tasks in this phase yet."
+        renderRow={(task) => (
+          <>
+            <ResponsiveDataTableCell className="min-w-0 @max-[540px]:col-start-1 @max-[540px]:row-start-1">
+              <div className="flex items-start gap-2">
+                {task.status === "DONE" ? (
+                  <CheckCircle2
+                    size={16}
+                    className="shrink-0 text-green-700"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <Circle
+                    size={16}
+                    className={cn(
+                      "shrink-0 text-[#94a3b8]",
+                      task.status === "IN_PROGRESS" && "text-blue-600",
+                    )}
+                    aria-hidden="true"
+                  />
+                )}
+                <div className="min-w-0 [overflow-wrap:anywhere]">
+                  <p className="m-0 font-medium">{task.title}</p>
+                  <p className="mt-1 mb-0 text-[11px] text-[#65718a]">
+                    {task.role}
+                  </p>
+                </div>
+              </div>
+            </ResponsiveDataTableCell>
+            <ResponsiveDataTableCell className="min-w-0 break-words text-[#65718a] @max-[540px]:col-span-2">
+              <span className="hidden font-medium @max-[540px]:inline">
+                Assigned staff:{" "}
+              </span>
+              {stream.staff?.find((person) => person.id === task.employeeId)
+                ?.fullName || "Unassigned"}
+            </ResponsiveDataTableCell>
+            <ResponsiveDataTableCell className="@max-[540px]:col-span-2">
+              <span className="mr-1 hidden font-medium text-[#65718a] @max-[540px]:inline">
+                Status:
+              </span>
+              <Pill tone={taskStatusTones[task.status]}>
+                {taskStatusLabels[task.status]}
+              </Pill>
+            </ResponsiveDataTableCell>
+            <ResponsiveDataTableCell className="text-[#65718a] @max-[540px]:col-span-2">
+              <span className="hidden font-medium @max-[540px]:inline">
+                Due:{" "}
+              </span>
+              {task.dueDate ? (
+                <time dateTime={task.dueDate}>
+                  {formatDateOnly(task.dueDate)}
+                </time>
+              ) : (
+                "Not set"
+              )}
+            </ResponsiveDataTableCell>
+            {!readOnly && (
+              <ResponsiveDataTableCell className="justify-self-end @max-[540px]:col-start-2 @max-[540px]:row-start-1">
+                <TaskRowActions
+                  workspaceId={workspaceId}
+                  stream={stream}
+                  task={task}
+                  onUpdated={onUpdated}
+                  disabled={busy}
+                />
+              </ResponsiveDataTableCell>
+            )}
+          </>
+        )}
+      />
+    </ResponsiveDataTable>
+  )
+}
 
 export function WorkspaceOverview({
   workspace,
@@ -18,7 +163,7 @@ export function WorkspaceOverview({
 }: {
   workspace: ProjectWorkspaceDetail
   onUpdated: (workspace: ProjectWorkspaceDetail) => void
-  onEditPlan: (stream: ProjectWorkspaceDetail["workstreams"][number]) => void
+  onEditPlan: (stream: Workstream) => void
   busy: boolean
   readOnly?: boolean
 }) {
@@ -32,255 +177,143 @@ export function WorkspaceOverview({
       phase.tasks.length > 0 &&
       phase.tasks.every((task) => task.status === "DONE"),
   ).length
-  const milestone = workspace.workstreams
-    .flatMap((stream) => stream.milestones ?? [])
-    .find((item) => item.deliveryStatus !== "SENT_TO_CLIENT")
+  const nextWorkstream = workspace.workstreams.find((stream) =>
+    stream.milestones?.some((item) => item.deliveryStatus !== "SENT_TO_CLIENT"),
+  )
+  const milestone = nextWorkstream?.milestones?.find(
+    (item) => item.deliveryStatus !== "SENT_TO_CLIENT",
+  )
   return (
-    <>
-      <div className="mb-5 grid gap-4 md:grid-cols-3">
-        {[
+    <div className="grid min-w-0 gap-5">
+      <StatStrip
+        label="Work plan summary"
+        pending={false}
+        unavailable={false}
+        compact
+        className="grid-cols-3 max-[1050px]:grid-cols-3 max-[650px]:grid-cols-1"
+        items={[
           {
             label: "Tasks complete",
             value: `${done} / ${tasks.length}`,
+            caption: `${tasks.length - done} remaining`,
             icon: CheckCircle2,
+            tone: "bg-[#e8f3ed] text-[#267449]",
           },
           {
             label: "Phases complete",
             value: `${completedPhases} / ${phases.length}`,
+            caption: `${phases.length - completedPhases} remaining`,
             icon: Layers3,
+            tone: "bg-[#e7eefb] text-[#294c96]",
           },
           {
             label: "Next deliverable",
-            value: milestone?.title || "No pending milestone",
+            value: milestone?.title || "None pending",
+            caption: nextWorkstream?.serviceName ?? "No pending milestone",
             icon: Flag,
+            tone: "bg-[#fff2e2] text-[#986018]",
           },
-        ].map(({ label, value, icon: Icon }) => (
-          <article
-            key={label}
-            className="rounded-xl border border-[#dfe5ec] bg-[#fbfcfd] p-5 shadow-[0_2px_8px_rgb(24_41_68_/_4%)]"
-          >
-            <p className="m-0 flex items-center gap-2 text-xs text-[#60718c]">
-              <Icon size={18} className="text-[#3153a5]" />
-              {label}
-            </p>
-            <p className="mt-3 mb-0 text-xl font-semibold tracking-tight text-[#142037]">
-              {value}
-            </p>
-          </article>
-        ))}
-      </div>
-      <div className="min-w-0">
-        <div className="min-w-0 space-y-5">
-          {workspace.workstreams.map((stream) => (
-            <section
-              key={stream.id}
-              className="overflow-hidden rounded-xl border border-[#dfe5ec]"
-            >
-              <header className="flex flex-wrap items-center justify-between gap-3 bg-[#edf1f5] px-5 py-4">
-                <h2 className="m-0 text-sm font-semibold">
-                  {workspace.workstreams.length > 1
-                    ? stream.serviceName
-                    : "Project plan"}{" "}
-                  <span className="font-normal text-[#60718c]">
-                    ({stream.plan?.phases.length ?? 0} phases)
-                  </span>
-                </h2>
-                {!readOnly && (
-                  <Button
-                    variant="outline"
-                    disabled={busy}
-                    className="h-8 text-xs"
-                    onClick={() => onEditPlan(stream)}
+        ]}
+      />
+      {workspace.workstreams.map((stream) => (
+        <OverviewPanel
+          key={stream.id}
+          title={
+            workspace.workstreams.length > 1
+              ? stream.serviceName
+              : "Project plan"
+          }
+          description={
+            stream.plan
+              ? `${stream.plan.phases.length} ${stream.plan.phases.length === 1 ? "phase" : "phases"}`
+              : undefined
+          }
+          action={
+            !readOnly && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => onEditPlan(stream)}
+              >
+                {workspace.workstreams.length > 1
+                  ? `Edit ${stream.serviceName}`
+                  : "Edit project plan"}
+              </Button>
+            )
+          }
+        >
+          {stream.plan?.phases.length ? (
+            <div className="grid gap-3">
+              {stream.plan.phases.map((phase, index) => {
+                const count = phase.tasks.filter(
+                  (task) => task.status === "DONE",
+                ).length
+                const percent = phase.tasks.length
+                  ? Math.round((count / phase.tasks.length) * 100)
+                  : 0
+                return (
+                  <details
+                    key={phase.id}
+                    open={index === 0}
+                    className="group rounded-lg border border-[#e8ebef]"
                   >
-                    {workspace.workstreams.length > 1
-                      ? `Edit ${stream.serviceName}`
-                      : "Edit project plan"}
-                  </Button>
-                )}
-              </header>
-              <div className="space-y-3 p-3">
-                {stream.plan && (
-                  <div
-                    className="grid grid-cols-[16px_minmax(0,1fr)_100px_96px_36px] items-center gap-3 px-[17px] py-1 text-[11px] font-semibold text-[#60718c]"
-                    aria-hidden="true"
-                  >
-                    <span className="col-span-2">Phase</span>
-                    <span className="text-center">Tasks complete</span>
-                    <span className="col-span-2 text-center">Progress</span>
-                  </div>
-                )}
-                {!stream.plan && (
-                  <p className="p-3 text-xs text-[#65718a]">
-                    A delivery template has not been selected yet.
-                  </p>
-                )}
-                {stream.plan?.phases.map((phase, index) => {
-                  const count = phase.tasks.filter(
-                    (task) => task.status === "DONE",
-                  ).length
-                  const percent = phase.tasks.length
-                    ? Math.round((count / phase.tasks.length) * 100)
-                    : 0
-                  return (
-                    <details
-                      key={phase.id}
-                      open={index === 0}
-                      className="group overflow-hidden rounded-lg border border-[#dfe5ec]"
+                    <summary
+                      className={cn(
+                        "flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-2 rounded-lg px-4 py-3 text-xs marker:hidden hover:bg-[#f8fafd] group-open:rounded-b-none group-open:border-b group-open:border-[#e8ebef] [&::-webkit-details-marker]:hidden",
+                        focusRing,
+                      )}
                     >
-                      <summary className="grid cursor-pointer list-none grid-cols-[16px_minmax(0,1fr)_100px_96px_36px] items-center gap-3 bg-[#f7f9fc] px-4 py-4 text-xs marker:hidden focus-visible:outline-2 focus-visible:outline-[#294a9b] [&::-webkit-details-marker]:hidden">
-                        <ChevronRight
-                          size={16}
-                          className="shrink-0 transition-transform group-open:rotate-90"
-                        />
-                        <strong className="min-w-0 flex-1">
-                          {phase.title}
-                        </strong>
-                        <span
-                          className="text-center tabular-nums"
-                          aria-label={`${count} of ${phase.tasks.length} tasks complete`}
-                        >
-                          {count} / {phase.tasks.length}
-                        </span>
+                      <ChevronRight
+                        size={16}
+                        className="shrink-0 transition-transform group-open:rotate-90 motion-reduce:transition-none"
+                        aria-hidden="true"
+                      />
+                      <strong className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+                        {phase.title}
+                      </strong>
+                      <span
+                        className="text-[#65718a] tabular-nums"
+                        aria-label={`${count} of ${phase.tasks.length} tasks complete`}
+                      >
+                        {count} / {phase.tasks.length} tasks
+                      </span>
+                      <span className="w-16 max-[450px]:hidden">
                         <ProgressMeter
                           value={percent}
                           max={100}
                           label={`${phase.title} progress`}
                           colorClass="bg-[#294c96]"
                         />
-                        <span className="w-9 text-right tabular-nums text-[#60718c]">
-                          {percent}%
-                        </span>
-                      </summary>
-                      <div className="overflow-x-auto px-4 pb-3">
-                        <table className="w-full min-w-[900px] table-fixed text-left text-xs">
-                          <colgroup>
-                            <col />
-                            <col className="w-[22%]" />
-                            <col className="w-[15%]" />
-                            <col className="w-[14%]" />
-                            <col className="w-[96px]" />
-                          </colgroup>
-                          <thead className="bg-[#e8edf2] text-[11px] text-[#182235]">
-                            <tr>
-                              <th
-                                scope="col"
-                                className="px-4 py-3 font-semibold"
-                              >
-                                Task
-                              </th>
-                              <th
-                                scope="col"
-                                className="px-3 py-3 text-center font-semibold"
-                              >
-                                Assigned staff
-                              </th>
-                              <th
-                                scope="col"
-                                className="px-3 py-3 text-center font-semibold"
-                              >
-                                Status
-                              </th>
-                              <th
-                                scope="col"
-                                className="px-3 py-3 text-center font-semibold"
-                              >
-                                Due
-                              </th>
-                              <th
-                                scope="col"
-                                className="px-3 py-3 text-center font-semibold"
-                              >
-                                Actions
-                              </th>
-                            </tr>
-                          </thead>
-                          <AnimatedTableBody
-                            items={phase.tasks}
-                            viewKey={JSON.stringify(
-                              phase.tasks.map((task) => [
-                                task.id,
-                                task.status,
-                                task.employeeId,
-                                task.dueDate,
-                              ]),
-                            )}
-                            animateRows={false}
-                            columns={5}
-                            rowClassName="border-t border-[#edf0f4]"
-                            emptyContent="No tasks in this phase yet."
-                            renderRow={(task) => (
-                              <>
-                                <td className="px-4 py-3">
-                                  <div className="flex items-start gap-2">
-                                    {task.status === "DONE" ? (
-                                      <CheckCircle2
-                                        size={16}
-                                        className="shrink-0 text-green-700"
-                                      />
-                                    ) : (
-                                      <Circle
-                                        size={16}
-                                        className={`shrink-0 ${task.status === "IN_PROGRESS" ? "text-blue-600" : "text-[#94a3b8]"}`}
-                                      />
-                                    )}
-                                    <div>
-                                      <p className="m-0">{task.title}</p>
-                                      <p className="mt-1 mb-0 text-[10px] text-[#65718a]">
-                                        {task.role}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </td>
-                                <td className="px-3 py-3 text-center align-middle text-[#60718c]">
-                                  {stream.staff?.find(
-                                    (person) => person.id === task.employeeId,
-                                  )?.fullName || "Unassigned"}
-                                </td>
-                                <td className="px-3 py-3 text-center align-middle">
-                                  <span
-                                    className={`inline-flex rounded-md px-2 py-1 text-[10px] ${pillToneClass(taskStatusTones[task.status])}`}
-                                  >
-                                    {taskStatusLabels[task.status]}
-                                  </span>
-                                </td>
-                                <td className="whitespace-nowrap px-3 py-3 text-center align-middle text-[#65718a]">
-                                  {task.dueDate
-                                    ? new Date(
-                                        `${task.dueDate}T00:00:00`,
-                                      ).toLocaleDateString()
-                                    : "Not set"}
-                                </td>
-                                <td className="px-3 py-3 text-center align-middle">
-                                  {readOnly ? (
-                                    <span>Read only</span>
-                                  ) : (
-                                    <TaskRowActions
-                                      workspaceId={workspace.id}
-                                      stream={stream}
-                                      task={task}
-                                      onUpdated={onUpdated}
-                                      disabled={busy}
-                                    />
-                                  )}
-                                </td>
-                              </>
-                            )}
-                          />
-                        </table>
-                        {!phase.tasks.length && (
-                          <p className="text-xs text-[#65718a]">
-                            No tasks in this phase yet.
-                          </p>
-                        )}
-                      </div>
-                    </details>
-                  )
-                })}
-              </div>
-            </section>
-          ))}
-        </div>
-      </div>
-    </>
+                      </span>
+                      <span className="w-9 text-right text-[#65718a] tabular-nums">
+                        {percent}%
+                      </span>
+                    </summary>
+                    <PhaseTasks
+                      phase={phase}
+                      stream={stream}
+                      workspaceId={workspace.id}
+                      onUpdated={onUpdated}
+                      busy={busy}
+                      readOnly={readOnly}
+                    />
+                  </details>
+                )
+              })}
+            </div>
+          ) : (
+            <EmptyState
+              size="sm"
+              title={
+                stream.plan
+                  ? "No phases in this plan"
+                  : "A delivery template has not been selected yet."
+              }
+            />
+          )}
+        </OverviewPanel>
+      ))}
+    </div>
   )
 }

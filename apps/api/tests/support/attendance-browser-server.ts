@@ -127,6 +127,42 @@ test("attendance browser API fixture", { timeout: 1800000 }, async (t) => {
     employeeId: overviewEmployee.id,
     userId: overviewUser.id,
   }
+  const sparseOverviewDepartment = await prisma.department.create({
+    data: { name: "PG013 sparse overview" },
+  })
+  const sparseOverviewHead = await prisma.user.create({
+    data: {
+      email: "pg013-sparse-head@attendance-browser.test",
+      fullName: "PG013 Sparse Overview Head",
+      passwordHash: "test-only",
+      role: "STAFF",
+      departmentId: sparseOverviewDepartment.id,
+    },
+  })
+  const sparseOverviewEmployee = await prisma.employee.create({
+    data: {
+      employeeId: "BROWSER-PG013-sparse-head",
+      fullName: "PG013 Sparse Overview Head",
+      userId: sparseOverviewHead.id,
+      departmentId: sparseOverviewDepartment.id,
+    },
+  })
+  await prisma.attendancePolicyAssignment.create({
+    data: {
+      employeeId: sparseOverviewEmployee.id,
+      policyId: policy.id,
+      effectiveFrom: new Date("2026-01-01"),
+    },
+  })
+  await prisma.department.update({
+    where: { id: sparseOverviewDepartment.id },
+    data: { headId: sparseOverviewHead.id },
+  })
+  actors["pg013-sparse-head"] = {
+    ...(await issueSession(sparseOverviewHead)),
+    employeeId: sparseOverviewEmployee.id,
+    userId: sparseOverviewHead.id,
+  }
   const reportingDepartment = await prisma.department.create({
     data: { name: "WC06 reporting" },
   })

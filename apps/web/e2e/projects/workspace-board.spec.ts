@@ -53,7 +53,7 @@ test("workspace board groups tasks and updates the existing plan", async ({
     await route.fulfill({ json: workspace })
   })
   await page.goto("/project-workspace/group%3Aboard")
-  await page.getByRole("tab", { name: "Work", exact: true }).click()
+  await page.getByRole("link", { name: "Work", exact: true }).click()
   await expect(
     page.getByRole("button", { name: "Edit project plan" }),
   ).toBeVisible()
@@ -187,7 +187,7 @@ test("board recovers from errors and scopes grouped tasks with terminal controls
   })
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto("/project-workspace/group%3Aboard")
-  await page.getByRole("tab", { name: "Work", exact: true }).click()
+  await page.getByRole("link", { name: "Work", exact: true }).click()
   await page.getByRole("tab", { name: "Board", exact: true }).click()
   await expect(page.getByRole("region", { name: "Not started" })).toContainText(
     "Not started",
@@ -313,7 +313,7 @@ test("custom board columns persist and return tasks on deletion", async ({
     await route.fulfill({ json: workspace })
   })
   await page.goto("/project-workspace/group%3Aboard")
-  await page.getByRole("tab", { name: "Work", exact: true }).click()
+  await page.getByRole("link", { name: "Work", exact: true }).click()
   await page.getByRole("tab", { name: "Board", exact: true }).click()
   await page.getByRole("button", { name: "Add column" }).click()
   await expect(page.getByRole("dialog", { name: "Add column" })).toBeVisible()
@@ -352,7 +352,7 @@ test("custom board columns persist and return tasks on deletion", async ({
   )
   expect(task.status).toBe("IN_PROGRESS")
   await page.reload()
-  await page.getByRole("tab", { name: "Work", exact: true }).click()
+  await page.getByRole("link", { name: "Work", exact: true }).click()
   await page.getByRole("tab", { name: "Board", exact: true }).click()
   await expect(page.getByRole("region", { name: "Review" })).toContainText(
     "Review assets",
@@ -471,7 +471,7 @@ test("board filters use real task metadata and support custom-column drops", asy
   })
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto("/project-workspace/group%3Aboard")
-  await page.getByRole("tab", { name: "Work", exact: true }).click()
+  await page.getByRole("link", { name: "Work", exact: true }).click()
   await page.getByRole("tab", { name: "Board", exact: true }).click()
   await expect(
     page.getByRole("button", {
@@ -535,7 +535,7 @@ test("board filters use real task metadata and support custom-column drops", asy
     phase.tasks = []
   })
   await page.reload()
-  await page.getByRole("tab", { name: "Work", exact: true }).click()
+  await page.getByRole("link", { name: "Work", exact: true }).click()
   await page.getByRole("tab", { name: "Board", exact: true }).click()
   await expect(page.getByRole("region", { name: "Not started" })).toContainText(
     "No tasks",

@@ -3,6 +3,8 @@ import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const sizes = {
+  /** Compact placeholder inside an existing card. */
+  xs: "px-3 py-2",
   /** Inline note inside a card or panel section. */
   sm: "px-4 py-5",
   /** Section-level placeholder. */
@@ -52,8 +54,8 @@ export function EmptyState({
     >
       {Icon && (
         <Icon
-          size={size === "sm" ? 20 : 26}
-          className="mb-3 text-[#8293ad]"
+          size={size === "sm" || size === "xs" ? 20 : 26}
+          className={cn("text-[#8293ad]", size === "xs" ? "mb-1" : "mb-3")}
           aria-hidden="true"
         />
       )}
@@ -61,7 +63,7 @@ export function EmptyState({
         <Heading
           className={cn(
             "m-0 font-semibold text-foreground",
-            size === "sm" ? "text-xs" : "text-sm",
+            size === "sm" || size === "xs" ? "text-xs" : "text-sm",
           )}
         >
           {title}

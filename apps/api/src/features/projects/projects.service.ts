@@ -11,6 +11,7 @@ import {
   projectAuditStatus,
 } from "../project-management-logs/events.js"
 import { writeProjectLog } from "../project-management-logs/writer.js"
+import { finishLoggedRequest } from "../service-operation-logs/request-status-log.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 import { lockRows } from "../../shared/db/locks.js"
 
@@ -199,6 +200,23 @@ export async function getProject(userId: string, id: string) {
               orderBy: { createdAt: "desc" },
             })
           : []
+      const notes = isClient
+        ? await tx.projectNoteRevision.findMany({
+            where: {
+              note: { projectId: id },
+              status: "APPROVED",
+              clientVisible: true,
+            },
+            select: {
+              id: true,
+              content: true,
+              submittedAt: true,
+              reviewedAt: true,
+              author: { select: { fullName: true } },
+            },
+            orderBy: [{ submittedAt: "desc" }, { id: "desc" }],
+          })
+        : []
       const isWorkspaceManaged = Boolean(
         project.templateKey || project.workspaceGroupId,
       )
@@ -223,6 +241,7 @@ export async function getProject(userId: string, id: string) {
         canReviewChanges,
         deliverables,
         changeRequests,
+        notes,
       }
     },
     { isolationLevel: "RepeatableRead" },
@@ -687,10 +706,7 @@ export async function reviewProjectCancellationRequest(
           },
           data: { state: "CANCELLED" },
         })
-        await tx.serviceRequest.updateMany({
-          where: { id: project.requestId, status: { not: "CANCELLED" } },
-          data: { status: "CANCELLED" },
-        })
+        await finishLoggedRequest(tx, project.requestId, userId, "CANCELLED")
       }
       const declined = await tx.projectChangeRequest.updateMany({
         where: {
