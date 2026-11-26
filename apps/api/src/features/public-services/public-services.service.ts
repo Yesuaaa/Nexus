@@ -23,7 +23,9 @@ function present(
   })
   return {
     ...publicData,
-    imageUrl: safeHttpsUrl(serviceImagePublicUrl(imagePath)),
+    imageUrl: imagePath?.startsWith("local-services/")
+      ? serviceImagePublicUrl(imagePath)
+      : safeHttpsUrl(serviceImagePublicUrl(imagePath)),
     pricing: pricingTemplate?.isPublic ? price(pricingTemplate) : null,
     packages: packages.map(
       ({

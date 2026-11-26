@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto"
+import { mkdir, unlink, writeFile } from "node:fs/promises"
+import path from "node:path"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 import { safeHttpsUrl } from "../../shared/validation.js"
 
@@ -8,6 +10,41 @@ const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp"]
 const imagePattern =
   /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/
 const extensions = { jpeg: "jpg", png: "png", webp: "webp" } as const
+export const localServiceImageDirectory = path.resolve(
+  process.cwd(),
+  "uploads/service-images",
+)
+const localPrefix = "local-services/"
+const localName = /^local-services\/[a-f0-9-]{36}\.(jpg|png|webp)$/
+
+export async function uploadLocalServiceImage(
+  dataUrl: string,
+): Promise<string> {
+  const match = dataUrl.match(imagePattern)
+  if (!match)
+    throw new ServiceImageStorageError("Service image data is invalid")
+  const bytes = Buffer.from(match[2]!, "base64")
+  if (!bytes.length || bytes.length > maxImageBytes)
+    throw new ServiceImageStorageError("Service image exceeds the size limit")
+  const name = `${randomUUID()}.${extensions[match[1] as keyof typeof extensions]}`
+  await mkdir(localServiceImageDirectory, { recursive: true })
+  await writeFile(path.join(localServiceImageDirectory, name), bytes, {
+    flag: "wx",
+  })
+  return localPrefix + name
+}
+
+export async function removeLocalServiceImage(
+  imagePath: string,
+): Promise<void> {
+  if (!localName.test(imagePath))
+    throw new ServiceImageStorageError("Invalid local image path")
+  await unlink(
+    path.join(localServiceImageDirectory, imagePath.slice(localPrefix.length)),
+  ).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "ENOENT") throw error
+  })
+}
 
 export type ServiceImageStorage = {
   upload(dataUrl: string, directory?: string): Promise<string>
@@ -153,6 +190,8 @@ export function getServiceImageStorage() {
 
 export function serviceImagePublicUrl(path: string | null) {
   if (!path) return null
+  if (localName.test(path))
+    return `/api/service-images/${path.slice(localPrefix.length)}`
   try {
     return getServiceImageStorage().publicUrl(path)
   } catch (error) {
