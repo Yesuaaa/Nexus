@@ -7,33 +7,47 @@ import { parsePage } from "../../shared/query/pagination.js"
 import { parseWorkspaceIdentity } from "./workspace-identity.js"
 import {
   addProjectTask,
-  assignProjectTeamLead,
-  cancelProjectWorkspace,
-  createProjectWorkspaces,
-  getProjectWorkspace,
-  getAdminProjectManagementWorkspaceDetails,
-  listApprovedBookings,
-  listProjectWorkspaceTemplates,
-  listProjectWorkspaces,
-  listWorkspaceDirectory,
-  renameProjectWorkspace,
   updateProjectTask,
   saveProjectPlan,
+} from "./project-plan.service.js"
+import {
+  assignProjectTeamLead,
+  cancelProjectWorkspace,
+  updateProjectWorkspaceStatus,
+} from "./workspace-lifecycle.service.js"
+import {
+  createProjectWorkspaces,
+  listApprovedBookings,
+  listProjectWorkspaceTemplates,
+} from "./workspace-creation.service.js"
+import {
+  getProjectWorkspace,
+  getAdminProjectManagementWorkspaceDetails,
+} from "./workspace-details.service.js"
+import {
+  listProjectWorkspaces,
+  listWorkspaceDirectory,
+} from "./workspace-directory.service.js"
+import { renameProjectWorkspace } from "./workspace-rename.service.js"
+import {
   updateProjectDeliverable,
-  uploadProjectDeliverable,
-  removeProjectDeliverableAttachment,
   reviewProjectDeliverable,
   sendProjectDeliverableToClient,
+  escalateProjectDeliverable,
+} from "./deliverables.service.js"
+import {
+  uploadProjectDeliverable,
+  removeProjectDeliverableAttachment,
   downloadProjectDeliverable,
   downloadProjectDeliverableSubmission,
+} from "./deliverable-files.service.js"
+import {
   createProjectNote,
   createProjectNoteRevision,
   reviewProjectNoteRevision,
   escalateProjectNoteRevision,
   unpublishProjectNoteRevision,
-  escalateProjectDeliverable,
-  updateProjectWorkspaceStatus,
-} from "./project-workspace.service.js"
+} from "./project-notes.service.js"
 import { getProjectWorkspaceOverview } from "./project-workspace-overview.service.js"
 
 export const projectWorkspaceRouter = Router()

@@ -56,7 +56,7 @@ export function ConverynLogoReveal({
 
       gsap.set(dots, { opacity: 0, scale: 0.86, transformOrigin: "50% 50%" })
       gsap.set(outlines, { drawSVG: "0%" })
-      gsap.set(fills, { opacity: 0 })
+      gsap.set(fills, { clipPath: "circle(0% at 50% 50%)" })
       gsap.set(svg, { visibility: "visible" })
 
       timelineRef.current = gsap
@@ -74,8 +74,16 @@ export function ConverynLogoReveal({
         )
         .set(outlines, { opacity: 1 }, 0.9)
         .to(outlines, { drawSVG: "100%", duration: 1.3, ease: "none" }, 0.9)
-        .to(fills, { opacity: 1, duration: 0.5, ease: "power2.inOut" }, 2.3)
-        .to(outlines, { opacity: 0, duration: 0.5, ease: "power2.inOut" }, 2.3)
+        .to(
+          fills,
+          {
+            clipPath: "circle(100% at 50% 50%)",
+            duration: 0.5,
+            ease: "power2.inOut",
+          },
+          2.3,
+        )
+        .to(outlines, { opacity: 0, duration: 0.2, ease: "power2.out" }, 2.6)
 
       return () => {
         timelineRef.current = null

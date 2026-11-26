@@ -1,10 +1,13 @@
 import { ModuleTransition } from "@/components/layout/module-transition"
 import { ServicesPage } from "@/features/services/pages/services-page"
+import { parseInquiryService } from "@/features/public-services/model/service-inquiry-link"
 
-export default function Page() {
+export default async function Page({ searchParams }: PageProps<"/services">) {
   return (
     <ModuleTransition>
-      <ServicesPage />
+      <ServicesPage
+        inquiryService={parseInquiryService((await searchParams).service)}
+      />
     </ModuleTransition>
   )
 }

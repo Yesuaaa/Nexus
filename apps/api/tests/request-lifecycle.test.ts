@@ -5,7 +5,7 @@ import { issueSession } from "../src/features/auth/auth.service.js"
 import {
   updateProjectWorkspaceStatus,
   cancelProjectWorkspace,
-} from "../src/features/project-workspace/project-workspace.service.js"
+} from "../src/features/project-workspace/workspace-lifecycle.service.js"
 
 test(
   "request lifecycle migration, filters, completion and cancellation preserve their meanings",

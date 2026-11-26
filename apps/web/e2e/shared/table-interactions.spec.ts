@@ -190,7 +190,9 @@ for (const width of [1440, 390]) {
     const projectTable = page
       .getByRole("region", { name: "Project list" })
       .getByRole("table")
-    await page.clock.install()
+    const pauseTime = Date.now()
+    await page.clock.install({ time: pauseTime - 60_000 })
+    await page.clock.pauseAt(pauseTime)
     async function settleProjectSearch(query: string | null) {
       await expect
         .poll(async () => {

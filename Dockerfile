@@ -45,7 +45,8 @@ USER node
 CMD ["node", "scripts/deploy-migrations.mjs"]
 
 FROM deps AS web-build
-COPY apps/web apps/web
+# Browser tests are checked in the workspace and can import API test dependencies.
+COPY --exclude=e2e apps/web apps/web
 COPY apps/api/src/features/modules/module-registry.json apps/api/src/features/modules/module-registry.json
 # Next.js rewrites are resolved at build time for the internal API service.
 ARG API_PROXY_TARGET=http://api:3001

@@ -252,7 +252,7 @@ export function AnimatedSlotGridBody<T>({
   rowClassName,
   renderRow,
   emptyContent,
-  emptyHeight = 150,
+  emptyHeight = 170,
   defaultRowHeight = 58,
   autoRowHeight = false,
   className,

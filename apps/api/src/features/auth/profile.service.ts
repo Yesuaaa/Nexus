@@ -112,8 +112,10 @@ function url(value: unknown, label: string, required = false) {
   const clean = text(value, label, 2048, required)
   if (!clean) return ""
   const safe = safeHttpsUrl(clean)
-  if (safe) return safe
-  throw new AuthError(400, `${label} must be an HTTPS URL`)
+  if (!safe) throw new AuthError(400, `${label} must be an HTTPS URL`)
+  // Percent-encoding can make the stored URL longer than the submitted one.
+  if (safe.length > 2048) throw new AuthError(400, `Provide a valid ${label}`)
+  return safe
 }
 function list(value: unknown, label: string, limit: number): unknown[] {
   if (!Array.isArray(value) || value.length > limit)

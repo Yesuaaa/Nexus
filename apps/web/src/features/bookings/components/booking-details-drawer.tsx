@@ -55,12 +55,12 @@ export function BookingDetailsDrawer({
       description={
         managementStyle
           ? (details) =>
-              `${details.referenceNumber || details.id} Â· Service request`
+              `${details.referenceNumber || details.id} · Service request`
           : description
       }
       fallbackTitle={managementStyle ? "Request details" : "Booking details"}
       fallbackDescription={
-        managementStyle ? "Loading service request detailsâ€¦" : description
+        managementStyle ? "Loading service request details…" : description
       }
       leading={
         managementStyle ? (

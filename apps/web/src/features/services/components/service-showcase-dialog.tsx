@@ -64,7 +64,7 @@ export function ServiceShowcaseDialog({
     if (!name) return
     typeTweenRef.current?.kill()
 
-    const target = "EXPlore"
+    const target = "Explore"
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       name.textContent = target
       return

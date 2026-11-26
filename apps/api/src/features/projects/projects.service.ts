@@ -11,6 +11,7 @@ import {
   projectAuditStatus,
 } from "../project-management-logs/events.js"
 import { writeProjectLog } from "../project-management-logs/writer.js"
+import { finishLoggedRequest } from "../service-operation-logs/request-status-log.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 import { lockRows } from "../../shared/db/locks.js"
 
@@ -683,10 +684,7 @@ export async function reviewProjectCancellationRequest(
           },
           data: { state: "CANCELLED" },
         })
-        await tx.serviceRequest.updateMany({
-          where: { id: project.requestId, status: { not: "CANCELLED" } },
-          data: { status: "CANCELLED" },
-        })
+        await finishLoggedRequest(tx, project.requestId, userId, "CANCELLED")
       }
       const declined = await tx.projectChangeRequest.updateMany({
         where: {

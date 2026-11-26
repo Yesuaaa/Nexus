@@ -104,6 +104,7 @@ function paintFrame(
   { dots, centerX, centerY, wideLayout }: ReturnType<typeof makeGrid>,
   elapsed: number,
   animateIndicator: boolean,
+  showIndicator: boolean,
 ) {
   const phase = (elapsed / FIELD_LOOP_MS) * TURN
   const ribbonPhase = phase * (wideLayout ? 3 : 2)
@@ -158,6 +159,7 @@ function paintFrame(
     context.fill(paths[index])
   }
 
+  if (!showIndicator) return
   context.globalAlpha = 1
   context.fillStyle = blues[0]
   context.beginPath()
@@ -173,7 +175,7 @@ function paintFrame(
   context.fill()
 }
 
-export function HeroHalftone() {
+export function HeroHalftone({ background = false }: { background?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -183,6 +185,7 @@ export function HeroHalftone() {
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)")
     const wideLayout = window.matchMedia("(min-width: 761px)")
+    const curtain = canvas.closest("[data-pinned-hero]")?.nextElementSibling
     let width = 0
     let height = 0
     let grid: ReturnType<typeof makeGrid> | undefined
@@ -193,7 +196,15 @@ export function HeroHalftone() {
 
     function paint() {
       if (!context || !grid) return
-      paintFrame(context, width, height, grid, elapsed, !reducedMotion.matches)
+      paintFrame(
+        context,
+        width,
+        height,
+        grid,
+        elapsed,
+        !reducedMotion.matches,
+        !background,
+      )
     }
 
     function tick(now: number) {
@@ -208,13 +219,25 @@ export function HeroHalftone() {
     }
 
     function updatePlayback() {
-      if (frame) window.cancelAnimationFrame(frame)
+      // Intersection alone cannot tell when the next section covers the sticky hero.
+      const canAnimate =
+        visible &&
+        !document.hidden &&
+        !reducedMotion.matches &&
+        (!curtain || curtain.getBoundingClientRect().top > 0)
+      if (canAnimate) {
+        if (!frame) frame = window.requestAnimationFrame(tick)
+        return
+      }
+      if (!frame) return
+      window.cancelAnimationFrame(frame)
       frame = 0
       lastPaint = 0
+    }
+
+    function updateMotionPreference() {
       paint()
-      if (visible && !document.hidden && !reducedMotion.matches) {
-        frame = window.requestAnimationFrame(tick)
-      }
+      updatePlayback()
     }
 
     function resize() {
@@ -248,24 +271,37 @@ export function HeroHalftone() {
     resize()
     sizeObserver.observe(canvas)
     visibilityObserver.observe(canvas)
-    reducedMotion.addEventListener("change", updatePlayback)
+    if (curtain)
+      window.addEventListener("scroll", updatePlayback, { passive: true })
+    reducedMotion.addEventListener("change", updateMotionPreference)
     document.addEventListener("visibilitychange", updatePlayback)
 
     return () => {
       window.cancelAnimationFrame(frame)
       sizeObserver.disconnect()
       visibilityObserver.disconnect()
-      reducedMotion.removeEventListener("change", updatePlayback)
+      window.removeEventListener("scroll", updatePlayback)
+      reducedMotion.removeEventListener("change", updateMotionPreference)
       document.removeEventListener("visibilitychange", updatePlayback)
     }
-  }, [])
+  }, [background])
 
   return (
-    <div className="relative max-[761px]:aspect-[4/3] max-[761px]:w-full max-[761px]:max-w-[290px] max-[761px]:justify-self-center min-[761px]:absolute min-[761px]:top-[calc(-1px_-_var(--landing-header-height))] min-[761px]:right-[calc(-1_*_var(--landing-frame-inset))] min-[761px]:bottom-0 min-[761px]:left-[40%]">
+    <div
+      className={
+        background
+          ? "pointer-events-none absolute inset-0 opacity-20"
+          : "relative max-[761px]:aspect-[4/3] max-[761px]:w-full max-[761px]:max-w-[290px] max-[761px]:justify-self-center min-[761px]:absolute min-[761px]:top-[calc(-1px_-_var(--landing-header-height))] min-[761px]:right-[calc(-1_*_var(--landing-frame-inset))] min-[761px]:bottom-0 min-[761px]:left-[40%]"
+      }
+    >
       <canvas
         ref={canvasRef}
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 block size-full min-[761px]:[mask-image:linear-gradient(to_left,#000_0_max(0px,calc(var(--landing-frame-inset)_-_8px)),transparent_max(0px,calc(var(--landing-frame-inset)_-_8px))_calc(var(--landing-frame-inset)_+_8px),#000_calc(var(--landing-frame-inset)_+_8px))]"
+        className={
+          background
+            ? "pointer-events-none absolute inset-0 block size-full"
+            : "pointer-events-none absolute inset-0 block size-full min-[761px]:[mask-image:linear-gradient(to_left,#000_0_max(0px,calc(var(--landing-frame-inset)_-_8px)),transparent_max(0px,calc(var(--landing-frame-inset)_-_8px))_calc(var(--landing-frame-inset)_+_8px),#000_calc(var(--landing-frame-inset)_+_8px))]"
+        }
       />
     </div>
   )

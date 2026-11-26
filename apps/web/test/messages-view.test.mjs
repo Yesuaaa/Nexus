@@ -1,9 +1,26 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
+import { openConversationBookings } from "../src/features/request-conversations/model/conversation-bookings.ts"
 import {
   getMessagesView,
   messagesViewHref,
 } from "../src/features/request-conversations/model/messages-view.ts"
+
+test("meetings can only be scheduled for bookings the API still accepts", () => {
+  const statuses = [
+    "UNDER_REVIEW",
+    "ACTIVATED",
+    "CONCLUDED",
+    "CANCELLED",
+    "CLOSED",
+  ]
+  assert.deepEqual(
+    openConversationBookings(statuses.map((status) => ({ status }))).map(
+      ({ status }) => status,
+    ),
+    ["UNDER_REVIEW", "ACTIVATED"],
+  )
+})
 
 test("only clients have a unified inbox, irrespective of module or deep link", () => {
   for (const role of ["STAFF", "ADMIN", "SUPERADMIN", "USER"])

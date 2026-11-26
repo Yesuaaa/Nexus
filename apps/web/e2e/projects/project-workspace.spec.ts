@@ -1585,7 +1585,9 @@ test("ordinary Staff workspace list retries after a failed request", async ({
   failRequests = false
   await page.getByRole("button", { name: "Try again" }).click()
   await expect(
-    page.getByRole("heading", { name: "No assigned projects yet" }),
+    page
+      .getByRole("table", { name: "Project workspaces" })
+      .getByRole("cell", { name: "No assigned projects yet.", exact: true }),
   ).toBeVisible()
   expect(pageErrors).toEqual([])
   expect(effectEventErrors).toEqual([])

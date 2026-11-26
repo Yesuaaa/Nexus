@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { ArrowUpRight, ChevronDown, Menu, X } from "lucide-react"
 import { useEffect, useRef, useState, type ReactNode } from "react"
+import { useInView, useReducedMotion } from "framer-motion"
 
 const headerClass =
   "sticky top-0 z-40 bg-(--landing-paper)/45 backdrop-blur-[1.5px] [border-bottom:1px_solid_var(--landing-line)]"
@@ -54,7 +55,7 @@ const mobileNavClass = [
 ].join(" ")
 
 const pageClass = [
-  '[--landing-paper:#f2f1ee] [--landing-ink:#121214] [--landing-blue:#2f5bff] [--landing-muted:color-mix(in_srgb,#121214_66%,#f2f1ee)] [--landing-line:color-mix(in_srgb,#121214_16%,#f2f1ee)] [--landing-frame-width:1360px] relative isolate overflow-clip bg-(--landing-paper) text-(color:--landing-ink) [font-family:var(--font-inter),"Inter_Variable",sans-serif] antialiased',
+  '[--landing-paper:var(--background)] [--landing-ink:#121214] [--landing-blue:#2f5bff] [--landing-muted:color-mix(in_srgb,var(--landing-ink)_66%,var(--landing-paper))] [--landing-line:color-mix(in_srgb,var(--landing-ink)_16%,var(--landing-paper))] [--landing-frame-width:1360px] relative isolate overflow-clip bg-(--landing-paper) text-(color:--landing-ink) [font-family:var(--font-inter),"Inter_Variable",sans-serif] antialiased',
   "[container-type:inline-size] [--landing-header-height:92px] max-[761px]:[--landing-header-height:76px] [--landing-frame-inset:max(0px,calc((100cqw_-_var(--landing-frame-width))_/_2))]",
   'before:absolute before:z-50 before:[inset:0_var(--landing-frame-inset)] before:[content:""] before:pointer-events-none before:[border-inline:1px_solid_var(--landing-line)]',
   "[:where(&)_:where(a)]:text-inherit [:where(&)_:where(a)]:no-underline [:where(&)_:where(a)]:touch-manipulation [:where(&)_:where(a)]:[-webkit-tap-highlight-color:transparent]",
@@ -127,14 +128,112 @@ const faqAnswerTextClass = [
 ].join(" ")
 
 const navigation = [
-  { label: "About", href: "/#about" },
+  { label: "About", href: "/about" },
   { label: "Services", href: "/explore/services" },
-  { label: "Our approach", href: "/#approach" },
-  { label: "Contact", href: "/#contact" },
+  { label: "Projects", href: "/explore/projects" },
 ]
+
+const contactHeadingLines = [
+  "SOMETHING IN MIND?",
+  "CREATE AN ACCOUNT TO START YOUR INQUIRY.",
+] as const
+
+function TypedContactLines({ reduced }: { reduced: boolean }) {
+  const [count, setCount] = useState(0)
+  const total = contactHeadingLines[0].length + contactHeadingLines[1].length
+
+  useEffect(() => {
+    if (reduced) return
+    const timer = window.setInterval(() => {
+      setCount((current) => {
+        if (current + 1 >= total) window.clearInterval(timer)
+        return Math.min(total, current + 1)
+      })
+    }, 35)
+    return () => window.clearInterval(timer)
+  }, [reduced, total])
+
+  const visibleCount = reduced ? total : count
+  return (
+    <>
+      {contactHeadingLines.map((line, index) => (
+        <span
+          key={line}
+          aria-hidden="true"
+          className={
+            index === 0
+              ? "relative block !text-inherit"
+              : "relative block text-[clamp(18px,2.6vw,34px)] whitespace-nowrap tracking-[-0.04em]"
+          }
+        >
+          <span className="invisible">{line}</span>
+          <span className="absolute inset-0">
+            {line.slice(
+              0,
+              Math.max(
+                0,
+                visibleCount - (index ? contactHeadingLines[0].length : 0),
+              ),
+            )}
+          </span>
+        </span>
+      ))}
+    </>
+  )
+}
+
+export function ContactHeading() {
+  const ref = useRef<HTMLHeadingElement>(null)
+  const inView = useInView(ref, { amount: 0.5 })
+  const reduced = useReducedMotion()
+
+  return (
+    <h2
+      id="contact-heading"
+      ref={ref}
+      aria-label={contactHeadingLines.join(" ")}
+    >
+      <TypedContactLines
+        key={inView ? "visible" : "hidden"}
+        reduced={!!reduced || !inView}
+      />
+    </h2>
+  )
+}
 
 export function LandingHeader() {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [overApproach, setOverApproach] = useState(false)
+  const headerRef = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    let frame = 0
+    const update = () => {
+      frame = 0
+      const approach = document.getElementById("approach")
+      const header = headerRef.current
+      if (!approach || !header) {
+        setOverApproach(false)
+        return
+      }
+      const bounds = approach.getBoundingClientRect()
+      const midpoint =
+        header.getBoundingClientRect().top +
+        (header.firstElementChild?.getBoundingClientRect().height ?? 0) / 2
+      setOverApproach(bounds.top <= midpoint && bounds.bottom > midpoint)
+    }
+    const schedule = () => {
+      if (!frame) frame = window.requestAnimationFrame(update)
+    }
+    update()
+    window.addEventListener("scroll", schedule, { passive: true })
+    window.addEventListener("resize", schedule)
+    return () => {
+      window.removeEventListener("scroll", schedule)
+      window.removeEventListener("resize", schedule)
+      if (frame) window.cancelAnimationFrame(frame)
+    }
+  }, [])
 
   useEffect(() => {
     if (!menuOpen) return
@@ -149,7 +248,10 @@ export function LandingHeader() {
   }, [menuOpen])
 
   return (
-    <header className={headerClass}>
+    <header
+      ref={headerRef}
+      className={`${headerClass} ${overApproach ? 'z-[60] border-white/15! bg-[#121214]/85! text-white backdrop-blur-md before:pointer-events-none before:absolute before:z-10 before:[inset:0_var(--landing-frame-inset)] before:border-x before:border-white/15 before:content-[""] [&_nav[aria-label="Main_navigation"]_a]:text-white/85 [&_nav[aria-label="Main_navigation"]_a:hover]:bg-white/10 [&_nav[aria-label="Main_navigation"]_a:hover]:text-white' : ""}`}
+    >
       <div className={navbarClass}>
         <Link
           href="/"
@@ -157,7 +259,11 @@ export function LandingHeader() {
           aria-label="Converyn home"
         >
           <img
-            src="/auth/converyn-logo-w-text.svg"
+            src={
+              overApproach
+                ? "/auth/converyn-logo-w-text-white.svg"
+                : "/auth/converyn-logo-w-text.svg"
+            }
             alt=""
             width={134}
             height={67}
@@ -167,9 +273,9 @@ export function LandingHeader() {
         <nav className={desktopNavClass} aria-label="Main navigation">
           {navigation.map((item) =>
             item.href ? (
-              <a key={item.label} href={item.href}>
+              <Link key={item.label} href={item.href}>
                 {item.label}
-              </a>
+              </Link>
             ) : (
               <button key={item.label} type="button" disabled>
                 {item.label}
@@ -178,15 +284,21 @@ export function LandingHeader() {
           )}
         </nav>
         <div className="flex items-center gap-6.5 max-[1101px]:gap-5 max-[851px]:gap-4 max-[761px]:gap-3">
-          <Link href="/login" className={portalLinkClass}>
+          <Link
+            href="/login"
+            className={`${portalLinkClass} ${overApproach ? "text-white/85 hover:text-white" : ""}`}
+          >
             Log in
           </Link>
-          <Link href="/register" className={navCtaClass}>
+          <Link
+            href="/register"
+            className={`${navCtaClass} ${overApproach ? "border-white! bg-white! text-[#121214]! hover:bg-transparent! hover:text-white! focus-visible:bg-transparent! focus-visible:text-white!" : ""}`}
+          >
             Sign up <ArrowUpRight size={16} aria-hidden="true" />
           </Link>
           <button
             id="landing-menu-toggle"
-            className={menuToggleClass}
+            className={`${menuToggleClass} ${overApproach ? "border-white/25 text-white" : ""}`}
             type="button"
             aria-label={menuOpen ? "Close navigation" : "Open navigation"}
             aria-expanded={menuOpen}
@@ -200,19 +312,19 @@ export function LandingHeader() {
       {menuOpen && (
         <nav
           id="landing-mobile-nav"
-          className={mobileNavClass}
+          className={`${mobileNavClass} ${overApproach ? "border-white/15 bg-[#121214]/95 [&_:is(a,button)]:border-white/15 [&_:is(a,button)]:text-white" : ""}`}
           aria-label="Mobile navigation"
         >
           {navigation.map((item) =>
             item.href ? (
-              <a
+              <Link
                 key={item.label}
                 href={item.href}
                 onClick={() => setMenuOpen(false)}
               >
                 {item.label}
                 <ArrowUpRight size={17} aria-hidden="true" />
-              </a>
+              </Link>
             ) : (
               <button key={item.label} type="button" disabled>
                 {item.label}
@@ -231,7 +343,13 @@ export function LandingHeader() {
   )
 }
 
-export function LandingMotion({ children }: { children: ReactNode }) {
+export function LandingMotion({
+  children,
+  className = "",
+}: {
+  children: ReactNode
+  className?: string
+}) {
   const root = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -282,7 +400,7 @@ export function LandingMotion({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <div ref={root} className={pageClass}>
+    <div ref={root} className={`${pageClass} ${className}`} data-landing-page>
       {children}
     </div>
   )
@@ -356,6 +474,7 @@ export function PinnedHero({ children }: { children: ReactNode }) {
   return (
     <div
       ref={heroRef}
+      data-pinned-hero
       className="sticky top-(--hero-sticky-top,0px) z-0 motion-reduce:relative motion-reduce:top-auto"
     >
       <div ref={contentRef}>{children}</div>

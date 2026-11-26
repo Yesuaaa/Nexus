@@ -22,7 +22,6 @@ import { contentClass } from "@/components/layout/styles"
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumbs"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { EmptyState } from "@/components/ui/empty-state"
 import {
   FilterSelect,
   filterSelectTriggerClass,
@@ -375,11 +374,10 @@ export function WorkspaceDirectoryPage({
               Try again
             </Button>
           </Alert>
-        ) : data && !data.rows.length ? (
-          <EmptyState icon={FolderKanban} title={noResults} size="lg" />
         ) : (
           <WorkspaceListTable
             directory
+            emptyMessage={noResults}
             workspaces={data?.rows ?? []}
             loading={list.loading}
             viewKey={list.tableViewKey}
@@ -393,7 +391,7 @@ export function WorkspaceDirectoryPage({
             }
           />
         )}
-        {data && data.total > 0 && (
+        {data && (
           <TablePaginationFooter
             {...pageRange(data.page, data.pageSize, data.total)}
             total={data.total}

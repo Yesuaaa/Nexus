@@ -3,17 +3,17 @@
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Eye, Plus, UsersRound } from "lucide-react"
+import { Eye, Plus } from "lucide-react"
 import { AnimatedSlotGridBody } from "@/components/ui/animated-data-row"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { EmptyState } from "@/components/ui/empty-state"
 import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { SearchField } from "@/components/ui/search-field"
 import { DataTableSkeletonRows } from "@/components/ui/data-table-skeleton"
 import { MemberIdentity } from "@/components/ui/member-identity"
 import { Pill } from "@/components/ui/pill"
 import {
+  DataTableEmptyRow,
   ResponsiveDataTable,
   ResponsiveDataTableBody,
   ResponsiveDataTableCell,
@@ -191,116 +191,114 @@ export function WorkspaceTeam({
           onChange={setStreamId}
         />
       </div>
-      {rows.length ? (
-        <div>
-          <ResponsiveDataTable label="Assigned staff" aria-busy={searchPending}>
-            <ResponsiveDataTableHeader
-              className="@max-[640px]:sr-only"
-              rowClassName={teamGrid}
-            >
-              {["Staff", "Position", "Service", "Assigned on", "Actions"].map(
-                (label) => (
-                  <ResponsiveDataTableColumnHeader key={label}>
-                    {label}
-                  </ResponsiveDataTableColumnHeader>
-                ),
-              )}
-            </ResponsiveDataTableHeader>
-            {searchPending ? (
-              <ResponsiveDataTableBody>
-                <DataTableSkeletonRows
-                  label="assigned staff"
-                  rows={5}
-                  rowClassName={cn(teamGrid, "min-h-[58px] px-4 py-3")}
-                  cellClassNames={[...teamCells]}
-                />
-              </ResponsiveDataTableBody>
-            ) : (
-              <AnimatedSlotGridBody
-                items={visible}
-                getKey={(row) => row.id}
-                viewKey={JSON.stringify([settledSearch, streamId])}
-                quickKey={settledSearch}
-                animateRows={false}
-                autoRowHeight
-                rowClassName={(_person, _index, isLast) =>
-                  cn(
-                    teamGrid,
-                    "min-h-[58px] px-4 py-3 text-xs hover:bg-[#f8fafd]",
-                    !isLast && "border-b border-[#eceef1]",
-                  )
-                }
-                emptyContent="No staff match these filters."
-                renderRow={({ id, person, stream }) => (
-                  <>
-                    <ResponsiveDataTableCell className={teamCells[0]}>
-                      <MemberIdentity
-                        member={person}
-                        secondaryText={null}
-                        nameAdornment={
-                          person.isTeamLead && <Pill>Team lead</Pill>
-                        }
-                      />
-                    </ResponsiveDataTableCell>
-                    <ResponsiveDataTableCell
-                      className={cn(teamCells[1], "break-words text-[#60718c]")}
-                    >
-                      <span className="hidden font-medium @max-[640px]:inline">
-                        Position:{" "}
-                      </span>
-                      {person.position || "Staff"}
-                    </ResponsiveDataTableCell>
-                    <ResponsiveDataTableCell className={teamCells[2]}>
-                      <span className="mr-1 hidden font-medium text-[#60718c] @max-[640px]:inline">
-                        Service:
-                      </span>
-                      <Pill
-                        className="max-w-full align-middle"
-                        title={stream.serviceName}
-                      >
-                        {stream.serviceName}
-                      </Pill>
-                    </ResponsiveDataTableCell>
-                    <ResponsiveDataTableCell
-                      className={cn(teamCells[3], "text-[#60718c]")}
-                    >
-                      <span className="hidden font-medium @max-[640px]:inline">
-                        Assigned on:{" "}
-                      </span>
-                      <time dateTime={person.approvedAt}>
-                        {formatDate(person.approvedAt)}
-                      </time>
-                    </ResponsiveDataTableCell>
-                    <ResponsiveDataTableCell className={teamCells[4]}>
-                      <button
-                        type="button"
-                        id={`team-member-view-${id}`}
-                        className={rowActionButton}
-                        aria-label={`View ${person.fullName}`}
-                        onClick={() => setDetailId(id)}
-                      >
-                        <Eye size={16} aria-hidden="true" />
-                        <HoverTooltip>View team member</HoverTooltip>
-                      </button>
-                    </ResponsiveDataTableCell>
-                  </>
-                )}
-              />
+      <div>
+        <ResponsiveDataTable label="Assigned staff" aria-busy={searchPending}>
+          <ResponsiveDataTableHeader
+            className="@max-[640px]:sr-only"
+            rowClassName={teamGrid}
+          >
+            {["Staff", "Position", "Service", "Assigned on", "Actions"].map(
+              (label) => (
+                <ResponsiveDataTableColumnHeader key={label}>
+                  {label}
+                </ResponsiveDataTableColumnHeader>
+              ),
             )}
-          </ResponsiveDataTable>
-          {!searchPending && (
-            <p className="m-0 px-1 py-3 text-[11px] text-[#738096]">
-              Showing {visible.length} of {rows.length} assignments
-            </p>
+          </ResponsiveDataTableHeader>
+          {searchPending ? (
+            <ResponsiveDataTableBody>
+              <DataTableSkeletonRows
+                label="assigned staff"
+                rows={5}
+                rowClassName={cn(teamGrid, "min-h-[58px] px-4 py-3")}
+                cellClassNames={[...teamCells]}
+              />
+            </ResponsiveDataTableBody>
+          ) : rows.length === 0 ? (
+            <ResponsiveDataTableBody>
+              <DataTableEmptyRow colSpan={5}>
+                No staff assigned yet
+              </DataTableEmptyRow>
+            </ResponsiveDataTableBody>
+          ) : (
+            <AnimatedSlotGridBody
+              items={visible}
+              getKey={(row) => row.id}
+              viewKey={JSON.stringify([settledSearch, streamId])}
+              quickKey={settledSearch}
+              animateRows={false}
+              autoRowHeight
+              rowClassName={(_person, _index, isLast) =>
+                cn(
+                  teamGrid,
+                  "min-h-[58px] px-4 py-3 text-xs hover:bg-[#f8fafd]",
+                  !isLast && "border-b border-[#eceef1]",
+                )
+              }
+              emptyContent="No staff match these filters."
+              renderRow={({ id, person, stream }) => (
+                <>
+                  <ResponsiveDataTableCell className={teamCells[0]}>
+                    <MemberIdentity
+                      member={person}
+                      secondaryText={null}
+                      nameAdornment={
+                        person.isTeamLead && <Pill>Team lead</Pill>
+                      }
+                    />
+                  </ResponsiveDataTableCell>
+                  <ResponsiveDataTableCell
+                    className={cn(teamCells[1], "break-words text-[#60718c]")}
+                  >
+                    <span className="hidden font-medium @max-[640px]:inline">
+                      Position:{" "}
+                    </span>
+                    {person.position || "Staff"}
+                  </ResponsiveDataTableCell>
+                  <ResponsiveDataTableCell className={teamCells[2]}>
+                    <span className="mr-1 hidden font-medium text-[#60718c] @max-[640px]:inline">
+                      Service:
+                    </span>
+                    <Pill
+                      className="max-w-full align-middle"
+                      title={stream.serviceName}
+                    >
+                      {stream.serviceName}
+                    </Pill>
+                  </ResponsiveDataTableCell>
+                  <ResponsiveDataTableCell
+                    className={cn(teamCells[3], "text-[#60718c]")}
+                  >
+                    <span className="hidden font-medium @max-[640px]:inline">
+                      Assigned on:{" "}
+                    </span>
+                    <time dateTime={person.approvedAt}>
+                      {formatDate(person.approvedAt)}
+                    </time>
+                  </ResponsiveDataTableCell>
+                  <ResponsiveDataTableCell className={teamCells[4]}>
+                    <button
+                      type="button"
+                      id={`team-member-view-${id}`}
+                      className={rowActionButton}
+                      aria-label={`View ${person.fullName}`}
+                      onClick={() => setDetailId(id)}
+                    >
+                      <Eye size={16} aria-hidden="true" />
+                      <HoverTooltip>View team member</HoverTooltip>
+                    </button>
+                  </ResponsiveDataTableCell>
+                </>
+              )}
+            />
           )}
-        </div>
-      ) : (
-        <EmptyState
-          icon={UsersRound}
-          title="No staff assigned yet"
-          description="The department head can assign eligible staff once the booking is ready for staffing."
-        />
-      )}
+        </ResponsiveDataTable>
+        {!searchPending && rows.length > 0 && (
+          <p className="m-0 px-1 py-3 text-[11px] text-[#738096]">
+            Showing {visible.length} of {rows.length} assignments
+          </p>
+        )}
+      </div>
       {detail && (
         <TeamMemberPanel
           key={detail.id}

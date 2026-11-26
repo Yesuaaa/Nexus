@@ -253,11 +253,32 @@ test(
           /temporarily/,
         )
         assert.ok(
-          logs.mock.calls.some(
-            (call) =>
-              call.arguments[1] === "GET" &&
-              call.arguments[2] === "/api/auth/me",
+          logs.mock.calls.some((call) => {
+            const [message, details] = call.arguments as [
+              string,
+              { endpoint: string; status: number },
+            ]
+            return (
+              message === "API request failed" &&
+              details.endpoint === "GET /api/auth/me" &&
+              details.status === 503
+            )
+          }),
+        )
+
+        // Authentication for a whole router fails before any route matches.
+        logs.mock.resetCalls()
+        await fetch(`${base}/request-conversations/private-id?before=secret`, {
+          headers: client.headers,
+        })
+        const failures = logs.mock.calls.filter(
+          (call) => call.arguments[0] === "API request failed",
+        )
+        assert.deepEqual(
+          failures.map(
+            (call) => (call.arguments[1] as { endpoint: string }).endpoint,
           ),
+          ["GET /api/request-conversations"],
         )
       },
     )

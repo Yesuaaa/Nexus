@@ -397,7 +397,7 @@ test(
       assert.equal(
         (
           await request(
-            admin,
+            superadmin,
             detailsPath(design.id, `group:${shared.id}`),
             method,
           )
