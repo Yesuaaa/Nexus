@@ -1,15 +1,15 @@
-"use client"
+﻿"use client"
 
 import { useState } from "react"
-import { CalendarRange, Eye, Plus, Search } from "lucide-react"
+import { CalendarRange, Eye, Plus } from "lucide-react"
 import { PageHeader, PageHeaderButton } from "@/components/layout/page-header"
 import { contentClass } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
-import { EmptyState } from "@/components/ui/empty-state"
 import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
 import {
+  DataTableEmptyRow,
   ResponsiveDataTable,
   ResponsiveDataTableBody,
   ResponsiveDataTableCell,
@@ -185,7 +185,7 @@ export function PayrollRunsPage({
               setSearch(event.target.value)
               list.setPage(1)
             }}
-            placeholder="Search period or run ID…"
+            placeholder="Search period or run IDâ€¦"
           />
           <FilterSelect
             fitOptions
@@ -305,32 +305,11 @@ export function PayrollRunsPage({
                 ]}
               />
             ) : list.rows.length === 0 ? (
-              <ResponsiveDataTableRow>
-                <ResponsiveDataTableCell aria-colspan={7} className="p-3">
-                  <EmptyState
-                    icon={list.previewing ? Search : CalendarRange}
-                    size="sm"
-                    title={
-                      hasFilters ? "No payroll runs match" : "No draft runs yet"
-                    }
-                    description={
-                      hasFilters
-                        ? "Adjust the search or filters to see other runs."
-                        : "Generate periods from the configured schedule, then create a draft run for one of them."
-                    }
-                    action={
-                      !hasFilters && canManage && !approvals ? (
-                        <Button
-                          variant="outline"
-                          onClick={() => setPanelMode("generate")}
-                        >
-                          Generate periods
-                        </Button>
-                      ) : undefined
-                    }
-                  />
-                </ResponsiveDataTableCell>
-              </ResponsiveDataTableRow>
+              <DataTableEmptyRow colSpan={7}>
+                {hasFilters
+                  ? "No payroll runs match your search or filters."
+                  : "No draft runs yet."}
+              </DataTableEmptyRow>
             ) : (
               list.rows.map((run) => {
                 const calculation = approvals
@@ -350,7 +329,7 @@ export function PayrollRunsPage({
                         {run.period.cutoffLabel}
                       </span>
                       <span className="mt-1 block text-[10px] text-[#738096]">
-                        {formatPayrollDate(run.period.startDate)} –{" "}
+                        {formatPayrollDate(run.period.startDate)} â€“{" "}
                         {formatPayrollDate(run.period.endDate)}
                       </span>
                     </ResponsiveDataTableCell>
@@ -377,7 +356,7 @@ export function PayrollRunsPage({
                             {calculationStatusLabel(calculation.status)}
                           </Pill>
                           <span className="text-[10px] text-[#738096]">
-                            {calculation.reviewItemCount} review ·{" "}
+                            {calculation.reviewItemCount} review Â·{" "}
                             {calculation.blockedItemCount} blocked
                           </span>
                         </div>
@@ -401,7 +380,7 @@ export function PayrollRunsPage({
                         ? calculation.calculatedItemCount +
                           calculation.reviewItemCount +
                           calculation.blockedItemCount
-                        : "—"}
+                        : "â€”"}
                     </ResponsiveDataTableCell>
                     <ResponsiveDataTableCell
                       className={

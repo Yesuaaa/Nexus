@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { PageHeader, PageHeaderButton } from "@/components/layout/page-header"
 import { contentClass } from "@/components/layout/styles"

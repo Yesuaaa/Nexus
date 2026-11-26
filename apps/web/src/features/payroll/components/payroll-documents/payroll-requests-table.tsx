@@ -1,7 +1,6 @@
 "use client"
 
 import { Eye, Pencil, Trash2 } from "lucide-react"
-import { EmptyState } from "@/components/ui/empty-state"
 import {
   ResponsiveDataTableCell,
   ResponsiveDataTableRow,
@@ -52,7 +51,6 @@ export function PayrollRequestsTable({
     requestSearchPending,
     requests,
     requestQuery,
-    emptyConcerns,
     concernFiltersActive,
     resetForm,
     setCreate,
@@ -118,156 +116,144 @@ export function PayrollRequestsTable({
         {!staff && requests.error && (
           <Alert className="mb-3">{requests.error}</Alert>
         )}
-        {emptyConcerns ? (
-          <EmptyState
-            title={
-              concernFiltersActive
-                ? "No concerns match those filters"
-                : "No payroll concerns"
-            }
-            description={
-              concernFiltersActive
-                ? "Try changing your search, concern type, or status."
-                : "You haven't raised any payroll concerns yet."
-            }
-            size="md"
-            role="status"
-          />
-        ) : (
-          <RecordTable
-            headings={[
-              ...(!staff ? ["Employee"] : []),
-              staff ? "Concern type" : "Type",
-              "Status",
-              staff ? "Date created" : "Created",
-              "Actions",
-            ]}
-            alignments={{ Actions: "center" }}
-            responsive={
-              staff
-                ? {
-                    label: "Payroll concerns",
-                    grid: staffRequestGrid,
-                    emptyMessage: concernFiltersActive
-                      ? "No concerns match your search or filters."
-                      : "No payroll concerns.",
-                    error: requests.error,
-                    retry: requests.retry,
-                  }
-                : undefined
-            }
-            loading={requests.loading || requestSearchPending}
-            empty={!requests.error && !requests.data?.rows.length}
-          >
-            {requests.data?.rows.map((row) => (
-              <RecordRow
-                key={row.id}
+        <RecordTable
+          headings={[
+            ...(!staff ? ["Employee"] : []),
+            staff ? "Concern type" : "Type",
+            "Status",
+            staff ? "Date created" : "Created",
+            "Actions",
+          ]}
+          alignments={{ Actions: "center" }}
+          responsive={
+            staff
+              ? {
+                  label: "Payroll concerns",
+                  grid: staffRequestGrid,
+                  emptyMessage: concernFiltersActive
+                    ? "No concerns match your search or filters."
+                    : "No payroll concerns.",
+                  error: requests.error,
+                  retry: requests.retry,
+                }
+              : undefined
+          }
+          emptyMessage={
+            concernFiltersActive
+              ? "No concerns match your search or filters."
+              : "No payroll concerns."
+          }
+          loading={requests.loading || requestSearchPending}
+          empty={!requests.error && !requests.data?.rows.length}
+        >
+          {requests.data?.rows.map((row) => (
+            <RecordRow
+              key={row.id}
+              className={
+                staff ? staffRequestGrid + " " + staffTableRow : undefined
+              }
+            >
+              {!staff && <RecordCell>{row.employee.fullName}</RecordCell>}
+              <RecordCell>
+                {staff && (
+                  <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                    Concern type
+                  </span>
+                )}
+                {humanizeEnum(row.type)}
+              </RecordCell>
+              <RecordCell>
+                {staff && (
+                  <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                    Status
+                  </span>
+                )}
+                <Pill tone="neutral">{humanizeEnum(row.status)}</Pill>
+              </RecordCell>
+              <RecordCell>
+                {staff && (
+                  <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                    Date created
+                  </span>
+                )}
+                {timestamp(row.createdAt)}
+              </RecordCell>
+              <RecordCell
                 className={
-                  staff ? staffRequestGrid + " " + staffTableRow : undefined
+                  staff ? "flex flex-wrap items-center gap-2" : "text-center"
                 }
               >
-                {!staff && <RecordCell>{row.employee.fullName}</RecordCell>}
-                <RecordCell>
-                  {staff && (
+                {staff ? (
+                  <>
                     <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                      Concern type
+                      Actions
                     </span>
-                  )}
-                  {humanizeEnum(row.type)}
-                </RecordCell>
-                <RecordCell>
-                  {staff && (
-                    <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                      Status
-                    </span>
-                  )}
-                  <Pill tone="neutral">{humanizeEnum(row.status)}</Pill>
-                </RecordCell>
-                <RecordCell>
-                  {staff && (
-                    <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                      Date created
-                    </span>
-                  )}
-                  {timestamp(row.createdAt)}
-                </RecordCell>
-                <RecordCell
-                  className={
-                    staff ? "flex flex-wrap items-center gap-2" : "text-center"
-                  }
-                >
-                  {staff ? (
-                    <>
-                      <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                        Actions
-                      </span>
-                      <RowActionsMenu
-                        triggerLabel={`Actions for payroll concern ${row.id}`}
-                        menuLabel={`Payroll concern actions for ${row.id}`}
-                        items={[
-                          {
-                            action: "view",
-                            label: (
-                              <RowActionLabel icon={Eye}>
-                                View concern
-                              </RowActionLabel>
-                            ),
-                          },
-                          ...(row.status === "OPEN"
-                            ? [
-                                {
-                                  action: "edit" as const,
-                                  label: (
-                                    <RowActionLabel icon={Pencil}>
-                                      Edit concern
-                                    </RowActionLabel>
-                                  ),
-                                },
-                                {
-                                  action: "delete" as const,
-                                  label: (
-                                    <RowActionLabel icon={Trash2}>
-                                      Delete concern
-                                    </RowActionLabel>
-                                  ),
-                                  className:
-                                    "text-destructive focus:text-destructive",
-                                },
-                              ]
-                            : []),
-                        ]}
-                        onAction={(action) => {
-                          if (action === "view") {
-                            resetForm()
-                            setCreate(false)
-                            setSelected(row)
-                          } else if (action === "edit") {
-                            startEdit(row)
-                          } else {
-                            setWithdrawalError("")
-                            setWithdrawal(row)
-                          }
-                        }}
-                      />
-                    </>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        resetForm()
-                        setCreate(false)
-                        setSelected(row)
+                    <RowActionsMenu
+                      triggerLabel={`Actions for payroll concern ${row.id}`}
+                      menuLabel={`Payroll concern actions for ${row.id}`}
+                      items={[
+                        {
+                          action: "view",
+                          label: (
+                            <RowActionLabel icon={Eye}>
+                              View concern
+                            </RowActionLabel>
+                          ),
+                        },
+                        ...(row.status === "OPEN"
+                          ? [
+                              {
+                                action: "edit" as const,
+                                label: (
+                                  <RowActionLabel icon={Pencil}>
+                                    Edit concern
+                                  </RowActionLabel>
+                                ),
+                              },
+                              {
+                                action: "delete" as const,
+                                label: (
+                                  <RowActionLabel icon={Trash2}>
+                                    Delete concern
+                                  </RowActionLabel>
+                                ),
+                                className:
+                                  "text-destructive focus:text-destructive",
+                              },
+                            ]
+                          : []),
+                      ]}
+                      onAction={(action) => {
+                        if (action === "view") {
+                          resetForm()
+                          setCreate(false)
+                          setSelected(row)
+                        } else if (action === "edit") {
+                          startEdit(row)
+                        } else {
+                          setWithdrawalError("")
+                          setWithdrawal(row)
+                        }
                       }}
-                    >
-                      View request
-                    </Button>
-                  )}
-                </RecordCell>
-              </RecordRow>
-            ))}
-          </RecordTable>
-        )}
+                    />
+                  </>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      resetForm()
+                      setCreate(false)
+                      setSelected(row)
+                    }}
+                  >
+                    View request
+                  </Button>
+                )}
+              </RecordCell>
+            </RecordRow>
+          ))}
+        </RecordTable>
         <Pages
           result={
             requests.loading ||

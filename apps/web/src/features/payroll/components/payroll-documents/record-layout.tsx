@@ -6,15 +6,13 @@ import {
   DataTableSkeletonRows,
   TableSkeletonBody,
 } from "@/components/ui/data-table-skeleton"
-import { EmptyState } from "@/components/ui/empty-state"
 import {
   DataTableErrorRow,
+  DataTableEmptyRow,
   ResponsiveDataTable,
   ResponsiveDataTableBody,
-  ResponsiveDataTableCell,
   ResponsiveDataTableColumnHeader,
   ResponsiveDataTableHeader,
-  ResponsiveDataTableRow,
 } from "@/components/ui/responsive-data-table"
 import {
   SidePanel,
@@ -141,11 +139,13 @@ export function RecordTable({
   columnClassNames,
   tableClassName,
   responsive,
+  emptyMessage = "No records to show.",
 }: {
   headings: string[]
   children: ReactNode
   loading: boolean
   empty: boolean
+  emptyMessage?: string
   alignments?: Record<string, "center" | "right">
   columnClassNames?: Record<string, string>
   tableClassName?: string
@@ -185,14 +185,9 @@ export function RecordTable({
               colSpan={headings.length}
             />
           ) : empty ? (
-            <ResponsiveDataTableRow>
-              <ResponsiveDataTableCell
-                aria-colspan={headings.length}
-                className="grid min-h-[90px] place-content-center p-6 text-center text-xs text-[#65718a]"
-              >
-                <span role="status">{responsive.emptyMessage}</span>
-              </ResponsiveDataTableCell>
-            </ResponsiveDataTableRow>
+            <DataTableEmptyRow colSpan={headings.length}>
+              {responsive.emptyMessage}
+            </DataTableEmptyRow>
           ) : (
             children
           )}
@@ -237,11 +232,9 @@ export function RecordTable({
           {empty ? (
             <TableRow>
               <TableCell colSpan={headings.length} className="p-0">
-                <EmptyState
-                  title="No records to show."
-                  size="sm"
-                  role="status"
-                />
+                <div className="grid min-h-[170px] place-content-center p-6 text-center text-xs text-[#7183a2]">
+                  <span role="status">{emptyMessage}</span>
+                </div>
               </TableCell>
             </TableRow>
           ) : (

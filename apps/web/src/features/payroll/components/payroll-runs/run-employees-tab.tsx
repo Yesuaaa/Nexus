@@ -2,10 +2,10 @@
 
 import { ChevronRight, Eye } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { EmptyState } from "@/components/ui/empty-state"
 import { HoverTooltip } from "@/components/ui/hover-tooltip"
 import { Pill } from "@/components/ui/pill"
 import {
+  DataTableEmptyRow,
   ResponsiveDataTable,
   ResponsiveDataTableBody,
   ResponsiveDataTableCell,
@@ -173,18 +173,9 @@ export function RunEmployeesTab({
                   }
                 />
               ) : items.rows.length === 0 ? (
-                <ResponsiveDataTableRow>
-                  <ResponsiveDataTableCell
-                    aria-colspan={employeeColumnCount}
-                    className="p-3"
-                  >
-                    <EmptyState
-                      size="sm"
-                      title="No employee results"
-                      description="No employees were included in this calculation revision."
-                    />
-                  </ResponsiveDataTableCell>
-                </ResponsiveDataTableRow>
+                <DataTableEmptyRow colSpan={employeeColumnCount}>
+                  No employee results in this calculation revision.
+                </DataTableEmptyRow>
               ) : (
                 items.rows.map((item) => (
                   <ResponsiveDataTableRow

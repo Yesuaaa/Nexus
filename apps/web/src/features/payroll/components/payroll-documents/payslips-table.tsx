@@ -1,7 +1,6 @@
 "use client"
 
 import { Eye } from "lucide-react"
-import { EmptyState } from "@/components/ui/empty-state"
 import {
   ResponsiveDataTableCell,
   ResponsiveDataTableRow,
@@ -38,7 +37,6 @@ export function PayslipsTable({
     publication,
     setPublication,
     slips,
-    emptyPayslips,
     payslipSearchPending,
     setSlip,
     download,
@@ -81,186 +79,178 @@ export function PayslipsTable({
           </div>
         )}
         {!staff && slips.error && <Alert className="mb-3">{slips.error}</Alert>}
-        {emptyPayslips ? (
-          <EmptyState
-            title="No payslips available"
-            description="Your published payslips will appear here once they're available."
-            size="md"
-            role="status"
-          />
-        ) : (
-          <RecordTable
-            headings={[
-              "Payroll period",
-              ...(!staff ? ["Employee", "Revision"] : []),
-              "Reference",
-              "Net pay",
-              "Publication",
-              staff ? "Actions" : "Details",
-            ]}
-            alignments={{
-              Revision: "right",
-              "Net pay": "right",
-              Actions: "center",
-              Details: "center",
-            }}
-            columnClassNames={
-              staff
-                ? undefined
-                : {
-                    "Payroll period": "w-[15%]",
-                    Employee: "w-[21%]",
-                    Revision: "w-[9%]",
-                    Reference: "w-[18%]",
-                    "Net pay": "w-[13%]",
-                    Publication: "w-[16%]",
-                    Details: "w-20",
-                  }
-            }
-            tableClassName={staff ? undefined : "table-fixed min-w-[680px]"}
-            responsive={
-              staff
-                ? {
-                    label: "My payslips",
-                    grid: staffPayslipGrid,
-                    emptyMessage: "No payslips available.",
-                    error: slips.error,
-                    retry: slips.retry,
-                  }
-                : undefined
-            }
-            loading={slips.loading || payslipSearchPending}
-            empty={!slips.error && !slips.data?.rows.length}
-          >
-            {slips.data?.rows.map((row) => (
-              <RecordRow
-                key={row.id}
+        <RecordTable
+          headings={[
+            "Payroll period",
+            ...(!staff ? ["Employee", "Revision"] : []),
+            "Reference",
+            "Net pay",
+            "Publication",
+            staff ? "Actions" : "Details",
+          ]}
+          alignments={{
+            Revision: "right",
+            "Net pay": "right",
+            Actions: "center",
+            Details: "center",
+          }}
+          columnClassNames={
+            staff
+              ? undefined
+              : {
+                  "Payroll period": "w-[15%]",
+                  Employee: "w-[21%]",
+                  Revision: "w-[9%]",
+                  Reference: "w-[18%]",
+                  "Net pay": "w-[13%]",
+                  Publication: "w-[16%]",
+                  Details: "w-20",
+                }
+          }
+          tableClassName={staff ? undefined : "table-fixed min-w-[680px]"}
+          responsive={
+            staff
+              ? {
+                  label: "My payslips",
+                  grid: staffPayslipGrid,
+                  emptyMessage: "No payslips available.",
+                  error: slips.error,
+                  retry: slips.retry,
+                }
+              : undefined
+          }
+          emptyMessage={"No payslips available."}
+          loading={slips.loading || payslipSearchPending}
+          empty={!slips.error && !slips.data?.rows.length}
+        >
+          {slips.data?.rows.map((row) => (
+            <RecordRow
+              key={row.id}
+              className={
+                staff ? staffPayslipGrid + " " + staffTableRow : undefined
+              }
+            >
+              <RecordCell>
+                {staff && (
+                  <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                    Payroll period
+                  </span>
+                )}
+                {row.period.cutoffLabel}
+              </RecordCell>
+              {!staff && (
+                <>
+                  <RecordCell>
+                    <span
+                      className="block truncate font-medium"
+                      title={row.employeeName}
+                    >
+                      {row.employeeName}
+                    </span>
+                    <span
+                      className="block truncate text-muted-foreground"
+                      title={row.employeeNumber}
+                    >
+                      {row.employeeNumber}
+                    </span>
+                  </RecordCell>
+                  <RecordCell className="text-right tabular-nums">
+                    {row.revision}
+                  </RecordCell>
+                </>
+              )}
+              <RecordCell className={staff ? "break-all" : undefined}>
+                {staff && (
+                  <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                    Reference
+                  </span>
+                )}
+                {staff ? (
+                  row.reference
+                ) : (
+                  <span className="block truncate" title={row.reference}>
+                    {row.reference}
+                  </span>
+                )}
+              </RecordCell>
+              <RecordCell
+                className={staff ? undefined : "text-right tabular-nums"}
+              >
+                {staff && (
+                  <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                    Net pay
+                  </span>
+                )}
+                {staff ? money(row, row.net) : formatPayrollMoney(row.net)}
+              </RecordCell>
+              <RecordCell>
+                {staff && (
+                  <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                    Publication
+                  </span>
+                )}
+                {!staff ? (
+                  <div className="grid justify-items-start gap-1">
+                    <Pill tone={row.publishedAt ? "success" : "info"}>
+                      {row.publishedAt ? "Published" : "Generated"}
+                    </Pill>
+                    {row.publishedAt && (
+                      <span className="text-muted-foreground">
+                        {timestamp(row.publishedAt)}
+                      </span>
+                    )}
+                  </div>
+                ) : row.publishedAt ? (
+                  timestamp(row.publishedAt)
+                ) : (
+                  <Pill tone="neutral">Generated</Pill>
+                )}
+              </RecordCell>
+              <RecordCell
                 className={
-                  staff ? staffPayslipGrid + " " + staffTableRow : undefined
+                  staff ? "flex flex-wrap items-center gap-2" : "text-center"
                 }
               >
-                <RecordCell>
-                  {staff && (
-                    <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                      Payroll period
-                    </span>
-                  )}
-                  {row.period.cutoffLabel}
-                </RecordCell>
-                {!staff && (
-                  <>
-                    <RecordCell>
-                      <span
-                        className="block truncate font-medium"
-                        title={row.employeeName}
-                      >
-                        {row.employeeName}
-                      </span>
-                      <span
-                        className="block truncate text-muted-foreground"
-                        title={row.employeeNumber}
-                      >
-                        {row.employeeNumber}
-                      </span>
-                    </RecordCell>
-                    <RecordCell className="text-right tabular-nums">
-                      {row.revision}
-                    </RecordCell>
-                  </>
+                {staff && (
+                  <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
+                    Actions
+                  </span>
                 )}
-                <RecordCell className={staff ? "break-all" : undefined}>
-                  {staff && (
-                    <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                      Reference
-                    </span>
-                  )}
-                  {staff ? (
-                    row.reference
-                  ) : (
-                    <span className="block truncate" title={row.reference}>
-                      {row.reference}
-                    </span>
-                  )}
-                </RecordCell>
-                <RecordCell
-                  className={staff ? undefined : "text-right tabular-nums"}
-                >
-                  {staff && (
-                    <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                      Net pay
-                    </span>
-                  )}
-                  {staff ? money(row, row.net) : formatPayrollMoney(row.net)}
-                </RecordCell>
-                <RecordCell>
-                  {staff && (
-                    <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                      Publication
-                    </span>
-                  )}
-                  {!staff ? (
-                    <div className="grid justify-items-start gap-1">
-                      <Pill tone={row.publishedAt ? "success" : "info"}>
-                        {row.publishedAt ? "Published" : "Generated"}
-                      </Pill>
-                      {row.publishedAt && (
-                        <span className="text-muted-foreground">
-                          {timestamp(row.publishedAt)}
-                        </span>
-                      )}
-                    </div>
-                  ) : row.publishedAt ? (
-                    timestamp(row.publishedAt)
-                  ) : (
-                    <Pill tone="neutral">Generated</Pill>
-                  )}
-                </RecordCell>
-                <RecordCell
-                  className={
-                    staff ? "flex flex-wrap items-center gap-2" : "text-center"
-                  }
-                >
-                  {staff && (
-                    <span className="mr-1.5 hidden text-[#738096] @max-[900px]:inline">
-                      Actions
-                    </span>
-                  )}
-                  {staff ? (
-                    <div className="flex flex-wrap justify-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setSlip(row)}
-                      >
-                        View
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void download(row)}
-                      >
-                        Download PDF
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex justify-center">
-                      <Button
-                        type="button"
-                        variant="rowAction"
-                        size={null}
-                        aria-label={`View payslip for ${row.employeeName}, ${row.period.cutoffLabel}, revision ${row.revision}`}
-                        onClick={() => setSlip(row)}
-                      >
-                        <Eye size={14} aria-hidden="true" />
-                        <HoverTooltip>View payslip details</HoverTooltip>
-                      </Button>
-                    </div>
-                  )}
-                </RecordCell>
-              </RecordRow>
-            ))}
-          </RecordTable>
-        )}
+                {staff ? (
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setSlip(row)}
+                    >
+                      View
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void download(row)}
+                    >
+                      Download PDF
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex justify-center">
+                    <Button
+                      type="button"
+                      variant="rowAction"
+                      size={null}
+                      aria-label={`View payslip for ${row.employeeName}, ${row.period.cutoffLabel}, revision ${row.revision}`}
+                      onClick={() => setSlip(row)}
+                    >
+                      <Eye size={14} aria-hidden="true" />
+                      <HoverTooltip>View payslip details</HoverTooltip>
+                    </Button>
+                  </div>
+                )}
+              </RecordCell>
+            </RecordRow>
+          ))}
+        </RecordTable>
         <Pages
           result={
             slips.loading ||
