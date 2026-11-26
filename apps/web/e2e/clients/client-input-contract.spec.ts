@@ -316,6 +316,30 @@ test("[NEX-027] client directory trims search, combines active filtering and sor
     table.getByRole("row").filter({ hasText: "Directory Client 08" }).first(),
   ).toBeVisible()
   await expect(page.getByRole("status")).toContainText("Showing 1–4 of 4")
+  // PG-019-F001-A004-T001: clear both filters without resetting the chosen order.
+  const cleared = page.waitForRequest((request) => {
+    const url = new URL(request.url())
+    return (
+      url.pathname === "/api/clients" &&
+      !url.searchParams.has("search") &&
+      !url.searchParams.has("status") &&
+      url.searchParams.get("sortBy") === "fullName"
+    )
+  })
+  await page.getByRole("button", { name: "Clear filters", exact: true }).click()
+  const clearedUrl = new URL((await cleared).url())
+  expect(clearedUrl.searchParams.get("page")).toBe("1")
+  expect(clearedUrl.searchParams.get("sortOrder")).toBe("asc")
+  await expect(
+    page.getByRole("searchbox", { name: "Search clients" }),
+  ).toHaveValue("")
+  await expect(
+    page.getByRole("combobox", { name: "Filter by account status" }),
+  ).toContainText("All Statuses")
+  await expect(
+    page.getByRole("combobox", { name: "Sort clients" }),
+  ).toContainText("Name: A to Z")
+  await expect(page.getByRole("status")).toContainText(/Showing 1.*10 of 12/)
 })
 
 test("[NEX-028] client creation preserves the selected inactive initial status", async ({
@@ -355,6 +379,22 @@ test("[NEX-029] client form disables submission while one save is pending", asyn
 
   const submit = dialog.locator('button[type="submit"]')
   await expect(submit).toHaveAccessibleName("Create Client")
+  // PG-019-F001-A016-T001: password display is local; busy state blocks every close path.
+  const password = dialog.getByLabel("Initial Password")
+  const originalPassword = await password.inputValue()
+  await expect(password).toHaveAttribute("type", "password")
+  await dialog
+    .getByRole("button", { name: "Show password", exact: true })
+    .focus()
+  await page.keyboard.press("Enter")
+  await expect(password).toHaveAttribute("type", "text")
+  await expect(
+    dialog.getByRole("button", { name: "Hide password", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true")
+  await page.keyboard.press("Enter")
+  await expect(password).toHaveAttribute("type", "password")
+  await expect(password).toHaveValue(originalPassword)
+  expect(submissions).toHaveLength(0)
   await submit.dblclick()
   await state.waitForPendingSubmission()
   await expect(submit).toBeDisabled()
@@ -362,6 +402,16 @@ test("[NEX-029] client form disables submission while one save is pending", asyn
   await expect(dialog.getByRole("button", { name: "Cancel" })).toBeDisabled()
   expect(submissions).toHaveLength(1)
 
+  await expect(
+    dialog.getByRole("button", { name: "Close client form", exact: true }),
+  ).toBeDisabled()
+  await expect(
+    dialog.getByRole("button", { name: "Show password", exact: true }),
+  ).toBeDisabled()
+  await page.keyboard.press("Escape")
+  await page.mouse.click(1, 1)
+  await expect(dialog).toBeVisible()
+  await expect(password).toHaveValue(originalPassword)
   state.releaseSubmission()
   await expect(dialog).toHaveCount(0)
   expect(submissions).toHaveLength(1)
