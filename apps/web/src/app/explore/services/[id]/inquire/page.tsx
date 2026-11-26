@@ -1,10 +1,12 @@
-import { PublicInquiryPage } from "@/features/public-services/pages/public-inquiry-page"
+import { redirect } from "next/navigation"
+import {
+  parseInquiryService,
+  withInquiryService,
+} from "@/features/public-services/model/service-inquiry-link"
 
 export default async function Page({
   params,
-}: {
-  params: Promise<{ id: string }>
-}) {
+}: PageProps<"/explore/services/[id]/inquire">) {
   const { id } = await params
-  return <PublicInquiryPage id={id} />
+  redirect(withInquiryService("/register", parseInquiryService(id)))
 }

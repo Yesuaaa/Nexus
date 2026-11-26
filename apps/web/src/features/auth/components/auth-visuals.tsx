@@ -1,4 +1,5 @@
 import { getImageProps } from "next/image"
+import Link from "next/link"
 import { useEffect, useState } from "react"
 import type { AuthCopy } from "../content/auth-copy"
 import { focusOutline, heroTitleClass } from "../styles/auth-styles"
@@ -131,7 +132,9 @@ export function PhotoPanel({
         aria-label={copy.community}
       >
         <div className="flex h-9 items-center">
-          <Brand white className="" />
+          <Link href="/" aria-label="Converyn home" data-auth-home-link>
+            <Brand white className="" />
+          </Link>
         </div>
         <div className="flex flex-1 flex-col justify-center py-12">
           <h1 className="text-[clamp(54px,6vw,88px)] leading-[0.92] font-extrabold tracking-[-0.055em] uppercase">

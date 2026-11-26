@@ -26,6 +26,7 @@ const receiptSelect = {
 
 const bookingSelect = {
   id: true,
+  referenceNumber: true,
   title: true,
   status: true,
   packageName: true,

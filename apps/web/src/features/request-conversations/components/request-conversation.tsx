@@ -82,6 +82,7 @@ import {
   mergeMessages,
   readConversationEvents,
 } from "../model/conversation-events"
+import { openConversationBookings } from "../model/conversation-bookings"
 import { useConversationThread } from "../hooks/use-conversation-thread"
 import { errorMessage } from "@/lib/error-message"
 import { watchVisibleRefresh } from "@/lib/visible-refresh"
@@ -395,6 +396,8 @@ function ConversationPanel({
     const controller = new AbortController()
     let loading = false
     let queued = false
+    // Before a department accepts, there is no live stream to connect to yet.
+    let waiting = false
     let retryTimer: ReturnType<typeof setTimeout> | undefined
     let wakeRetry: (() => void) | undefined
     function revoke(message: string) {
@@ -418,6 +421,7 @@ function ConversationPanel({
           controller.signal,
         )
         if (controller.signal.aborted) return
+        waiting = !result.conversation
         setHistory((previous) => {
           const overlaps = result.messages.some((row) =>
             previous?.messages.some((old) => old.id === row.id),
@@ -481,7 +485,8 @@ function ConversationPanel({
           if (controller.signal.aborted) return
           if (
             reason instanceof ApiError &&
-            [401, 403, 404].includes(reason.status)
+            [401, 403, 404].includes(reason.status) &&
+            !(waiting && reason.status === 404)
           ) {
             revoke(reason.message)
             return
@@ -497,8 +502,7 @@ function ConversationPanel({
         })
       }
     }
-    void refresh()
-    void connect()
+    void refresh().then(connect)
     // Fallback for missed live events; skips while a refresh is in flight.
     const stopFallback = watchVisibleRefresh(
       () => {
@@ -1098,7 +1102,9 @@ function ConversationPanel({
                     <div className="absolute right-0 bottom-full left-0 z-10">
                       <ScheduleConversationMeeting
                         conversationId={history.conversation.id}
-                        bookings={conversationBookings}
+                        bookings={openConversationBookings(
+                          conversationBookings,
+                        )}
                         onClose={() => setSchedulingMeeting(false)}
                         onSaved={applyMeetingUpdate}
                       />

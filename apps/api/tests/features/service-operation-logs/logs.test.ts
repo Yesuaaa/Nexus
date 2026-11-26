@@ -531,6 +531,15 @@ test(
       assert.equal(legacySearchBody.events.length, 1)
       assert.equal(legacySearchBody.events[0]?.id, legacy.id)
       assert.equal(legacySearchBody.events[0]?.actor.name, "Renamed Admin")
+      for (const wildcard of ["%25", "_____", "Renamed%25Admin"]) {
+        const response = await call(
+          `/service-operation-logs?search=${wildcard}`,
+        )
+        const { events } = (await response.json()) as {
+          events: { event: string }[]
+        }
+        assert.deepEqual(events, [], wildcard)
+      }
       for (const query of [
         "from=invalid",
         "page=-1",

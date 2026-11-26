@@ -406,9 +406,17 @@ export function WorkloadPage({
           aria-label="Staff workload table"
         >
           <table
-            className="w-full min-w-[850px] text-left text-xs"
+            className="w-full min-w-[850px] table-fixed text-left text-xs [&_td]:break-words"
             aria-busy={loading || table.searchPending}
           >
+            <colgroup>
+              <col className="w-[22%]" />
+              <col className="w-[36%]" />
+              <col className="w-[13%]" />
+              <col className="w-[8%]" />
+              <col className="w-[14%]" />
+              <col className="w-[7%]" />
+            </colgroup>
             <thead className="bg-[#e8eef2]">
               <tr>
                 {[

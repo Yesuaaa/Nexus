@@ -705,6 +705,24 @@ test("backend-denied review capabilities override privileged menu assumptions", 
   await expect(
     page.getByRole("menuitem", { name: /approve|verify|reject/i }),
   ).toHaveCount(0)
+
+  // PG-012-F001-A009-T001: preserve the Corrections assertions and verify a
+  // denied Superadmin capability on the fixed Overtime route as well.
+  await page.goto("/attendance/requests/overtime")
+  await expect(page.getByRole("heading", { name: "Overtime" })).toBeVisible()
+  await page
+    .getByRole("button", {
+      name: `More actions for ${overtime.employee.fullName}'s request`,
+      exact: true,
+    })
+    .click()
+  await expect(page.getByRole("menuitem")).toHaveCount(1)
+  await expect(
+    page.getByRole("menuitem", { name: "View details", exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("menuitem", { name: /approve|verify|reject/i }),
+  ).toHaveCount(0)
 })
 
 for (const scenario of [

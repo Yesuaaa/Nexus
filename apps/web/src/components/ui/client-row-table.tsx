@@ -42,11 +42,23 @@ export function ClientRowTable<T extends { id: string }>({
   renderRow: (item: T) => ReactNode
   renderMobileRow: (item: T) => ReactNode
 }) {
+  const empty = items.length === 0 && !error
+
   return (
-    <>
-      <div className="overflow-x-auto rounded-xl bg-[#e7edf3] p-1.5 @max-[900px]:hidden">
+    <div className="@container min-w-0">
+      <div
+        className={
+          empty
+            ? "overflow-x-auto rounded-lg border border-[#e8ebef] bg-background @max-[900px]:hidden"
+            : "overflow-x-auto rounded-xl bg-[#e7edf3] p-1.5 @max-[900px]:hidden"
+        }
+      >
         <table
-          className="w-full min-w-[920px] table-fixed border-separate border-spacing-y-2 text-left text-xs text-foreground"
+          className={
+            empty
+              ? "w-full min-w-[920px] table-fixed text-left text-xs text-foreground"
+              : "w-full min-w-[920px] table-fixed border-separate border-spacing-y-2 text-left text-xs text-foreground"
+          }
           aria-busy={ariaBusy}
         >
           <caption className="sr-only">{caption}</caption>
@@ -55,7 +67,13 @@ export function ClientRowTable<T extends { id: string }>({
               <col key={column.label} className={column.className} />
             ))}
           </colgroup>
-          <thead className="sr-only">
+          <thead
+            className={
+              empty
+                ? "h-[39px] border-b border-[#dfe6eb] bg-[#e8eef2] [&_th]:px-4 [&_th]:font-semibold"
+                : "sr-only"
+            }
+          >
             <tr>
               {columns.map((column) => (
                 <th key={column.label} scope="col">
@@ -79,7 +97,11 @@ export function ClientRowTable<T extends { id: string }>({
         </table>
       </div>
       <div
-        className="hidden gap-3 @max-[900px]:grid"
+        className={
+          empty
+            ? "hidden rounded-lg border border-[#e8ebef] bg-background @max-[900px]:grid"
+            : "hidden gap-3 @max-[900px]:grid"
+        }
         role="list"
         aria-label={ariaLabel}
         aria-busy={ariaBusy}
@@ -116,6 +138,6 @@ export function ClientRowTable<T extends { id: string }>({
           renderRow={renderMobileRow}
         />
       </div>
-    </>
+    </div>
   )
 }

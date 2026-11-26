@@ -22,6 +22,7 @@ import { Pill } from "@/components/ui/pill"
 import { Skeleton } from "@/components/ui/skeleton"
 import { SidePanelError } from "@/components/ui/side-panel"
 import {
+  DataTableEmptyRow,
   ResponsiveDataTable,
   ResponsiveDataTableBody,
   ResponsiveDataTableCell,
@@ -474,7 +475,7 @@ export function PayrollOverviewPage() {
           </div>
           {overview.loading ? (
             <Skeleton className="h-28 w-full" />
-          ) : data?.attention.length ? (
+          ) : data ? (
             <ResponsiveDataTable
               label="Items Requiring Attention"
               className="overflow-x-auto"
@@ -494,63 +495,62 @@ export function PayrollOverviewPage() {
                 )}
               </ResponsiveDataTableHeader>
               <ResponsiveDataTableBody>
-                {data.attention.map((row) => (
-                  <ResponsiveDataTableRow
-                    key={row.id}
-                    variant="directory"
-                    className={grid + " py-2 text-xs"}
-                  >
-                    <ResponsiveDataTableCell>
-                      {row.category === "APPROVAL"
-                        ? row.item
-                        : humanizeEnum(row.item)}
-                    </ResponsiveDataTableCell>
-                    <ResponsiveDataTableCell>
-                      {row.period}
-                    </ResponsiveDataTableCell>
-                    <ResponsiveDataTableCell>
-                      {humanizeEnum(row.category)}
-                    </ResponsiveDataTableCell>
-                    <ResponsiveDataTableCell>
-                      <Pill tone="warning">{humanizeEnum(row.status)}</Pill>
-                    </ResponsiveDataTableCell>
-                    <ResponsiveDataTableCell className="text-center">
-                      <Button asChild variant="rowAction" size={null}>
-                        <Link
-                          href={
-                            row.category === "APPROVAL"
-                              ? "/module/payroll/approvals"
-                              : "/module/payroll/reconciliation?run=" +
-                                encodeURIComponent(row.runId)
-                          }
-                          aria-label={
-                            "View " +
-                            humanizeEnum(row.category) +
-                            " for " +
-                            row.period
-                          }
-                        >
-                          <Eye size={15} aria-hidden />
-                          <HoverTooltip>
-                            {row.category === "APPROVAL"
-                              ? "View payroll approval"
-                              : "View reconciliation details"}
-                          </HoverTooltip>
-                        </Link>
-                      </Button>
-                    </ResponsiveDataTableCell>
-                  </ResponsiveDataTableRow>
-                ))}
+                {data.attention.length === 0 ? (
+                  <DataTableEmptyRow colSpan={5}>
+                    No payroll items require attention in this range.
+                  </DataTableEmptyRow>
+                ) : (
+                  data.attention.map((row) => (
+                    <ResponsiveDataTableRow
+                      key={row.id}
+                      variant="directory"
+                      className={grid + " py-2 text-xs"}
+                    >
+                      <ResponsiveDataTableCell>
+                        {row.category === "APPROVAL"
+                          ? row.item
+                          : humanizeEnum(row.item)}
+                      </ResponsiveDataTableCell>
+                      <ResponsiveDataTableCell>
+                        {row.period}
+                      </ResponsiveDataTableCell>
+                      <ResponsiveDataTableCell>
+                        {humanizeEnum(row.category)}
+                      </ResponsiveDataTableCell>
+                      <ResponsiveDataTableCell>
+                        <Pill tone="warning">{humanizeEnum(row.status)}</Pill>
+                      </ResponsiveDataTableCell>
+                      <ResponsiveDataTableCell className="text-center">
+                        <Button asChild variant="rowAction" size={null}>
+                          <Link
+                            href={
+                              row.category === "APPROVAL"
+                                ? "/module/payroll/approvals"
+                                : "/module/payroll/reconciliation?run=" +
+                                  encodeURIComponent(row.runId)
+                            }
+                            aria-label={
+                              "View " +
+                              humanizeEnum(row.category) +
+                              " for " +
+                              row.period
+                            }
+                          >
+                            <Eye size={15} aria-hidden />
+                            <HoverTooltip>
+                              {row.category === "APPROVAL"
+                                ? "View payroll approval"
+                                : "View reconciliation details"}
+                            </HoverTooltip>
+                          </Link>
+                        </Button>
+                      </ResponsiveDataTableCell>
+                    </ResponsiveDataTableRow>
+                  ))
+                )}
               </ResponsiveDataTableBody>
             </ResponsiveDataTable>
-          ) : (
-            data && (
-              <EmptyState
-                size="sm"
-                title="No payroll items require attention in this range"
-              />
-            )
-          )}
+          ) : null}
         </section>
       </div>
     </main>

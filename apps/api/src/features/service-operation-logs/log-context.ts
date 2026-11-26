@@ -16,7 +16,9 @@ export const serviceLogContext: RequestHandler = (request, response, next) => {
 /** Only static Express route templates; no raw URLs, query strings or parameter values. */
 export function serviceLogEndpoint(request: Request): string | undefined {
   const root = request.originalUrl.split("?")[0].split("/")[2]?.toLowerCase()
-  const route: unknown = request.route?.path
+  // Failures in router-level middleware happen before a route is matched, so
+  // only the mount point is known.
+  const route: unknown = request.route ? request.route.path : "/"
   if (
     !root ||
     !/^[a-z-]+$/.test(root) ||
