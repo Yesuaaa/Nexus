@@ -124,4 +124,43 @@ test("[NEX-012] admin can browse paginated client requests and projects in read-
   await expect(
     directory.getByRole("button", { name: /Edit|Delete/i }),
   ).toHaveCount(0)
+  // PG-019-F001-A013-T001: real keyboard tabs/dismissal and fallback focus.
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    const opener = directory.getByRole("button", {
+      name: "View Morgan Client",
+      exact: true,
+    })
+    await opener.focus()
+    await page.keyboard.press("Enter")
+    const panel = page.getByRole("dialog")
+    await panel.getByRole("tab", { name: "Overview", exact: true }).focus()
+    await page.keyboard.press("ArrowRight")
+    await expect(
+      panel.getByRole("tab", { name: "Service requests", exact: true }),
+    ).toHaveAttribute("aria-selected", "true")
+    await page.keyboard.press("Escape")
+    await expect(panel).toHaveCount(0)
+    await expect(opener).toBeFocused()
+    if (width === 1440) {
+      await page.keyboard.press("Enter")
+      await expect(page.getByRole("dialog")).toBeVisible()
+      await page.mouse.click(1, 1)
+      await expect(page.getByRole("dialog")).toHaveCount(0)
+      await expect(opener).toBeFocused()
+    }
+  }
+  const lastOpener = directory.getByRole("button", {
+    name: "View Morgan Client",
+    exact: true,
+  })
+  await lastOpener.focus()
+  await page.keyboard.press("Enter")
+  await expect(page.getByRole("dialog")).toBeVisible()
+  // A fixture-only DOM removal exercises the documented disconnected-opener branch;
+  // it does not claim this page polls while the drawer is open.
+  await lastOpener.evaluate((element) => element.remove())
+  await page.keyboard.press("Escape")
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(page.locator("#client-directory-heading")).toBeFocused()
 })

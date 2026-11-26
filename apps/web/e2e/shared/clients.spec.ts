@@ -371,7 +371,18 @@ test.describe("Client management", () => {
       const initial = gate()
       const nextPage = gate()
       const initialProjects = gate()
+      // PG-019-F001-A010-T001: prove related requests wait for profile AND tab readiness.
+      const profile = gate()
+      let relatedRequests = 0
+      await page.route("**/api/clients/*", async (route) => {
+        if (new URL(route.request().url()).pathname.split("/").length !== 4)
+          return route.fallback()
+        profile.start()
+        await profile.pending
+        return route.fallback()
+      })
       await page.route("**/api/clients/*/service-requests**", async (route) => {
+        relatedRequests++
         const url = new URL(route.request().url())
         const pageNumber = Number(url.searchParams.get("page") ?? "1")
         const requestGate = pageNumber === 1 ? initial : nextPage
@@ -395,6 +406,7 @@ test.describe("Client management", () => {
         })
       })
       await page.route("**/api/clients/*/projects**", async (route) => {
+        relatedRequests++
         initialProjects.start()
         await initialProjects.pending
         return route.fulfill({
@@ -418,6 +430,15 @@ test.describe("Client management", () => {
       await page.goto("/clients")
       await page.getByRole("button", { name: /View.*Target User/i }).click()
       const drawer = page.getByRole("dialog")
+      try {
+        await profile.started
+        expect(relatedRequests).toBe(0)
+        await drawer.getByRole("tab", { name: "Service requests" }).click()
+        expect(relatedRequests).toBe(0)
+      } finally {
+        profile.release()
+      }
+
       await drawer.getByRole("tab", { name: "Service requests" }).click()
       const desktopTable = drawer.locator("table")
       const mobileList = drawer.getByRole("list", { name: "Service requests" })

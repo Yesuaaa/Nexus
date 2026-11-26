@@ -196,6 +196,44 @@ test(
         for (const sortBy of ["fullName", "createdAt", "isActive"])
           await list(`?sortBy=${sortBy}&sortOrder=asc`)
         assert.deepEqual((await list("?page=99")).clients, [])
+        // PG-019-F001-A005-T002: independent exact ordering for every supported direction.
+        const clientIds = Array.from(
+          { length: 22 },
+          (_, i) => `client-${String(i).padStart(2, "0")}`,
+        )
+        const ordinaryId = (
+          await prisma.user.findUniqueOrThrow({
+            where: { email: "user@example.com" },
+          })
+        ).id
+        const named = clientIds.slice(1)
+        const active = [
+          ...clientIds.filter((id) => id !== "client-01"),
+          ordinaryId,
+        ]
+        const orders = {
+          "createdAt:asc": [...clientIds, ordinaryId],
+          "createdAt:desc": [ordinaryId, ...clientIds],
+          "email:asc": [...clientIds, ordinaryId],
+          "email:desc": [ordinaryId, ...[...clientIds].reverse()],
+          "fullName:asc": [...named, ordinaryId, "client-00"],
+          "fullName:desc": ["client-00", ordinaryId, ...[...named].reverse()],
+          "isActive:asc": ["client-01", ...active],
+          "isActive:desc": [...active, "client-01"],
+        }
+        for (const [ordering, expected] of Object.entries(orders)) {
+          const [sortBy, sortOrder] = ordering.split(":")
+          const actual = []
+          for (const page of [1, 2, 3])
+            actual.push(
+              ...(
+                await list(
+                  `?page=${page}&sortBy=${sortBy}&sortOrder=${sortOrder}`,
+                )
+              ).clients.map((client) => client.id),
+            )
+          assert.deepEqual(actual, expected, ordering)
+        }
       },
     )
     await t.test(
@@ -465,6 +503,34 @@ test(
           ).role,
           "USER",
         )
+        // PG-019-F001-A017-T002: conflicts cover internal/retired identities and leave no history.
+        const domain = async () => ({
+          users: await prisma.user.findMany({ orderBy: { id: "asc" } }),
+          history: await prisma.accountManagementChange.findMany({
+            orderBy: { id: "asc" },
+          }),
+        })
+        const conflictBaseline = await domain()
+        for (const email of [
+          " ADMIN@EXAMPLE.COM ",
+          " DELETED@EXAMPLE.COM ",
+          " NEW.CLIENT@EXAMPLE.COM ",
+        ]) {
+          const response = await mutate("", "POST", { ...input, email })
+          assert.equal(response.status, 409)
+          assert.deepEqual(await response.json(), {
+            error: "An account with this email already exists.",
+          })
+          assert.deepEqual(await domain(), conflictBaseline)
+          const update = await mutate(
+            "/client-02",
+            "PATCH",
+            { ...input, email },
+            "SUPERADMIN",
+          )
+          assert.equal(update.status, 409)
+          assert.deepEqual(await domain(), conflictBaseline)
+        }
       },
     )
     await t.test(

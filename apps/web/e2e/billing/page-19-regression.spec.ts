@@ -162,4 +162,52 @@ test("Billing Logs renders the authorized booking data and an unspecified due da
   await expect(dialog).toContainText(payment.bookingReference)
   await expect(dialog).toContainText(payment.amount)
   await expect(dialog).toContainText("Not specified")
+  // PG-016-F001-A006-T002: missing fields and independently priced line items.
+  await page.keyboard.press("Escape")
+  const variants = [
+    {
+      ...payment,
+      bookingReference: null,
+      approvedAt: null,
+      lineItems: [
+        { description: "One item", quantity: 1, unitPrice: "125.07" },
+      ],
+    },
+    {
+      ...payment,
+      bookingReference: null,
+      approvedAt: null,
+      lineItems: [
+        { description: "Design", quantity: 2, unitPrice: "50.00" },
+        { description: "Review", quantity: 1, unitPrice: "25.07" },
+      ],
+    },
+  ]
+  for (const variant of variants) {
+    await page.route("**/api/request-workflows/billing", (route) =>
+      route.fulfill({ json: [variant] }),
+    )
+    await page.reload()
+    await page.getByRole("button", { name: "Review", exact: true }).click()
+    await expect(
+      dialog.getByText("Booking reference", { exact: true }),
+    ).toHaveCount(0)
+    await expect(
+      dialog.getByText("Quotation accepted on", { exact: true }),
+    ).toHaveCount(0)
+    if (variant.lineItems.length === 1) {
+      await expect(
+        dialog.getByRole("row").filter({ hasText: payment.serviceName }),
+      ).toContainText("₱125.07")
+    } else {
+      await expect(
+        dialog.getByRole("row").filter({ hasText: "Design" }),
+      ).toContainText("₱100.00")
+      await expect(
+        dialog.getByRole("row").filter({ hasText: "Review" }),
+      ).toContainText("₱25.07")
+      await expect(dialog.locator("tfoot")).toContainText("₱125.07")
+    }
+    await page.keyboard.press("Escape")
+  }
 })

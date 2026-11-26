@@ -293,6 +293,77 @@ test(
         3,
       )
     }
+    // PG-018-F001-A020-T002: HTTP/controller parity and delegated visibility.
+    const sessions = new Map<string, string>()
+    for (const person of [head, staff, teammate, admin, superadmin])
+      sessions.set(person.id, (await issueSession(person)).token)
+    for (const person of [head, staff, admin, superadmin]) {
+      const response = await fetch(
+        `${base}/api/projects/calendar?scope=team&month=2030-02`,
+        { headers: { Authorization: `Bearer ${sessions.get(person.id)}` } },
+      )
+      assert.equal(response.status, 200)
+      const body = (await response.json()) as {
+        events: { id: string; href: string | null; location: string | null }[]
+        canViewTeam: boolean
+        organization: boolean
+      }
+      assert.equal(Array.isArray(body.events), true)
+      assert.equal(body.organization, person.role !== "STAFF")
+      assert.equal(body.canViewTeam, person.role === "STAFF")
+      if (person.id === head.id)
+        assert.equal(
+          body.events.find((e) => e.id === `meeting-${meeting.id}`)?.location,
+          meeting.location,
+        )
+    }
+    assert.equal(
+      (
+        await fetch(`${base}/api/projects/calendar?scope=team`, {
+          headers: { Authorization: `Bearer ${sessions.get(teammate.id)}` },
+        })
+      ).status,
+      403,
+    )
+    await database.requestWorkflow.update({
+      where: { requestId: booking.id },
+      data: { quotationApproverId: admin.id, paymentVerifierId: superadmin.id },
+    })
+    try {
+      for (const person of [admin, superadmin]) {
+        const response = await fetch(
+          `${base}/api/projects/calendar?month=2030-02`,
+          { headers: { Authorization: `Bearer ${sessions.get(person.id)}` } },
+        )
+        assert.equal(response.status, 200)
+        const body = (await response.json()) as {
+          events: { id: string; href: string | null; location: string | null }[]
+        }
+        assert.equal(
+          body.events.find((e) => e.id === `consultation-${scheduled.id}`)
+            ?.href,
+          `/messages?request=${encodeURIComponent(booking.id)}`,
+        )
+        assert.equal(
+          body.events.find((e) => e.id === `consultation-${scheduled.id}`)
+            ?.location,
+          scheduled.location,
+        )
+        assert.equal(
+          body.events.find((e) => e.id === `meeting-${meeting.id}`)?.href,
+          null,
+        )
+        assert.equal(
+          body.events.find((e) => e.id === `meeting-${meeting.id}`)?.location,
+          null,
+        )
+      }
+    } finally {
+      await database.requestWorkflow.update({
+        where: { requestId: booking.id },
+        data: { quotationApproverId: null, paymentVerifierId: null },
+      })
+    }
     await assert.rejects(
       listInternalCalendar(client.id, "team"),
       /Internal calendar access/,

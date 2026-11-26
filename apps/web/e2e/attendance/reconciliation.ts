@@ -292,6 +292,64 @@ export function reconciliationTests() {
       closed: 0,
     }
     await expectDistribution(onlySuspended, departmentFilter)
+    // PG-014-F001-A006-T001: suspended is excluded from the open figure.
+    const timeLogFigures = page.getByLabel("Time log figures")
+    await expect(timeLogFigures.getByRole("definition")).toHaveText([
+      "1",
+      "1",
+      "0",
+      "0",
+    ])
+    await expect(
+      timeLogFigures.getByText("Needs review", { exact: true }),
+    ).toHaveCount(0)
+
+    // PG-014-F001-A005-T002: clearing the department preserves the date pair.
+    const timeLogDepartment = page.getByRole("combobox", {
+      name: "Time logs department",
+    })
+    const chooserReads: string[] = []
+    const trackDepartment = (request: import("@playwright/test").Request) => {
+      if (new URL(request.url()).pathname === "/api/attendance/departments")
+        chooserReads.push(request.url())
+    }
+    page.on("request", trackDepartment)
+    await timeLogDepartment.click()
+    const resetResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url())
+      return (
+        url.pathname === "/api/attendance/overview" &&
+        url.searchParams.get("departmentId") === ""
+      )
+    })
+    await page
+      .getByRole("option", { name: "All permitted departments", exact: true })
+      .click()
+    const reset = await resetResponse
+    expect(reset.status()).toBe(200)
+    expect(Object.fromEntries(new URL(reset.url()).searchParams)).toEqual({
+      from: date,
+      to: date,
+      departmentId: "",
+    })
+    await expect(
+      timeLogFigures.getByRole("definition").locator("span:first-child"),
+    ).toHaveText(["4", "4", "1", "2"])
+    await expect(
+      timeLogFigures.getByText("Needs review", { exact: true }),
+    ).toBeVisible()
+    page.off("request", trackDepartment)
+    expect(chooserReads).toEqual([])
+    await timeLogDepartment.click()
+    await page
+      .getByRole("option", { name: "WC06 reporting", exact: true })
+      .click()
+    await expect(timeLogFigures.getByRole("definition")).toHaveText([
+      "1",
+      "1",
+      "0",
+      "0",
+    ])
     expect((await read<Records>("records", nextDate)).workdays).toEqual([])
     await selectDate(nextDate)
     await expect(page.getByText("No check-ins in this period.")).toBeVisible()
@@ -515,6 +573,9 @@ export function reconciliationTests() {
       await signIn(reviewer, role)
       await reviewer.goto("/attendance/time-logs/records")
       await reviewer
+        .getByRole("searchbox", { name: "Search attendance employees" })
+        .fill("BROWSER-recovery")
+      await reviewer
         .getByRole("button", { name: "View logs for Attendance recovery" })
         .click()
       await reviewer
@@ -677,6 +738,9 @@ export function reconciliationTests() {
         await page.clock.setFixedTime(new Date("2026-11-13T12:00:00Z"))
         await signIn(page, "admin")
         await page.goto("/attendance/time-logs/records")
+        await page
+          .getByRole("searchbox", { name: "Search attendance employees" })
+          .fill(`BROWSER-${actor}`)
         await page
           .getByRole("button", { name: `View logs for Attendance ${actor}` })
           .click()

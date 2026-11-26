@@ -270,6 +270,65 @@ test("all attendance navigation pages preserve module ownership and role boundar
         assert.equal(canAccessRoute({ ...staff, role }, link.href), false)
     }
 
+  // PG-014-F001-A001-T002
+  const timeLogs = "/attendance/time-logs/overview"
+  const head = { ...staff, headOf: { id: "dept", name: "Design" } }
+  // PG-015-F001-A001-T001
+  for (const records of [
+    "/attendance/time-logs/records",
+    "/attendance/records",
+  ]) {
+    assert.equal(canAccessRoute(head, records), true)
+    assert.equal(
+      getActiveWorkspaceModuleId(head, records),
+      "attendance-monitoring",
+    )
+    assert.equal(canAccessRoute({ ...head, isActive: false }, records), false)
+    assert.equal(canAccessRoute(staff, records), false)
+    assert.equal(canAccessRoute({ ...staff, role: "USER" }, records), false)
+    for (const role of ["ADMIN", "SUPERADMIN"]) {
+      const permitted = {
+        ...staff,
+        role,
+        permissions: [Permissions.EMPLOYEES_READ],
+      }
+      assert.equal(canAccessRoute(permitted, records), true)
+      assert.equal(
+        getActiveWorkspaceModuleId(permitted, records),
+        "attendance-monitoring",
+      )
+      assert.equal(
+        canAccessRoute({ ...permitted, permissions: [] }, records),
+        false,
+      )
+      assert.equal(
+        canAccessRoute({ ...permitted, isActive: false }, records),
+        false,
+      )
+    }
+  }
+  assert.equal(canAccessRoute(head, timeLogs), true)
+  assert.equal(canAccessRoute({ ...head, isActive: false }, timeLogs), false)
+  assert.equal(canAccessRoute({ ...staff, role: "USER" }, timeLogs), false)
+  for (const role of ["ADMIN", "SUPERADMIN"]) {
+    const privileged = {
+      ...staff,
+      role,
+      permissions: [Permissions.EMPLOYEES_READ],
+    }
+    assert.equal(canAccessRoute(privileged, timeLogs), true, role)
+    assert.equal(
+      canAccessRoute({ ...privileged, isActive: false }, timeLogs),
+      false,
+      role,
+    )
+    assert.equal(
+      canAccessRoute({ ...privileged, permissions: [] }, timeLogs),
+      false,
+      role,
+    )
+  }
+
   // PG-011-F001-A001-T001: the canonical Leave route follows the attendance
   // role and permission policy for both self-service and administrative users.
   const leaveRoute = "/attendance/requests/leave"

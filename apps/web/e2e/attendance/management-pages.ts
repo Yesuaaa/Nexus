@@ -204,12 +204,14 @@ export function managementPageTests() {
     try {
       await page.goto("/attendance/time-logs/records")
       const table = page.getByRole("table", { name: "Employees", exact: true })
-      await expect(
-        table.getByRole("button", { name: "View logs for Attendance staff" }),
-      ).toBeVisible()
       const search = page.getByRole("searchbox", {
         name: "Search attendance employees",
       })
+      // Search for the seeded row because fixture growth can move it off page one.
+      await search.fill("BROWSER-staff")
+      await expect(
+        table.getByRole("button", { name: "View logs for Attendance staff" }),
+      ).toBeVisible()
       await search.fill("No matching employee")
       await searchStarted
       await expect(table).toHaveAttribute("aria-busy", "true")

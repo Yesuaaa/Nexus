@@ -160,13 +160,33 @@ test(
     assert.equal(summary.employees, 2)
     assert.equal(summary.checkIns.total, 2)
     assert.equal(summary.workedHours, 20)
+    // PG-014-F001-A014-T001: names deliberately differ from insertion order.
+    await prisma.department.update({
+      where: { id: departments[0].id },
+      data: { name: "Zulu" },
+    })
+    await prisma.department.update({
+      where: { id: departments[1].id },
+      data: { name: "Alpha" },
+    })
     const departmentList = await request("/departments")
     assert.equal(departmentList.status, 200)
     assert.equal(
-      ((await departmentList.json()) as { departments: unknown[] }).departments
-        .length,
+      ((await departmentList.clone().json()) as { departments: unknown[] })
+        .departments.length,
       2,
     )
+    assert.deepEqual(await departmentList.json(), {
+      departments: [
+        { id: departments[1].id, name: "Alpha" },
+        { id: departments[0].id, name: "Zulu" },
+      ],
+    })
+    const headOptions = await request("/departments", head)
+    assert.equal(headOptions.status, 200)
+    assert.deepEqual(await headOptions.json(), {
+      departments: [{ id: departments[0].id, name: "Zulu" }],
+    })
     const recordsResponse = await request(`/records?${range}`)
     const recordsText = await recordsResponse.text()
     assert.equal(recordsResponse.status, 200)
@@ -371,6 +391,45 @@ test(
       { approve: false, verify: false, reject: false },
     )
     assert.equal((await request(`/overview?${range}`, admin)).status, 200)
+    // PG-014-F001-A015-T002: compare valid report scopes without timestamps.
+    async function report(who: typeof admin, department?: string) {
+      const query =
+        department === undefined ? range : range + "&departmentId=" + department
+      const result = await request("/overview?" + query, who)
+      assert.equal(result.status, 200)
+      return (await result.json()) as {
+        scope: string
+        checkIns: { total: number }
+        recordedDays: number
+      }
+    }
+    const ownReport = await report(head, departments[0].id)
+    const blank = await report(head, "")
+    const omitted = await report(head)
+    assert.equal(ownReport.scope, "DEPARTMENT")
+    assert.deepEqual(blank, ownReport)
+    assert.deepEqual(omitted, ownReport)
+    const outsideReport = await report(admin, departments[1].id)
+    assert.equal(outsideReport.scope, "DEPARTMENT")
+    assert.equal(outsideReport.checkIns.total, 1)
+    assert.equal(
+      (
+        await request(
+          "/overview?" + range + "&departmentId=pg014-missing",
+          head,
+        )
+      ).status,
+      403,
+    )
+    assert.equal(
+      (
+        await request(
+          "/overview?" + range + "&departmentId=pg014-missing",
+          admin,
+        )
+      ).status,
+      404,
+    )
     assert.equal(
       (
         await request(

@@ -68,3 +68,61 @@ test("calendar conflicts require overlapping times and a shared assignee", () =>
   )
   assert.equal(calendarConflicts(events, Date.parse("2030-02-04")).size, 0)
 })
+
+test("[PG-018-F001-A018-T002] leave conflicts honor business zones, assignees, tasks and half-open midnight", () => {
+  const person = [{ id: "staff", name: "Staff" }]
+  const leave = {
+    id: "leave",
+    type: "leave",
+    allDay: true,
+    startDate: "2032-03-14",
+    timeZone: "America/New_York",
+    startsAt: "2032-03-14T00:00:00Z",
+    endsAt: "2032-03-15T00:00:00Z",
+    staffMembers: person,
+  }
+  const timed = {
+    id: "timed",
+    type: "meeting",
+    startsAt: "2032-03-14T05:00:00Z",
+    endsAt: "2032-03-14T06:00:00Z",
+    staffMembers: person,
+  }
+  const task = {
+    id: "task",
+    type: "task",
+    deadline: true,
+    startsAt: "2032-03-13T16:00:00Z",
+    endsAt: null,
+    staffMembers: person,
+  }
+  const midnight = {
+    ...timed,
+    id: "midnight",
+    startsAt: "2032-03-14T03:00:00Z",
+    endsAt: "2032-03-14T04:00:00Z",
+  }
+  assert.deepEqual(
+    [
+      ...calendarConflicts([leave, timed, task], Date.parse("2032-03-01")),
+    ].sort(),
+    ["leave", "task", "timed"],
+  )
+  for (const control of [
+    midnight,
+    { ...timed, completed: true },
+    { ...task, completed: true },
+    { ...timed, staffMembers: [{ id: "other", name: "Other" }] },
+  ])
+    assert.equal(
+      calendarConflicts([leave, control], Date.parse("2032-03-01")).size,
+      0,
+    )
+  assert.equal(
+    calendarConflicts(
+      [{ ...leave, timeZone: "Asia/Manila" }, midnight],
+      Date.parse("2032-03-01"),
+    ).size,
+    2,
+  )
+})
