@@ -98,9 +98,10 @@ function replay(
 }
 
 export const publicServicesRepository = {
-  async list(query: string, page: number) {
+  async list(query: string, page: number, category?: string) {
     const where: Prisma.ServiceWhereInput = {
       isActive: true,
+      ...(category ? { iconKey: category } : {}),
       ...(query
         ? {
             OR: [

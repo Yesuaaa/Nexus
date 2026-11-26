@@ -8,6 +8,16 @@ import { gsap } from "gsap"
 import { useHoverLabel } from "@/components/ui/use-hover-label"
 import { SearchField } from "@/components/ui/search-field"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { focusRing } from "@/components/layout/styles"
+import { cn } from "@/lib/utils"
+import { serviceIconOptions } from "@/features/services/components/service-icon"
+import {
   ArrowUpRight,
   ArrowLeft,
   ArrowRight,
@@ -230,10 +240,11 @@ function PublicServiceCard({
 
 const catalogPath = "/explore/services"
 
-function catalogHref(query: string, page = 1) {
+function catalogHref(query: string, page = 1, category = "") {
   const params = new URLSearchParams()
   if (query) params.set("q", query)
   if (page > 1) params.set("page", String(page))
+  if (category) params.set("category", category)
   return params.size ? `${catalogPath}?${params}` : catalogPath
 }
 
@@ -241,13 +252,31 @@ export function PublicServicesPage() {
   const router = useRouter()
   const params = useSearchParams()
   const query = (params.get("q") ?? "").trim().slice(0, 120)
+  const category = serviceIconOptions.some(
+    (option) => option.value === params.get("category"),
+  )
+    ? (params.get("category") ?? "")
+    : ""
+  const [search, setSearch] = useState(query)
+  const [previousQuery, setPreviousQuery] = useState(query)
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  if (previousQuery !== query) {
+    setPreviousQuery(query)
+    setSearch(query)
+  }
+  useEffect(
+    () => () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current)
+    },
+    [],
+  )
   const requestedPage = params.get("page") ?? ""
   const page = /^[1-9][0-9]{0,4}$/.test(requestedPage)
     ? Number(requestedPage)
     : 1
   const resource = useAsyncResource(
-    (signal) => listPublicServices(query, page, signal),
-    [query, page],
+    (signal) => listPublicServices(query, page, signal, category),
+    [query, page, category],
     {
       fallbackError: "We couldn't load services. Please try again.",
     },
@@ -271,44 +300,62 @@ export function PublicServicesPage() {
         aria-hidden="true"
         className="relative left-1/2 mb-5 h-px w-screen -translate-x-1/2 bg-[#d7d6d2]"
       />
-      <form
-        action={catalogPath}
-        className="flex items-center gap-3 max-[540px]:flex-wrap"
+      <div
         role="search"
-        onSubmit={(event) => {
-          event.preventDefault()
-          const search = new FormData(event.currentTarget).get("q")
-          if (typeof search === "string")
-            router.push(catalogHref(search.trim()), { scroll: false })
-        }}
+        className="grid grid-cols-[minmax(0,1fr)_224px] gap-3 max-[700px]:grid-cols-1"
       >
         <SearchField
-          key={query}
+          size="large"
           id="service-search"
           name="q"
           label="Search services"
-          fullWidth
-          containerClassName="!w-full !min-w-0 !flex-1 max-[1050px]:!w-full"
+          containerClassName="!shadow-none focus-within:!bg-background"
+          className="focus-visible:!outline-none"
           maxLength={120}
-          placeholder="Search services by name or description"
-          defaultValue={query}
+          placeholder="Search services..."
+          value={search}
+          onChange={(event) => {
+            const value = event.target.value
+            setSearch(value)
+            if (searchTimer.current) clearTimeout(searchTimer.current)
+            searchTimer.current = setTimeout(() => {
+              router.push(catalogHref(value.trim(), 1, category), {
+                scroll: false,
+              })
+              searchTimer.current = null
+            }, 300)
+          }}
         />
-        <button
-          type="submit"
-          className={`${styles.primary} !min-h-[34px] !px-4 !py-2`}
+        <Select
+          value={category || "all"}
+          onValueChange={(value) => {
+            if (searchTimer.current) clearTimeout(searchTimer.current)
+            searchTimer.current = null
+            router.push(
+              catalogHref(search.trim(), 1, value === "all" ? "" : value),
+              { scroll: false },
+            )
+          }}
         >
-          Search
-        </button>
-        {(query || page > 1) && (
-          <Link
-            href={catalogPath}
-            scroll={false}
-            className={`${styles.secondary} !min-h-[34px] !px-4 !py-2`}
+          <SelectTrigger
+            className={cn(
+              "h-12 rounded-xl border-[#dce3ee] bg-background px-4 text-sm font-semibold text-[#17233a] shadow-[0_1px_2px_rgb(31_55_94_/_4%)]",
+              focusRing,
+            )}
+            aria-label="Filter services by category"
           >
-            Clear
-          </Link>
-        )}
-      </form>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Categories</SelectItem>
+            {serviceIconOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
       {resource.loading ? (
         <PublicState loading message="Finding services for you…" />
       ) : resource.error ? (
@@ -316,8 +363,8 @@ export function PublicServicesPage() {
       ) : !resource.data?.services.length ? (
         <PublicState
           message={
-            query
-              ? "No services match your search. Try a different term."
+            query || category
+              ? "No services match your search or category. Try another filter."
               : "New services are on their way. Please check back soon."
           }
         />
@@ -340,7 +387,7 @@ export function PublicServicesPage() {
           <nav className={styles.pagination} aria-label="Service pages">
             {page > 1 && (
               <Link
-                href={catalogHref(query, page - 1)}
+                href={catalogHref(query, page - 1, category)}
                 scroll={false}
                 className={styles.secondary}
               >
@@ -353,7 +400,7 @@ export function PublicServicesPage() {
             </span>
             {page < pages && (
               <Link
-                href={catalogHref(query, page + 1)}
+                href={catalogHref(query, page + 1, category)}
                 scroll={false}
                 className={styles.secondary}
               >

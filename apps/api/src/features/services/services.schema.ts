@@ -2,7 +2,7 @@ import { BillingInterval, PricingModel } from "../../generated/prisma/client.js"
 
 const imageDataUrlPattern = /^data:image\/(webp);base64,([A-Za-z0-9+/]+={0,2})$/
 const maxImageBytes = 2 * 1024 * 1024
-const serviceIconKeys = [
+export const serviceIconKeys = [
   "social",
   "advertising",
   "business",

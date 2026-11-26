@@ -128,7 +128,6 @@ const faqAnswerTextClass = [
 ].join(" ")
 
 const navigation = [
-  { label: "About", href: "/about" },
   { label: "Services", href: "/explore/services" },
   { label: "Projects", href: "/explore/projects" },
 ]
@@ -491,26 +490,33 @@ const expertise = [
   "Customer experience",
 ]
 
-export function ServiceMarquee() {
+export function ServiceMarquee({
+  heading = "The right expertise. A connected approach.",
+  description = "From a first impression to a lasting connection, bring your ideas into focus with creative and digital services that work together.",
+  items = expertise,
+  label = "Creative and digital expertise",
+  headingId = "converyn-expertise-heading",
+}: {
+  heading?: string
+  description?: string
+  items?: readonly string[]
+  label?: string
+  headingId?: string
+}) {
   return (
     <section
       className="[padding:48px_0_54px] [border-block:1px_solid_var(--landing-line)] max-[761px]:[padding-block:36px_38px]"
-      aria-labelledby="converyn-expertise-heading"
+      aria-labelledby={headingId}
     >
       <div className={marqueeHeadingClass}>
-        <p id="converyn-expertise-heading">
-          The right expertise. A connected approach.
-        </p>
-        <p className={marqueeDescriptionClass}>
-          From a first impression to a lasting connection, bring your ideas into
-          focus with creative and digital services that work together.
-        </p>
+        <p id={headingId}>{heading}</p>
+        <p className={marqueeDescriptionClass}>{description}</p>
       </div>
       <div
         className={marqueeClass}
         tabIndex={0}
         role="group"
-        aria-label="Creative and digital expertise"
+        aria-label={label}
       >
         <div className="flex w-[max-content] animate-[landing-service-marquee_50s_linear_infinite]">
           {[0, 1].map((copy) => (
@@ -521,7 +527,7 @@ export function ServiceMarquee() {
               key={copy}
               aria-hidden={copy === 1 ? true : undefined}
             >
-              {expertise.map((service) => (
+              {items.map((service) => (
                 <span className={marqueeItemClass} key={service}>
                   {service}
                 </span>

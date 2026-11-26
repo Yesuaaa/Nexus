@@ -45,8 +45,10 @@ export function listPublicServices(
   query: string,
   page: number,
   signal?: AbortSignal,
+  category?: string,
 ) {
   const params = new URLSearchParams({ q: query, page: String(page) })
+  if (category) params.set("category", category)
   return publicRequest<ServiceListing>("/services?" + params.toString(), {
     signal,
   })

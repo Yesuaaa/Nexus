@@ -2,6 +2,8 @@ import { createHash } from "node:crypto"
 import { serviceImagePublicUrl } from "../services/service-image-storage.js"
 import { safeHttpsUrl } from "../../shared/validation.js"
 import { publicServicesRepository } from "./public-services.repository.js"
+import { serviceIconKeys } from "../services/services.schema.js"
+import { HttpError } from "../../shared/http-error.js"
 import {
   idInput,
   pageInput,
@@ -49,10 +51,17 @@ function present(
 }
 
 export const publicServicesService = {
-  async list(query: unknown, page: unknown) {
+  async list(query: unknown, page: unknown, category: unknown) {
+    if (
+      category !== undefined &&
+      (typeof category !== "string" ||
+        !serviceIconKeys.some((key) => key === category))
+    )
+      throw new HttpError(400, "Choose a valid service category.")
     const result = await publicServicesRepository.list(
       searchInput(query),
       pageInput(page),
+      category as string | undefined,
     )
     return { ...result, services: result.services.map(present) }
   },
