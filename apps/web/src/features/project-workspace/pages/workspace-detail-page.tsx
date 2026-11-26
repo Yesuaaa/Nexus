@@ -342,6 +342,8 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
                 workspace={workspace}
                 onViewTeam={() => setTab("Team")}
                 onViewDeliverables={() => setTab("Deliverables")}
+                onViewWork={() => setTab("Work")}
+                onViewActivity={() => setTab("Activity")}
               />
             </TabsContent>
             <TabsContent value="Work" className="m-0 outline-none">

@@ -7,7 +7,11 @@ import { getPrisma, disconnectPrisma } from "../../../src/lib/db.js"
 import { bootstrapShowcase } from "../../../prisma/seed/showcase-phase2-foundation.js"
 import { seedShowcase } from "../../../prisma/seed/showcase-core.js"
 import { seedShowcaseProjects } from "../../../prisma/seed/showcase-projects.js"
-import { getProjectWorkspace } from "../../../src/features/project-workspace/project-workspace.service.js"
+import {
+  getProjectWorkspace,
+  updateProjectTask,
+  updateProjectWorkspaceStatus,
+} from "../../../src/features/project-workspace/project-workspace.service.js"
 import { authService } from "../../../src/features/auth/auth.service.js"
 import { verifyAccessToken } from "../../../src/features/auth/auth.jwt.js"
 import { seedShowcaseCompensation } from "../../../prisma/seed/showcase-payroll.js"
@@ -16,6 +20,11 @@ import { listClientProjects } from "../../../src/features/projects/projects.serv
 import { showcaseId } from "../../../prisma/seed/showcase-plan.js"
 import { seedPayrollDashboard } from "../../../prisma/seed/showcase-payroll-dashboard.js"
 import { readPayrollOverview } from "../../../src/features/payroll/payroll-overview.service.js"
+import { seedShowcaseWorkload } from "../../../prisma/seed/showcase-workload.js"
+import { seedFeaturedShowcase } from "../../../prisma/seed/showcase-featured.js"
+import { seedFeaturedDeliverables } from "../../../prisma/seed/showcase-deliverables.js"
+import { seedShowcaseOnHold } from "../../../prisma/seed/showcase-status.js"
+import { seedFinalShowcaseStaff } from "../../../prisma/seed/showcase-final-staff.js"
 
 test(
   "showcase workflows produce repeatable staffed boards and payroll",
@@ -60,6 +69,60 @@ test(
     await seedShowcase(prisma, "IllustrativeStrongPass1!")
     const boards = await seedShowcaseProjects("showcase-bootstrap-head")
     assert.equal(boards.length, 4)
+    const workload = await seedShowcaseWorkload(
+      "showcase-bootstrap-head",
+      "2026-11-23",
+    )
+    assert.equal(workload.createdCapacities, 8)
+    assert.equal(workload.updatedAllocations, 16)
+    assert.deepEqual(
+      await seedShowcaseWorkload("showcase-bootstrap-head", "2026-11-23"),
+      {
+        createdCapacities: 0,
+        updatedAllocations: 0,
+        skippedCapacities: 8,
+        skippedAllocations: 16,
+      },
+    )
+    await prisma.user.update({
+      where: { id: "showcase-bootstrap-head" },
+      data: { email: "advertising.head@local.test" },
+    })
+    const expectedRefinement = {
+      skillsUpdated: 20,
+      skillsSkipped: 0,
+      capacitiesCreated: 12,
+      capacitiesSkipped: 8,
+    }
+    assert.deepEqual(
+      await seedFinalShowcaseStaff("showcase-bootstrap-head", "2026-11-23"),
+      expectedRefinement,
+    )
+    assert.deepEqual(
+      await seedFinalShowcaseStaff(
+        "showcase-bootstrap-head",
+        "2026-11-23",
+        true,
+      ),
+      expectedRefinement,
+    )
+    assert.deepEqual(
+      await seedFinalShowcaseStaff(
+        "showcase-bootstrap-head",
+        "2026-11-23",
+        true,
+      ),
+      {
+        skillsUpdated: 0,
+        skillsSkipped: 20,
+        capacitiesCreated: 0,
+        capacitiesSkipped: 20,
+      },
+    )
+    await prisma.user.update({
+      where: { id: "showcase-bootstrap-head" },
+      data: { email: "head@showcase.invalid" },
+    })
     for (const board of boards) {
       const project = await prisma.project.findUniqueOrThrow({
         where: { id: board.projectId },
@@ -94,7 +157,176 @@ test(
       await seedShowcaseProjects("showcase-bootstrap-head"),
       boards,
     )
+    assert.deepEqual(await seedShowcaseOnHold("showcase-bootstrap-head"), {
+      placedOnHold: 2,
+      skipped: 0,
+    })
+    assert.deepEqual(await seedShowcaseOnHold("showcase-bootstrap-head"), {
+      placedOnHold: 0,
+      skipped: 2,
+    })
+    assert.deepEqual(
+      await seedShowcaseProjects("showcase-bootstrap-head"),
+      boards,
+    )
+    await updateProjectWorkspaceStatus(
+      "showcase-bootstrap-head",
+      boards[1]!.workspaceId,
+      "RESUME",
+    )
+    assert.deepEqual(await seedShowcaseOnHold("showcase-bootstrap-head"), {
+      placedOnHold: 0,
+      skipped: 2,
+    })
+    assert.equal(
+      (
+        await getProjectWorkspace(
+          "showcase-bootstrap-head",
+          boards[1]!.workspaceId,
+        )
+      ).workstreams[0]?.status,
+      "IN_PROGRESS",
+    )
     assert.equal(await prisma.workflowActionReceipt.count(), 16)
+    const featured = await seedFeaturedShowcase("showcase-bootstrap-head")
+    const featuredWorkspace = await getProjectWorkspace(
+      "showcase-bootstrap-head",
+      featured.workspaceId,
+    )
+    const featuredTasks = featuredWorkspace.workstreams.flatMap(
+      (stream) => stream.plan?.phases.flatMap((phase) => phase.tasks) ?? [],
+    )
+    assert.equal(featuredTasks.length, 24)
+    assert.equal(
+      featuredTasks.filter((task) => task.status === "DONE").length,
+      14,
+    )
+    assert.equal(featuredWorkspace.workstreams[0]?.staff?.length, 6)
+    assert.equal(
+      featuredWorkspace.workstreams[0]?.staff?.filter(
+        (person) => person.isTeamLead,
+      ).length,
+      1,
+    )
+    assert.equal(featuredWorkspace.workstreams[0]?.milestones?.length, 6)
+    assert.equal(featuredWorkspace.kanbanAssignments.length, 3)
+    const movedTask = featuredWorkspace.kanbanAssignments[0]!
+    const afterMove = await updateProjectTask(
+      "showcase-bootstrap-head",
+      featured.workspaceId,
+      featured.projectId,
+      movedTask.taskId,
+      "IN_PROGRESS",
+      null,
+    )
+    assert.ok(
+      afterMove.kanbanAssignments.every(
+        (entry) => entry.taskId !== movedTask.taskId,
+      ),
+    )
+    await assert.rejects(
+      () => seedFeaturedShowcase("showcase-bootstrap-head"),
+      /showcase task was moved/,
+    )
+    const afterReturn = await updateProjectTask(
+      "showcase-bootstrap-head",
+      featured.workspaceId,
+      featured.projectId,
+      movedTask.taskId,
+      "IN_PROGRESS",
+      movedTask.columnId,
+    )
+    assert.equal(afterReturn.kanbanAssignments.length, 3)
+    const featuredClientProjects = await listClientProjects(
+      showcaseId("user", 22),
+    )
+    assert.ok(
+      featuredClientProjects.some(
+        (project) =>
+          project.id === featured.projectId &&
+          project.completedTasks === 14 &&
+          project.taskCount === 24,
+      ),
+    )
+    const otherClientProjects = await listClientProjects(showcaseId("user", 23))
+    assert.ok(
+      otherClientProjects.every((project) => project.id !== featured.projectId),
+    )
+    assert.deepEqual(
+      await seedFeaturedShowcase("showcase-bootstrap-head"),
+      featured,
+    )
+    await seedFeaturedDeliverables(
+      "showcase-bootstrap-head",
+      featured.workspaceId,
+      featured.projectId,
+    )
+    const actualDeliverables = await prisma.projectMilestone.findMany({
+      where: { projectId: featured.projectId },
+      orderBy: { displayOrder: "asc" },
+      include: { workflowFile: true },
+    })
+    assert.deepEqual(
+      actualDeliverables.map((item) => item.deliveryStatus),
+      [
+        "SENT_TO_CLIENT",
+        "APPROVED",
+        "IN_REVIEW",
+        "NOT_SUBMITTED",
+        "NOT_SUBMITTED",
+        "NOT_SUBMITTED",
+      ],
+    )
+    assert.ok(actualDeliverables[0]?.workflowFile?.clientVisible)
+    const filesBefore = await prisma.workflowFile.count({
+      where: { requestId: featured.requestId },
+    })
+    await seedFeaturedDeliverables(
+      "showcase-bootstrap-head",
+      featured.workspaceId,
+      featured.projectId,
+    )
+    assert.equal(
+      await prisma.workflowFile.count({
+        where: { requestId: featured.requestId },
+      }),
+      filesBefore,
+    )
+    await prisma.user.update({
+      where: { id: showcaseId("user", 22) },
+      data: { email: "not-showcase@example.test" },
+    })
+    await assert.rejects(
+      () =>
+        seedFeaturedDeliverables(
+          "showcase-bootstrap-head",
+          featured.workspaceId,
+          featured.projectId,
+        ),
+      /expected featured showcase project/,
+    )
+    await prisma.user.update({
+      where: { id: showcaseId("user", 22) },
+      data: { email: "client1@showcase.invalid" },
+    })
+    assert.deepEqual(
+      await seedShowcaseWorkload("showcase-bootstrap-head", "2026-11-23"),
+      {
+        createdCapacities: 0,
+        updatedAllocations: 6,
+        skippedCapacities: 8,
+        skippedAllocations: 16,
+      },
+    )
+    assert.deepEqual(
+      await seedShowcaseWorkload("showcase-bootstrap-head", "2026-11-23"),
+      {
+        createdCapacities: 0,
+        updatedAllocations: 0,
+        skippedCapacities: 8,
+        skippedAllocations: 22,
+      },
+    )
     const login = await authService.login({
       email: "operations@showcase.invalid",
       password: "IllustrativeStrongPass1!",

@@ -9,10 +9,14 @@ import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
   BreakdownList,
-  ItemList,
   MiniStats,
   OverviewPanel,
+  RowsSkeleton,
+  tableClass,
+  headCellClass,
+  cellClass,
 } from "@/components/ui/overview-panel"
+import { Pill } from "@/components/ui/pill"
 import { KpiDonutChart } from "@/components/ui/kpi-donut-chart"
 import type { KpiDistributionSegment } from "@/components/ui/kpi-distribution-chart"
 import {
@@ -31,7 +35,7 @@ import {
   type ProjectWorkspaceOverview,
   type ProjectWorkspaceOverviewTask,
 } from "../api/project-workspace-api"
-import { taskStatusLabels } from "../model/task-status"
+import { taskStatusLabels, taskStatusTones } from "../model/task-status"
 import { errorMessage } from "@/lib/error-message"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import { cn } from "@/lib/utils"
@@ -72,14 +76,97 @@ type OverviewLoadResult = {
   error: string
 }
 
-function taskNote(task: ProjectWorkspaceOverviewTask, due: string) {
-  return `${task.projectName} · Due ${due} · ${taskStatusLabels[task.status]}`
+function DeadlineList({
+  tasks,
+  loading,
+  empty,
+  formatDateOnly,
+  today,
+  overdue = false,
+}: {
+  tasks: ProjectWorkspaceOverviewTask[]
+  loading: boolean
+  empty: string
+  formatDateOnly: (value: string) => string
+  today: string
+  overdue?: boolean
+}) {
+  if (loading) return <RowsSkeleton />
+  if (!tasks.length)
+    return <p className="m-0 text-xs leading-5 text-[#65718a]">{empty}</p>
+  const shown = tasks.slice(0, 8)
+  return (
+    <>
+      <table className={`${tableClass} table-fixed`}>
+        <colgroup>
+          <col className="w-[44%]" />
+          <col className="w-[28%]" />
+          <col className="w-[28%]" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th scope="col" className={headCellClass}>
+              Task / Project
+            </th>
+            <th scope="col" className={headCellClass}>
+              Due date
+            </th>
+            <th scope="col" className={headCellClass}>
+              Status
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {shown.map((task) => (
+            <tr key={task.id}>
+              <td className={`${cellClass} pr-2 align-top`}>
+                <div className="break-words font-medium text-[#182235]">
+                  {task.title}
+                </div>
+                <div className="mt-0.5 break-words text-[#65718a]">
+                  {task.projectName}
+                </div>
+              </td>
+              <td className={`${cellClass} pr-2 align-top text-[#182235]`}>
+                <span className="break-words">
+                  {formatDateOnly(task.dueDate)}
+                </span>
+                {overdue ? (
+                  <span className="mt-0.5 block text-[11px] text-[#b4234d]">
+                    Overdue
+                  </span>
+                ) : formatDateOnly(task.dueDate) === today ? (
+                  <span className="mt-0.5 block text-[11px] text-[#65718a]">
+                    Due today
+                  </span>
+                ) : null}
+              </td>
+              <td className={`${cellClass} align-top`}>
+                <Pill
+                  tone={taskStatusTones[task.status]}
+                  title={taskStatusLabels[task.status]}
+                >
+                  {taskStatusLabels[task.status]}
+                </Pill>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {tasks.length > shown.length && (
+        <p className="mt-3 mb-0 text-[11px] text-[#65718a]">
+          +{tasks.length - shown.length} more
+        </p>
+      )}
+    </>
+  )
 }
 
 export function ProjectWorkspaceOverviewPage() {
   const account = usePortalAccount()
   const departmentId = account.headOf?.id ?? null
-  const { formatDateOnly, preferencesLoaded, timeZone } = useDatePreferences()
+  const { formatDate, formatDateOnly, preferencesLoaded, timeZone } =
+    useDatePreferences()
   const resource = useAsyncResource<OverviewLoadResult>(
     async (signal) => {
       try {
@@ -234,19 +321,6 @@ export function ProjectWorkspaceOverviewPage() {
       ),
     },
   ]
-  const upcomingRows =
-    data?.upcomingDeadlines.map((task) => ({
-      id: task.id,
-      label: task.title,
-      note: taskNote(task, formatDateOnly(task.dueDate)),
-    })) ?? []
-  const overdueRows =
-    data?.overdueTaskList.map((task) => ({
-      id: task.id,
-      label: task.title,
-      note: taskNote(task, formatDateOnly(task.dueDate)),
-      tone: "danger" as const,
-    })) ?? []
 
   return (
     <main
@@ -498,8 +572,10 @@ export function ProjectWorkspaceOverviewPage() {
                 Task deadline data is unavailable.
               </p>
             ) : (
-              <ItemList
-                rows={upcomingRows}
+              <DeadlineList
+                tasks={data?.upcomingDeadlines ?? []}
+                formatDateOnly={formatDateOnly}
+                today={formatDate(new Date())}
                 loading={loading}
                 empty="No task deadlines in the next 14 days."
               />
@@ -522,8 +598,11 @@ export function ProjectWorkspaceOverviewPage() {
                 Overdue task data is unavailable.
               </p>
             ) : (
-              <ItemList
-                rows={overdueRows}
+              <DeadlineList
+                tasks={data?.overdueTaskList ?? []}
+                formatDateOnly={formatDateOnly}
+                today={formatDate(new Date())}
+                overdue
                 loading={loading}
                 empty="No overdue tasks."
               />

@@ -1,9 +1,12 @@
 "use client"
 
 import { useState, type ReactNode } from "react"
-import { MoreHorizontal, Plus } from "lucide-react"
+import { CalendarDays, MoreHorizontal, Plus } from "lucide-react"
+import { Avatar } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { FilterSelect } from "@/components/ui/filter-select"
 import { FormInput } from "@/components/ui/form-input"
+import { SearchField } from "@/components/ui/search-field"
 import {
   SidePanel,
   SidePanelHeader,
@@ -68,9 +71,12 @@ export function WorkspaceBoard({
   const [dragged, setDragged] = useState<{
     projectId: string
     taskId: string
-    status: ProjectTaskStatus
+    columnId: string
   } | null>(null)
-  const [hovered, setHovered] = useState<ProjectTaskStatus | null>(null)
+  const [hovered, setHovered] = useState<string | null>(null)
+  const [search, setSearch] = useState("")
+  const [phaseFilter, setPhaseFilter] = useState("")
+  const [assigneeFilter, setAssigneeFilter] = useState("")
   const [adding, setAdding] = useState(false)
   const [projectId, setProjectId] = useState("")
   const [phaseId, setPhaseId] = useState("")
@@ -86,6 +92,42 @@ export function WorkspaceBoard({
       phase.tasks.map((task) => ({ stream, phase, task })),
     ),
   )
+  const phaseOptions = Array.from(
+    new Map(
+      rows.map(({ stream, phase }) => [
+        `${stream.id}:${phase.id}`,
+        {
+          value: `${stream.id}:${phase.id}`,
+          label: `${phase.title} · ${stream.serviceName}`,
+        },
+      ]),
+    ).values(),
+  )
+  const assigneeOptions = Array.from(
+    new Map(
+      workspace.workstreams.flatMap((stream) =>
+        (stream.staff ?? []).map(
+          (person) =>
+            [person.id, { value: person.id, label: person.fullName }] as const,
+        ),
+      ),
+    ).values(),
+  ).sort((a, b) => a.label.localeCompare(b.label))
+  const filteredRows = rows.filter(({ stream, phase, task }) => {
+    const query = search.trim().toLocaleLowerCase()
+    return (
+      (!query ||
+        `${task.title} ${task.role} ${phase.title} ${stream.serviceName}`
+          .toLocaleLowerCase()
+          .includes(query)) &&
+      (!phaseFilter || phaseFilter === `${stream.id}:${phase.id}`) &&
+      (!assigneeFilter ||
+        (assigneeFilter === "unassigned"
+          ? !task.employeeId
+          : task.employeeId === assigneeFilter))
+    )
+  })
+  const filtering = Boolean(search.trim() || phaseFilter || assigneeFilter)
   async function changeStatus(
     projectId: string,
     taskId: string,
@@ -306,22 +348,48 @@ export function WorkspaceBoard({
           if (deleting) void saveColumn("delete", deleting.id)
         }}
       />
-      <div className="mb-4 flex flex-wrap items-center justify-end gap-3">
-        {viewSwitcher}
-        {workspace.canManage && (
-          <Button
-            variant="brandOutline"
-            disabled={busy || !workspace.canManage || !available.length}
-            onClick={() => {
-              setError("")
-              setPlacement("END")
-              setColumnEdit({ id: null, name: "" })
-            }}
-          >
-            <Plus size={14} aria-hidden="true" />
-            Add column
-          </Button>
-        )}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 max-[560px]:w-full max-[560px]:flex-auto">
+          <SearchField
+            label="Search tasks"
+            placeholder="Search tasks..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+          <FilterSelect
+            label="Filter by phase"
+            value={phaseFilter}
+            onChange={setPhaseFilter}
+            options={[{ value: "", label: "All phases" }, ...phaseOptions]}
+          />
+          <FilterSelect
+            label="Filter by assignee"
+            value={assigneeFilter}
+            onChange={setAssigneeFilter}
+            options={[
+              { value: "", label: "All assignees" },
+              { value: "unassigned", label: "Unassigned" },
+              ...assigneeOptions,
+            ]}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          {viewSwitcher}
+          {workspace.canManage && (
+            <Button
+              variant="brandOutline"
+              disabled={busy || !workspace.canManage || !available.length}
+              onClick={() => {
+                setError("")
+                setPlacement("END")
+                setColumnEdit({ id: null, name: "" })
+              }}
+            >
+              <Plus size={14} aria-hidden="true" />
+              Add column
+            </Button>
+          )}
+        </div>
       </div>
       <SidePanel
         open={adding}
@@ -425,18 +493,23 @@ export function WorkspaceBoard({
         </Form>
       </SidePanel>
       {!adding && !columnEdit && !deleting && error && <Alert>{error}</Alert>}
+      {filtering && filteredRows.length === 0 && (
+        <p role="status" className="mb-3 text-xs text-[#65718a]">
+          No tasks match these filters.
+        </p>
+      )}
       {busy && <p role="status">Saving task status…</p>}
       <div
         aria-label="Task board"
         role="region"
         tabIndex={0}
-        className="max-w-full overflow-x-auto focus-visible:outline-2 focus-visible:outline-[#294a9b]"
+        className="@container max-w-full overflow-x-auto focus-visible:outline-2 focus-visible:outline-[#294a9b]"
       >
-        <div className="flex w-max min-w-full items-stretch gap-3 pb-3">
+        <div className="flex w-full items-stretch gap-3 pb-3">
           {columns.map((column) => {
             const status = column.status
             const custom = !statuses.includes(column.id as ProjectTaskStatus)
-            const items = rows.filter((row) => {
+            const items = filteredRows.filter((row) => {
               const assignment = (workspace.kanbanAssignments ?? []).find(
                 (item) =>
                   item.projectId === row.stream.id &&
@@ -450,17 +523,12 @@ export function WorkspaceBoard({
               <section
                 key={column.id}
                 aria-label={column.name}
-                className={`min-h-[180px] w-80 shrink-0 rounded-md border px-2 pb-3 ${hovered === status ? "border-[#3153a5] bg-[#edf3ff]" : "border-[#e1e4ea] bg-[#fafbfc]"}`}
+                className={`min-h-[220px] min-w-0 flex-[1_0_16rem] rounded-xl border p-3 transition-colors ${hovered === column.id ? "border-[#3153a5] bg-[#edf3ff] ring-2 ring-[#3153a5]/20" : "border-[#e1e6ed] bg-[#f5f7fa]"}`}
                 onDragOver={(event) => {
-                  if (
-                    !custom &&
-                    dragged &&
-                    !busy &&
-                    dragged.status !== status
-                  ) {
+                  if (dragged && !busy && dragged.columnId !== column.id) {
                     event.preventDefault()
                     event.dataTransfer.dropEffect = "move"
-                    setHovered(status)
+                    setHovered(column.id)
                   }
                 }}
                 onDragLeave={(event) => {
@@ -474,15 +542,20 @@ export function WorkspaceBoard({
                 onDrop={(event) => {
                   event.preventDefault()
                   setHovered(null)
-                  if (!custom && dragged && !busy && dragged.status !== status)
-                    void changeStatus(dragged.projectId, dragged.taskId, status)
+                  if (dragged && !busy && dragged.columnId !== column.id)
+                    void changeStatus(
+                      dragged.projectId,
+                      dragged.taskId,
+                      status,
+                      custom ? column.id : null,
+                    )
                   setDragged(null)
                 }}
               >
-                <h2 className="m-0 flex min-h-11 items-center gap-2 px-1 text-xs font-semibold">
+                <h2 className="m-0 mb-2 flex min-h-10 items-center gap-2 px-1 text-xs font-semibold text-[#182235]">
                   <span
                     aria-hidden="true"
-                    className={`size-2 rounded-full ${statusDots[status]}`}
+                    className={`size-2 rounded-full ${custom ? "bg-[#a67b3b]" : statusDots[status]}`}
                   />
                   {column.name} <Pill tone="neutral">{items.length}</Pill>
                   {custom && workspace.canManage && (
@@ -518,7 +591,9 @@ export function WorkspaceBoard({
                   )}
                 </h2>
                 {items.length === 0 && (
-                  <p className="px-1 text-xs text-[#65718a]">No tasks</p>
+                  <p className="rounded-lg border border-dashed border-[#d7dfea] px-3 py-4 text-center text-xs text-[#65718a]">
+                    {filtering ? "No matching tasks" : "No tasks"}
+                  </p>
                 )}
                 <div className="space-y-2">
                   {items.map(({ stream, phase, task }) => {
@@ -542,14 +617,14 @@ export function WorkspaceBoard({
                           setDragged({
                             projectId: stream.id,
                             taskId: task.id,
-                            status: task.status,
+                            columnId: column.id,
                           })
                         }}
                         onDragEnd={() => {
                           setDragged(null)
                           setHovered(null)
                         }}
-                        className="relative overflow-hidden rounded-md border border-[#dfe5ec] bg-white"
+                        className={`relative overflow-hidden rounded-lg border border-[#dfe5ec] bg-white shadow-[0_1px_3px_rgb(30_55_80_/_5%)] transition-shadow hover:shadow-[0_3px_9px_rgb(30_55_80_/_10%)] ${dragged?.projectId === stream.id && dragged.taskId === task.id ? "opacity-60 shadow-md" : ""}`}
                       >
                         <TaskRowActions
                           card
@@ -560,24 +635,51 @@ export function WorkspaceBoard({
                           disabled={busy || terminal}
                           cardContent={
                             <>
-                              <span className="line-clamp-3 w-full break-words font-semibold text-[#142037]">
+                              <Pill
+                                tone="neutral"
+                                title={`${stream.serviceName} · ${phase.title}`}
+                              >
+                                {phase.title}
+                              </Pill>
+                              {workspace.workstreams.length > 1 && (
+                                <span
+                                  className="block truncate text-[10px] font-normal text-[#65718a]"
+                                  title={stream.serviceName}
+                                >
+                                  {stream.serviceName}
+                                </span>
+                              )}
+                              <span className="mt-1 line-clamp-3 w-full break-words font-semibold text-[#142037]">
                                 {task.title}
                               </span>
-                              <span className="w-full break-words font-normal text-[#65718a]">
-                                {stream.serviceName} · {phase.title}
-                              </span>
                               {(task.employeeId || task.dueDate) && (
-                                <span className="w-full break-words font-normal text-[#65718a]">
-                                  {assignee?.fullName ||
-                                    (task.employeeId
-                                      ? "No longer assigned to project"
-                                      : "")}
-                                  {task.employeeId && task.dueDate ? " · " : ""}
-                                  {task.dueDate
-                                    ? new Date(
+                                <span className="mt-2 flex w-full items-center justify-between gap-2 border-t border-[#edf0f4] pt-2 font-normal text-[#65718a]">
+                                  {task.dueDate && (
+                                    <span className="flex min-w-0 items-center gap-1.5">
+                                      <CalendarDays
+                                        size={13}
+                                        aria-hidden="true"
+                                      />
+                                      {new Date(
                                         `${task.dueDate}T00:00:00`,
-                                      ).toLocaleDateString()
-                                    : ""}
+                                      ).toLocaleDateString()}
+                                    </span>
+                                  )}
+                                  {assignee ? (
+                                    <span className="ml-auto flex min-w-0 items-center gap-1.5">
+                                      <Avatar
+                                        name={assignee.fullName}
+                                        size="sm"
+                                      />
+                                      <span className="sr-only">
+                                        Assigned to {assignee.fullName}
+                                      </span>
+                                    </span>
+                                  ) : task.employeeId ? (
+                                    <span className="ml-auto text-[11px]">
+                                      No longer assigned to project
+                                    </span>
+                                  ) : null}
                                 </span>
                               )}
                             </>

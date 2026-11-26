@@ -31,6 +31,7 @@ export function StatStrip({
   unavailable,
   columns = 4,
   className,
+  wrapLabels = false,
 }: {
   items: StatStripItem[]
   label: string
@@ -38,6 +39,7 @@ export function StatStrip({
   unavailable: boolean
   columns?: 2 | 4
   className?: string
+  wrapLabels?: boolean
 }) {
   return (
     <section
@@ -68,7 +70,8 @@ export function StatStrip({
               </span>
               <h2
                 className={cn(
-                  "m-0 truncate text-xs font-medium text-[#65718a]",
+                  "m-0 text-xs font-medium text-[#65718a]",
+                  wrapLabels ? "break-words" : "truncate",
                   href && "group-hover:text-[#203f8c]",
                 )}
               >

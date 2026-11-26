@@ -1203,6 +1203,23 @@ test("department heads see department project analytics and can open Management"
     page.getByText("Approve wireframes", { exact: true }),
   ).toBeVisible()
   await expect(page.getByText("Review content", { exact: true })).toBeVisible()
+  const upcoming = page.getByRole("region", { name: "Upcoming task deadlines" })
+  const overdue = page.getByRole("region", { name: "Overdue tasks" })
+  await expect(
+    upcoming.getByRole("row", { name: /Approve wireframes/ }),
+  ).toContainText("Brand refresh")
+  await expect(
+    upcoming.getByRole("row", { name: /Approve wireframes/ }),
+  ).toContainText("11/20/2026")
+  await expect(
+    upcoming.getByRole("row", { name: /Approve wireframes/ }),
+  ).toContainText("In progress")
+  await expect(
+    overdue.getByRole("row", { name: /Review content/ }),
+  ).toContainText("Not started")
+  await expect(
+    overdue.getByRole("row", { name: /Review content/ }),
+  ).toContainText("Overdue")
   const requestsBeforeRefresh = requestPaths.length
   const refreshedOverview = page.waitForResponse(
     (response) =>

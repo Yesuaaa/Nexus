@@ -184,7 +184,7 @@ export async function prepareShowcaseBoard(
       showcaseUuid("phase2-request", 2),
       showcaseUuid("phase2-request", 3),
     ].includes(project.request?.submissionKey ?? "") ||
-    project.status !== "IN_PROGRESS" ||
+    !["IN_PROGRESS", "ON_HOLD"].includes(project.status) ||
     project.request?.workflow?.state !== "ACTIVE_PROJECT" ||
     project.request?.acceptedDepartment?.headId !== actorId
   )
@@ -219,6 +219,8 @@ export async function prepareShowcaseBoard(
       "Workspace contains unrelated Kanban data; refusing to change it",
     )
   if (project.workPlan === null) {
+    if (project.status === "ON_HOLD")
+      throw new Error("A held showcase plan cannot be initialized")
     await saveProjectPlan(actorId, workspaceId, project.id, {
       plan,
       expectedUpdatedAt: project.updatedAt.toISOString(),
@@ -232,6 +234,8 @@ export async function prepareShowcaseBoard(
     (column) => column.name === "Revisions",
   )
   if (!revision) {
+    if (project.status === "ON_HOLD")
+      throw new Error("A held showcase board cannot be initialized")
     workspace = await mutateKanbanColumn(actorId, workspaceId, "create", null, {
       name: "Revisions",
       afterColumnId: "IN_PROGRESS",
@@ -250,6 +254,10 @@ export async function prepareShowcaseBoard(
     if (existing && existing.columnId !== revision.id)
       throw new Error(
         "A showcase task was moved to another column; refusing to overwrite it",
+      )
+    if (!existing && project.status === "ON_HOLD")
+      throw new Error(
+        "A held showcase board was modified; refusing to restore it",
       )
     if (!existing)
       workspace = await updateProjectTask(
