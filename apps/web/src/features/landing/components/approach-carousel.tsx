@@ -1,336 +1,346 @@
 "use client"
 
-import Image from "next/image"
-import { ArrowLeft, ArrowRight } from "lucide-react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { gsap } from "gsap"
+import { ScrollTrigger } from "gsap/ScrollTrigger"
+import { motion, useReducedMotion } from "framer-motion"
+import {
+  CalendarDays,
+  ClipboardCheck,
+  Lightbulb,
+  ShieldCheck,
+  Target,
+  Users,
+  Wallet,
+  Workflow,
+  Wrench,
+} from "lucide-react"
+
+import { ApproachChat } from "./approach-chat"
+
+gsap.registerPlugin(ScrollTrigger)
 
 const approachClass = [
-  "relative isolate overflow-hidden [padding-block:88px_62px] bg-(--landing-ink) text-(color:--landing-paper)",
-  "max-[761px]:[padding-block:65px_42px]",
-].join(" ")
-
-const approachHeadingClass = [
-  "max-w-[1264px] mx-auto px-12 flex justify-between items-end gap-12",
-  "[&_h2_>_span]:text-(color:--landing-blue)",
-  "[&>_p]:text-[rgb(242_241_238_/_76%)] [&>_p]:text-[14px] [&>_p]:leading-[1.9]",
-  "max-[1101px]:px-9",
-  "max-[851px]:gap-7",
-  "max-[851px]:[&>_p]:text-[12px]",
-  "max-[761px]:px-6",
-  "max-[761px]:[&>_p]:max-w-[225px]",
-  "max-[761px]:[&>_h2]:text-[32px]",
-  "max-[621px]:items-start max-[621px]:flex-col max-[621px]:gap-5",
-  "max-[621px]:[&>_h2]:text-[36px]",
-  "max-[621px]:[&>_p]:max-w-[360px] max-[621px]:[&>_p]:text-[13px]",
-].join(" ")
-
-const approachViewportClass = [
-  "overflow-x-auto [overscroll-behavior-x:contain] [scroll-snap-type:x_mandatory] scroll-px-[max(48px,calc((100vw_-_1168px)_/_2))] [padding:0_max(48px,calc((100vw_-_1168px)_/_2))_6px] mt-12 [scrollbar-width:none]",
-  "[&::-webkit-scrollbar]:hidden",
-  "focus-visible:[outline:2px_solid_var(--landing-blue)] focus-visible:outline-offset-[7px]",
-  "max-[1101px]:px-9 max-[1101px]:scroll-px-9",
-  "max-[761px]:mt-8.75 max-[761px]:px-6 max-[761px]:scroll-px-6",
-  "motion-reduce:scroll-auto",
-].join(" ")
-
-const approachCardClass = [
-  "grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] [flex:0_0_auto] gap-8.5 w-[min(1000px,calc(100vw_-_120px))] min-h-[468px] p-4.5 bg-(--landing-paper) text-(color:--landing-ink) [border:1px_solid_rgb(242_241_238_/_20%)] rounded-[6px] [scroll-snap-align:start] [box-shadow:0_22px_48px_rgb(0_0_0_/_15%)]",
-  "[&:hover_[data-step-image]_>_img]:[transform:scale(1.035)]",
-  "max-[1101px]:gap-6.5 max-[1101px]:min-h-[440px]",
-  "max-[851px]:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] max-[851px]:gap-6 max-[851px]:min-h-[425px] max-[851px]:p-3.75",
-  "max-[761px]:w-[calc(100vw_-_72px)]",
-  "max-[621px]:grid-cols-1 max-[621px]:gap-0 max-[621px]:p-3 max-[621px]:min-h-0 max-[621px]:rounded-[6px]",
-].join(" ")
-
-const stepImageClass = [
-  "relative min-h-[430px] overflow-hidden rounded-[4px] bg-(--landing-ink)",
-  "[&>_img]:[transition:transform_850ms_cubic-bezier(0.22,1,0.36,1)]",
-  'after:absolute after:[inset:35%_0_0] after:[content:""] after:[background:linear-gradient(_transparent,rgb(18_18_20_/_60%)_65%,rgb(18_18_20_/_95%)_)]',
-  "max-[1101px]:min-h-[400px]",
-  "max-[851px]:min-h-[393px]",
-  "max-[621px]:min-h-0 max-[621px]:aspect-[1.2]",
-].join(" ")
-
-const stepImageCaptionClass = [
-  "absolute z-1 bottom-6.5 left-6.5 right-6.5 text-[#f2f1ee]",
-  "[&>_span]:text-[66px] [&>_span]:leading-[1] [&>_span]:font-normal [&>_span]:tracking-[-4px]",
-  "[&>_p]:mt-3.5 [&>_p]:text-[20px] [&>_p]:font-medium [&>_p]:tracking-[-0.5px]",
-  "max-[851px]:left-5 max-[851px]:bottom-5.75",
-  "max-[851px]:[&>_span]:text-[58px]",
-  "max-[851px]:[&>_p]:text-[18px]",
-  "max-[621px]:left-5 max-[621px]:bottom-5",
-  "max-[621px]:[&>_span]:text-[54px] max-[621px]:[&>_span]:tracking-[-3px]",
-  "max-[621px]:[&>_p]:mt-2.25 max-[621px]:[&>_p]:text-[17px]",
-].join(" ")
-
-const stepContentClass = [
-  "flex flex-col min-w-0 [padding:12px_12px_0_0]",
-  "[&_h3]:max-w-[490px] [&_h3]:mt-6 [&_h3]:text-[clamp(28px,3vw,40px)] [&_h3]:leading-[1.16] [&_h3]:tracking-[-1.7px] [&_h3]:font-medium [&_h3]:text-pretty",
-  "[&>_p]:max-w-[440px] [&>_p]:mt-6 [&>_p]:text-[14px] [&>_p]:leading-[1.9] [&>_p]:text-(color:--landing-muted)",
-  "max-[1101px]:[&_h3]:text-[34px]",
-  "max-[851px]:[padding:10px_7px_0_0]",
-  "max-[851px]:[&_h3]:text-[29px] max-[851px]:[&_h3]:tracking-[-1px]",
-  "max-[851px]:[&>_p]:mt-4.5 max-[851px]:[&>_p]:text-[13px]",
-  "max-[621px]:min-h-[342px] max-[621px]:[padding:25px_12px_12px]",
-  "max-[621px]:[&_h3]:mt-4 max-[621px]:[&_h3]:text-[28px] max-[621px]:[&_h3]:leading-[1.2]",
-  "max-[621px]:[&>_p]:mt-4.5 max-[621px]:[&>_p]:text-[13px]",
-].join(" ")
-
-const stepFooterClass = [
-  "flex flex-wrap justify-between items-end gap-5 pt-12 mt-auto",
-  "[&>_span]:max-w-[170px] [&>_span]:pb-3 [&>_span]:text-[12px] [&>_span]:leading-[1.7] [&>_span]:text-(color:--landing-muted)",
-  "max-[1101px]:pt-8 max-[1101px]:gap-3",
-  "max-[1101px]:[&>_span]:max-w-[150px] max-[1101px]:[&>_span]:text-[11px]",
-  "max-[851px]:items-start max-[851px]:flex-col max-[851px]:pt-6.75 max-[851px]:gap-3.75",
-  "max-[851px]:[&>_span]:max-w-[none] max-[851px]:[&>_span]:pb-0",
-  "max-[621px]:pt-6.5 max-[621px]:gap-4.5",
-  "max-[621px]:[&>_span]:text-[10px]",
-].join(" ")
-
-const approachControlsClass = [
-  "max-w-[1264px] [margin:26px_auto_0] px-12 flex items-center justify-between gap-6",
-  "max-[1101px]:px-9",
-  "max-[761px]:px-6",
-].join(" ")
-
-const carouselArrowsClass = [
-  "flex gap-3",
-  "[&>_button]:grid [&>_button]:[place-items:center] [&>_button]:w-17 [&>_button]:h-10 [&>_button]:[border:1px_solid_rgb(242_241_238_/_8%)] [&>_button]:rounded-[4px] [&>_button]:bg-[rgb(242_241_238_/_12%)] [&>_button]:text-[#f2f1ee] [&>_button]:cursor-pointer [&>_button]:[transition:background_250ms,opacity_250ms]",
-  "[&>_button:hover:not(:disabled)]:bg-(--landing-blue)",
-  "[&>_button:disabled]:[opacity:0.3]",
-  "max-[621px]:[&>_button]:w-15 max-[621px]:[&>_button]:h-9.5",
+  'relative isolate z-[51] bg-(--landing-ink) py-22 text-(color:--landing-paper) before:pointer-events-none before:absolute before:z-20 before:[inset:0_var(--landing-frame-inset)] before:border-x before:border-white/15 before:content-[""]',
+  "max-[761px]:py-16",
 ].join(" ")
 
 const steps = [
   {
     number: "01",
-    name: "Discover",
-    image: "/landing/converyn-product-discover.webp",
-    imageAlt:
-      "A product-focused brand exploration kit with paper studies and cobalt color swatches",
-    title: "Find the right fit for your next big idea.",
-    description:
-      "Explore the services that support your goals. Whether you have a clear brief or a possibility in mind, start by discovering where we can make a difference together.",
-    outcome: "A little curiosity. A clearer direction.",
+    name: "Discuss",
+    title: "Tell us what you have in mind.",
+    description: "Tell us about your goals, ideas, and the support you need.",
+    features: [
+      { label: "Your goals", icon: Target },
+      { label: "Your ideas", icon: Lightbulb },
+      { label: "The right team", icon: Users },
+    ],
   },
   {
     number: "02",
-    name: "Connect",
-    image: "/landing/converyn-product-connect.webp",
-    imageAlt:
-      "A laptop and smartphone displaying coordinated illustrative digital concepts",
-    title: "A good conversation opens up new possibilities.",
-    description:
-      "Tell us what matters to your business. Share your questions, priorities, and requirements so we can understand the bigger picture before shaping the next step.",
-    outcome: "Your perspective comes first.",
+    name: "Quote",
+    title: "Get a clear plan for the work ahead.",
+    description: "Receive a clear scope, timeline, and tailored proposal.",
+    features: [
+      { label: "Clear scope", icon: ClipboardCheck },
+      { label: "Project timeline", icon: CalendarDays },
+      { label: "Tailored estimate", icon: Wallet },
+    ],
   },
   {
     number: "03",
-    name: "Create",
-    image: "/landing/converyn-product-create.webp",
-    imageAlt:
-      "A desktop screen, keyboard, and pen tablet in a product-focused creative workspace",
-    title: "Give your next chapter a shared direction.",
-    description:
-      "Bring the right ideas and expertise together. Discuss the scope, align on expectations, and agree on the work ahead before turning a possibility into a project.",
-    outcome: "Good work starts with understanding.",
+    name: "Approve",
+    title: "Let's bring your idea to life.",
+    description: "Confirm the plan and let's bring the work to life.",
+    features: [
+      { label: "Approve the plan", icon: ShieldCheck },
+      { label: "A ready workspace", icon: Workflow },
+      { label: "Work gets underway", icon: Wrench },
+    ],
   },
 ]
 
 export function ApproachCarousel() {
-  const viewport = useRef<HTMLDivElement>(null)
-  const [active, setActive] = useState(0)
-  const [isInView, setIsInView] = useState(true)
-  const [isPaused, setIsPaused] = useState(false)
-  const [isDocumentVisible, setIsDocumentVisible] = useState(true)
-  const [motionAllowed, setMotionAllowed] = useState(false)
+  const reduceMotion = useReducedMotion()
+  const stagesRef = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLElement>(null)
+  const chatTransitionRef = useRef<HTMLDivElement>(null)
+  const displayedStageRef = useRef<number | null>(null)
+  const [active, setActive] = useState<number | null>(null)
+  const [displayedStage, setDisplayedStage] = useState<{
+    stage: number
+    revision: number
+  } | null>(null)
+  const selected = steps[active ?? 0]
 
-  const goTo = useCallback((index: number) => {
-    const container = viewport.current
-    if (!container) return
-    const cards = container.querySelectorAll<HTMLElement>(
-      "[data-approach-card]",
-    )
-    const target = cards[index]
-    const first = cards[0]
-    if (!target || !first) return
-    container.scrollTo({
-      left: target.offsetLeft - first.offsetLeft,
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "instant"
-        : "smooth",
+  useLayoutEffect(() => {
+    const stages = stagesRef.current
+    if (!stages) return
+
+    const updateConnectors = () => {
+      stages
+        .querySelectorAll<HTMLElement>("[data-flow-step]")
+        .forEach((step) => {
+          const content = step.querySelector<HTMLElement>("[data-flow-content]")
+          if (!content) return
+
+          const gap = Math.max(0, step.clientHeight - content.offsetHeight)
+          const connectorHeight = gap * 0.85
+          step.style.setProperty(
+            "--flow-connector-top",
+            `${step.clientHeight - connectorHeight / 2}px`,
+          )
+          step.style.setProperty(
+            "--flow-connector-height",
+            `${connectorHeight}px`,
+          )
+        })
+    }
+
+    updateConnectors()
+    const observer = new ResizeObserver(updateConnectors)
+    observer.observe(stages)
+    stages.querySelectorAll<HTMLElement>("[data-flow-step]").forEach((step) => {
+      observer.observe(step)
+      const content = step.querySelector<HTMLElement>("[data-flow-content]")
+      if (content) observer.observe(content)
     })
+    return () => observer.disconnect()
   }, [])
 
-  useEffect(() => {
-    const container = viewport.current
-    if (!container) return
+  useLayoutEffect(() => {
+    const stages = stagesRef.current
+    if (!stages) return
 
-    const preference = window.matchMedia("(prefers-reduced-motion: reduce)")
-    const syncMotionPreference = () => setMotionAllowed(!preference.matches)
-    const syncDocumentVisibility = () =>
-      setIsDocumentVisible(document.visibilityState === "visible")
-
-    syncMotionPreference()
-    syncDocumentVisibility()
-    preference.addEventListener("change", syncMotionPreference)
-    document.addEventListener("visibilitychange", syncDocumentVisibility)
-
-    let observer: IntersectionObserver | undefined
-    if ("IntersectionObserver" in window) {
-      observer = new IntersectionObserver(
-        ([entry]) => setIsInView(entry?.isIntersecting ?? false),
-        { threshold: 0.25 },
-      )
-      observer.observe(container)
-    }
-
-    return () => {
-      observer?.disconnect()
-      preference.removeEventListener("change", syncMotionPreference)
-      document.removeEventListener("visibilitychange", syncDocumentVisibility)
-    }
+    const media = gsap.matchMedia()
+    media.add("(prefers-reduced-motion: no-preference)", () => {
+      stages
+        .querySelectorAll<HTMLElement>("[data-flow-connector]")
+        .forEach((line) => {
+          gsap.fromTo(
+            line,
+            { scaleY: 0 },
+            {
+              scaleY: 1,
+              ease: "none",
+              scrollTrigger: {
+                trigger: line,
+                start: "top 80%",
+                end: () => `+=${line.offsetHeight}`,
+                scrub: true,
+                invalidateOnRefresh: true,
+              },
+            },
+          )
+        })
+    })
+    return () => media.revert()
   }, [])
 
-  useEffect(() => {
-    if (!isInView || isPaused || !isDocumentVisible || !motionAllowed) return
+  useLayoutEffect(() => {
+    const chat = chatTransitionRef.current
+    if (!chat || active === null) return
 
-    const interval = window.setInterval(() => {
-      goTo((active + 1) % steps.length)
-    }, 2000)
-
-    return () => window.clearInterval(interval)
-  }, [active, goTo, isDocumentVisible, isInView, isPaused, motionAllowed])
-
-  function updateActive() {
-    const container = viewport.current
-    if (!container) return
-    const cards = Array.from(
-      container.querySelectorAll<HTMLElement>("[data-approach-card]"),
-    )
-    const firstOffset = cards[0]?.offsetLeft ?? 0
-    let nearest = 0
-    let nearestDistance = Number.POSITIVE_INFINITY
-
-    cards.forEach((card, index) => {
-      const distance = Math.abs(
-        container.scrollLeft - (card.offsetLeft - firstOffset),
-      )
-      if (distance < nearestDistance) {
-        nearest = index
-        nearestDistance = distance
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      displayedStageRef.current = active
+      gsap.set(chat, { autoAlpha: 1, y: 0, scale: 1 })
+      const update = gsap.delayedCall(0, () => {
+        setDisplayedStage((previous) => ({
+          stage: active,
+          revision: (previous?.revision ?? 0) + 1,
+        }))
+      })
+      return () => {
+        update.kill()
       }
+    }
+
+    if (displayedStageRef.current === null) {
+      displayedStageRef.current = active
+      const update = gsap.delayedCall(0, () => {
+        setDisplayedStage({ stage: active, revision: 0 })
+      })
+      return () => {
+        update.kill()
+      }
+    }
+
+    const transition = gsap.timeline()
+    transition.to(chat, {
+      autoAlpha: 0,
+      y: -6,
+      scale: 0.985,
+      duration: 0.2,
+      ease: "power2.inOut",
+      onComplete: () => {
+        displayedStageRef.current = active
+        setDisplayedStage((previous) => ({
+          stage: active,
+          revision: (previous?.revision ?? 0) + 1,
+        }))
+        gsap.set(chat, { y: 6 })
+      },
     })
-    setActive((current) => (current === nearest ? current : nearest))
-  }
+    transition.to(chat, {
+      autoAlpha: 1,
+      y: 0,
+      scale: 1,
+      duration: 0.25,
+      ease: "power2.out",
+    })
+    return () => {
+      transition.kill()
+    }
+  }, [active])
+
+  useEffect(() => {
+    const stages = stagesRef.current
+    const panel = panelRef.current
+    if (!stages || !panel) return
+
+    const media = gsap.matchMedia()
+    media.add(
+      { desktop: "(width > 761px)", mobile: "(width <= 761px)" },
+      ({ conditions }) => {
+        const articles = Array.from(stages.children)
+        const headerHeight = () =>
+          Number.parseFloat(
+            getComputedStyle(stages).getPropertyValue(
+              "--landing-header-height",
+            ),
+          )
+        const syncStage = () => {
+          const header = headerHeight()
+          const center = conditions?.desktop
+            ? header + panel.offsetHeight / 2
+            : (header + panel.offsetHeight + window.innerHeight) / 2
+          const index = articles.findIndex(
+            (article) => article.getBoundingClientRect().bottom > center,
+          )
+          setActive(index === -1 ? articles.length - 1 : index)
+        }
+
+        ScrollTrigger.create({
+          trigger: panel,
+          endTrigger: stages,
+          start: () => `top top+=${headerHeight()}`,
+          end: "bottom top",
+          onUpdate: syncStage,
+          onEnter: syncStage,
+          onEnterBack: syncStage,
+          onRefresh: (trigger) => {
+            if (trigger.isActive) syncStage()
+          },
+        })
+
+        // The services above can change the section's position after loading.
+        const observer = new ResizeObserver(() => ScrollTrigger.refresh())
+        observer.observe(stages.closest("main") ?? stages)
+        return () => observer.disconnect()
+      },
+    )
+
+    return () => media.revert()
+  }, [])
 
   return (
-    <section
-      id="approach"
-      className={approachClass}
-      aria-labelledby="approach-heading"
-      onFocusCapture={() => setIsPaused(true)}
-      onBlurCapture={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-          setIsPaused(false)
-        }
-      }}
-    >
-      <div className={approachHeadingClass} data-reveal>
-        <h2 id="approach-heading">
-          A clear beginning.
-          <br />
-          <span>A shared direction.</span>
-        </h2>
-        <p>
-          Discover what fits. Connect over what matters.
-          <br />
-          Create a clear path to what comes next.
-        </p>
-      </div>
-
+    <section id="approach" className={approachClass} aria-label="Flow">
       <div
-        ref={viewport}
-        className={approachViewportClass}
-        role="region"
-        aria-roledescription="carousel"
-        aria-label="Discover, Connect, and Create"
-        tabIndex={0}
-        onScroll={updateActive}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowRight") {
-            event.preventDefault()
-            goTo((active + 1) % steps.length)
-          } else if (event.key === "ArrowLeft") {
-            event.preventDefault()
-            goTo((active - 1 + steps.length) % steps.length)
-          } else if (event.key === "Home") {
-            event.preventDefault()
-            goTo(0)
-          } else if (event.key === "End") {
-            event.preventDefault()
-            goTo(steps.length - 1)
-          }
-        }}
-      >
-        <div className="relative flex w-[max-content] gap-6 max-[621px]:gap-4">
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 bg-[repeating-linear-gradient(135deg,transparent_0_10px,rgba(255,255,255,0.025)_10px_12px,transparent_12px_20px)]"
+      ></div>
+      <div className="relative mx-auto grid max-w-[1360px] grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-x-16 px-12 max-[1101px]:gap-x-10 max-[1101px]:px-8 max-[761px]:flex max-[761px]:flex-col max-[761px]:px-6 max-[761px]:[--approach-chat-height:clamp(260px,43svh,360px)]">
+        <div
+          ref={stagesRef}
+          className="min-[762px]:pb-(--landing-header-height)"
+        >
           {steps.map((step) => (
             <article
               key={step.number}
-              data-approach-card
-              className={approachCardClass}
-              aria-roledescription="slide"
-              aria-label={step.number + " of 03: " + step.name}
+              data-flow-step
+              className="relative flex min-h-[calc(100svh-var(--landing-header-height))] flex-col justify-center py-16 max-[761px]:min-h-[calc(100svh-var(--landing-header-height)-var(--approach-chat-height)-32px)] max-[761px]:py-12"
             >
-              <div className={stepImageClass} data-step-image>
-                <Image
-                  src={step.image}
-                  alt={step.imageAlt}
-                  fill
-                  sizes="(max-width: 620px) 85vw, (max-width: 900px) 40vw, 380px"
-                  className="object-cover"
-                />
-                <div className={stepImageCaptionClass}>
-                  <span>{step.number}</span>
-                  <p>{step.name}</p>
-                </div>
-              </div>
-              <div className={stepContentClass}>
-                <span className="text-[10px] leading-[1.6] uppercase tracking-[1.3px] text-(color:--landing-muted) max-[621px]:text-[8px]">
-                  The {step.name.toLowerCase()} stage
-                </span>
-                <h3>{step.title}</h3>
-                <p>{step.description}</p>
-                <div className={stepFooterClass}>
-                  <span>{step.outcome}</span>
-                </div>
-              </div>
+              <motion.div
+                data-flow-content
+                initial={false}
+                whileInView={{ opacity: 1, y: 0 }}
+                animate={
+                  reduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }
+                }
+                viewport={{ amount: 0.5 }}
+                transition={{
+                  duration: reduceMotion ? 0 : 0.45,
+                  ease: "easeOut",
+                }}
+              >
+                <p className="text-[11px] uppercase tracking-[0.14em] text-[rgb(242_241_238_/_58%)]">
+                  {step.number} — {step.name.toLowerCase()}
+                </p>
+                <h3 className="mt-6 max-w-[470px] text-[clamp(32px,3.2vw,48px)] leading-[1.1] font-medium tracking-[-0.05em]">
+                  {step.title}
+                </h3>
+                <p className="mt-7 max-w-[455px] text-[15px] leading-[1.9] text-[rgb(242_241_238_/_72%)] max-[761px]:text-[14px]">
+                  {step.description}
+                </p>
+                <ul className="mt-8 grid max-w-[455px] grid-cols-3 gap-x-5 gap-y-4 max-[761px]:mt-6 max-[381px]:gap-x-3">
+                  {step.features.map(({ label, icon: Icon }) => (
+                    <li
+                      key={label}
+                      className="flex flex-col items-start gap-2.5"
+                    >
+                      <Icon
+                        size={17}
+                        strokeWidth={1.8}
+                        className="text-(color:--landing-paper)"
+                        aria-hidden="true"
+                      />
+                      <span className="text-[13px] leading-[1.45] font-medium text-(color:--landing-paper)">
+                        {label}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </motion.div>
+              {step.number !== "03" && (
+                <div
+                  aria-hidden="true"
+                  data-flow-connector
+                  className="absolute left-[min(50%,227.5px)] w-1 -translate-x-1/2 origin-top rounded-full bg-white/30"
+                  style={{
+                    top: "var(--flow-connector-top)",
+                    height: "var(--flow-connector-height)",
+                  }}
+                ></div>
+              )}
             </article>
           ))}
         </div>
-      </div>
 
-      <div className={approachControlsClass}>
-        <div className={carouselArrowsClass}>
-          <button
-            type="button"
-            aria-label="Previous step"
-            onClick={() => goTo((active - 1 + steps.length) % steps.length)}
-          >
-            <ArrowLeft size={20} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            aria-label="Next step"
-            onClick={() => goTo((active + 1) % steps.length)}
-          >
-            <ArrowRight size={20} aria-hidden="true" />
-          </button>
-        </div>
-        <span className="text-[12px] [font-variant-numeric:tabular-nums] text-[#f2f1ee] [&>_span]:text-[rgb(242_241_238_/_56%)]">
-          {String(active + 1).padStart(2, "0")}
-          <span> / 03</span>
-        </span>
+        <aside
+          ref={panelRef}
+          className="sticky top-(--landing-header-height) z-10 flex h-[calc(100svh-var(--landing-header-height))] self-start items-center max-[761px]:order-first max-[761px]:-mx-6 max-[761px]:h-auto max-[761px]:self-stretch max-[761px]:bg-(--landing-ink) max-[761px]:px-6 max-[761px]:pb-3"
+        >
+          <div className="mx-auto w-full max-w-[540px]">
+            <div ref={chatTransitionRef}>
+              <ApproachChat
+                key={displayedStage?.revision ?? -1}
+                stage={displayedStage?.stage ?? null}
+              />
+            </div>
+            <div
+              aria-live="polite"
+              aria-atomic="true"
+              className="mt-5 flex items-center justify-between text-[12px] [font-variant-numeric:tabular-nums] text-[rgb(242_241_238_/_72%)] max-[761px]:mt-2"
+            >
+              <span>{selected.name}</span>
+              <span>
+                {selected.number}{" "}
+                <span className="text-[rgb(242_241_238_/_45%)]">/ 03</span>
+              </span>
+            </div>
+          </div>
+        </aside>
       </div>
     </section>
   )

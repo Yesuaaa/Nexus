@@ -21,16 +21,19 @@ import {
 } from "../model/schema"
 import type { AuthMode, AuthPortal } from "../model/types"
 import type { Role } from "../model/roles"
+import { withInquiryService } from "@/features/public-services/model/service-inquiry-link"
 
 export function AuthContent({
   mode,
   portal,
   copy,
+  inquiryService,
   onLoggedIn,
 }: {
   mode: AuthMode
   portal: AuthPortal
   copy: AuthCopy
+  inquiryService?: string
   onLoggedIn: (mode: AuthMode, role: Role) => void
 }) {
   const formRef = useRef<HTMLFormElement>(null)
@@ -304,7 +307,10 @@ export function AuthContent({
             <p>
               {mode === "login" ? copy.noAccountYet : copy.haveAccountYet}{" "}
               <Link
-                href={mode === "login" ? "/register" : "/login"}
+                href={withInquiryService(
+                  mode === "login" ? "/register" : "/login",
+                  inquiryService,
+                )}
                 className={`font-semibold text-[#253f8c] underline-offset-2 hover:underline ${focusOutline}`}
               >
                 {mode === "login" ? copy.createOne : copy.signInHere}

@@ -1,22 +1,20 @@
-import {
-  test,
-  expect,
-  type Browser,
-  type Locator,
-  type Page,
-} from "@playwright/test"
-import { spawn, type ChildProcess } from "node:child_process"
-import { randomUUID } from "node:crypto"
-import path from "node:path"
-import { defaultPreferences } from "../src/features/settings/api/settings-api"
-import type {
-  AttendancePolicy,
-  AttendanceAuditEvent,
-  AttendanceHistory,
-  AttendanceState,
-  AttendanceWorkday,
-} from "../src/features/attendance/api/attendance-api"
+import { test } from "@playwright/test"
+import { clockAndCorrectionTests } from "./attendance/clock-and-corrections"
+import { managementPageTests } from "./attendance/management-pages"
+import { personalOverviewTests } from "./attendance/personal-overview"
+import { policyEditingTests } from "./attendance/policy-editing"
+import { policyOverviewTests } from "./attendance/policy-overview"
+import { auditTests } from "./attendance/audit"
+import { reconciliationTests } from "./attendance/reconciliation"
+import { correctionNoticeTests } from "./attendance/correction-notices"
+import { workforceLogTests } from "./attendance/workforce-logs"
+import { overtimeConflictTests } from "./attendance/overtime-conflicts"
+import { leaveTests } from "./attendance/leave"
+import { requestsOverviewTests } from "./attendance/requests-overview"
+import { staleReviewTests } from "./attendance/stale-reviews"
+import { registerAttendanceHooks } from "./attendance/support"
 
+// One server and database serve every test below, so they run in this order.
 test.describe.configure({ mode: "serial" })
 type Fixture = {
   secret: string
@@ -7578,32 +7576,17 @@ test("[PG-012-F001-A019-T002] automatic overtime persists in the normal typed qu
   await expect(row).toContainText("180 minutes requested")
   await expect(row).toContainText("Pending")
 
-  const reloadedList = page.waitForResponse((response) => {
-    const url = new URL(response.url())
-    return (
-      response.request().method() === "GET" &&
-      url.pathname === "/api/attendance/adjustments" &&
-      url.searchParams.get("type") === "OVERTIME"
-    )
-  })
-  await page.reload()
-  const reloadedResponse = await reloadedList
-  expect(reloadedResponse.status()).toBe(200)
-  const persistedBody = (await reloadedResponse.json()) as {
-    adjustments: {
-      id: string
-      overtimeMinutes: number
-      status: string
-    }[]
-  }
-  expect(persistedBody.adjustments).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({
-        id: created.id,
-        overtimeMinutes: 180,
-        status: "PENDING",
-      }),
-    ]),
-  )
-  await expect(row).toContainText("180 minutes requested")
-})
+registerAttendanceHooks()
+clockAndCorrectionTests()
+managementPageTests()
+personalOverviewTests()
+policyEditingTests()
+policyOverviewTests()
+auditTests()
+reconciliationTests()
+correctionNoticeTests()
+workforceLogTests()
+overtimeConflictTests()
+leaveTests()
+requestsOverviewTests()
+staleReviewTests()

@@ -10,7 +10,6 @@ import {
   ClientPageHeader,
   clientPageHeaderActionClass,
 } from "@/components/layout/client-page-header"
-import { EmptyState } from "@/components/ui/empty-state"
 import { FilterSelect, filterBarClass } from "@/components/ui/filter-select"
 import { KpiCards } from "@/components/ui/kpi-cards"
 import { ClientTableSkeleton } from "@/components/ui/client-table-skeleton"
@@ -183,44 +182,15 @@ export function ClientProjectsPage() {
             columns={7}
             gridClassName="grid grid-cols-[76px_minmax(180px,1.25fr)_minmax(180px,1.25fr)_minmax(145px,.9fr)_minmax(100px,.7fr)_minmax(130px,.9fr)_120px] items-center gap-3.5"
           />
-        ) : error ? (
-          <ClientProjectsTable
-            projects={[]}
-            formatDate={formatDate}
-            viewKey={table.viewKey}
-            quickKey={`${filter}:${sort}:${query}`}
-            error={error}
-            onRetry={retry}
-          />
-        ) : projects.length === 0 ? (
-          <EmptyState
-            as="section"
-            size="lg"
-            headingLevel={2}
-            icon={FolderKanban}
-            title="No projects yet"
-            description="Once a booked service is activated, it will appear here with its progress and shared deliverables."
-            className="bg-white/60"
-            action={
-              <Button variant="brand" asChild>
-                <Link href="/services">
-                  <Plus size={16} aria-hidden="true" />
-                  Book a service
-                </Link>
-              </Button>
-            }
-          />
-        ) : visibleProjects.length === 0 ? (
-          <EmptyState
-            as="section"
-            title="No projects match"
-            description="Try another search or status filter."
-            className="bg-white"
-          />
         ) : (
           <>
             <ClientProjectsTable
               projects={table.visible}
+              emptyMessage={
+                projects.length === 0
+                  ? "No projects yet. Activated services will appear here."
+                  : "No projects match your search or filters."
+              }
               formatDate={formatDate}
               viewKey={table.viewKey}
               quickKey={`${filter}:${sort}:${query}`}

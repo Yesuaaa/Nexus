@@ -35,6 +35,7 @@ import {
   useSidePanel,
 } from "@/components/ui/side-panel"
 import {
+  DataTableEmptyRow,
   ResponsiveDataTable,
   ResponsiveDataTableBody,
   ResponsiveDataTableCell,
@@ -233,110 +234,105 @@ export function PayrollSettingsPage() {
                 title="Configuration history"
                 description="A mid-period change limits each generated period to its schedule’s effective dates."
               >
-                {settings.loading || settings.data?.history.length ? (
-                  <ResponsiveDataTable
-                    label="Payroll configuration history"
-                    aria-busy={settings.loading}
+                <ResponsiveDataTable
+                  label="Payroll configuration history"
+                  aria-busy={settings.loading}
+                >
+                  <ResponsiveDataTableHeader
+                    className="@max-[820px]:sr-only"
+                    rowClassName={configurationGrid}
                   >
-                    <ResponsiveDataTableHeader
-                      className="@max-[820px]:sr-only"
-                      rowClassName={configurationGrid}
-                    >
-                      {[
-                        "Frequency",
-                        "Cutoff schedule",
-                        "Effective dates",
-                        "Reason",
-                        "Status",
-                        "Details",
-                      ].map((label) => (
-                        <ResponsiveDataTableColumnHeader key={label}>
-                          {label}
-                        </ResponsiveDataTableColumnHeader>
-                      ))}
-                    </ResponsiveDataTableHeader>
-                    <ResponsiveDataTableBody>
-                      {settings.loading ? (
-                        <DataTableSkeletonRows
-                          label="payroll configuration history"
-                          rows={3}
-                          rowClassName={`${configurationGrid} min-h-[48px] px-4 py-3 @max-[820px]:grid-cols-2`}
-                          cellClassNames={["", "", "", "", "", ""]}
-                        />
-                      ) : (
-                        history
-                          .slice(
-                            (page - 1) * schedulePageSize,
-                            page * schedulePageSize,
+                    {[
+                      "Frequency",
+                      "Cutoff schedule",
+                      "Effective dates",
+                      "Reason",
+                      "Status",
+                      "Details",
+                    ].map((label) => (
+                      <ResponsiveDataTableColumnHeader key={label}>
+                        {label}
+                      </ResponsiveDataTableColumnHeader>
+                    ))}
+                  </ResponsiveDataTableHeader>
+                  <ResponsiveDataTableBody>
+                    {settings.loading ? (
+                      <DataTableSkeletonRows
+                        label="payroll configuration history"
+                        rows={3}
+                        rowClassName={`${configurationGrid} min-h-[48px] px-4 py-3 @max-[820px]:grid-cols-2`}
+                        cellClassNames={["", "", "", "", "", ""]}
+                      />
+                    ) : history.length === 0 ? (
+                      <DataTableEmptyRow colSpan={6}>
+                        No payroll schedule configured.
+                      </DataTableEmptyRow>
+                    ) : (
+                      history
+                        .slice(
+                          (page - 1) * schedulePageSize,
+                          page * schedulePageSize,
+                        )
+                        .map((configuration) => {
+                          const badge = statusFor(configuration)
+                          return (
+                            <ResponsiveDataTableRow
+                              key={configuration.id}
+                              className={`${configurationGrid} border-b border-[#edf0f3] px-4 py-3 last:border-b-0 @max-[820px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] @max-[820px]:gap-x-3 @max-[820px]:gap-y-2`}
+                            >
+                              <ResponsiveDataTableCell className="text-xs font-semibold @max-[820px]:col-start-1 @max-[820px]:row-start-1">
+                                {frequencyLabel(configuration.frequency)}
+                              </ResponsiveDataTableCell>
+                              <ResponsiveDataTableCell className="min-w-0 break-words text-xs @max-[820px]:col-start-1 @max-[820px]:row-start-2">
+                                <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
+                                  Cutoffs
+                                </span>
+                                {cutoffLabel(configuration)}
+                              </ResponsiveDataTableCell>
+                              <ResponsiveDataTableCell className="text-xs @max-[820px]:col-start-2 @max-[820px]:row-start-1 @max-[820px]:text-right">
+                                <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
+                                  Effective
+                                </span>
+                                {formatDate(configuration.effectiveFrom)} –{" "}
+                                {configuration.effectiveTo
+                                  ? formatDate(configuration.effectiveTo)
+                                  : "Present"}
+                              </ResponsiveDataTableCell>
+                              <ResponsiveDataTableCell className="min-w-0 text-xs @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-3">
+                                <span className="line-clamp-2">
+                                  <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
+                                    Reason
+                                  </span>
+                                  {configuration.changeReason}
+                                </span>
+                              </ResponsiveDataTableCell>
+                              <ResponsiveDataTableCell className="@max-[820px]:col-start-2 @max-[820px]:row-start-2 @max-[820px]:justify-self-end">
+                                <span className="mr-1.5 hidden text-xs text-[#65718a] @max-[820px]:inline">
+                                  Status
+                                </span>
+                                <Pill tone={badge.tone}>{badge.label}</Pill>
+                              </ResponsiveDataTableCell>
+                              <ResponsiveDataTableCell className="flex justify-center @max-[820px]:col-start-2 @max-[820px]:justify-end">
+                                <Button
+                                  variant="rowAction"
+                                  size={null}
+                                  aria-label={`View schedule effective ${formatDate(configuration.effectiveFrom)}`}
+                                  onClick={() =>
+                                    setSelectedSchedule(configuration)
+                                  }
+                                >
+                                  <Eye size={14} aria-hidden="true" />
+                                  <HoverTooltip>
+                                    View schedule details
+                                  </HoverTooltip>
+                                </Button>
+                              </ResponsiveDataTableCell>
+                            </ResponsiveDataTableRow>
                           )
-                          .map((configuration) => {
-                            const badge = statusFor(configuration)
-                            return (
-                              <ResponsiveDataTableRow
-                                key={configuration.id}
-                                className={`${configurationGrid} border-b border-[#edf0f3] px-4 py-3 last:border-b-0 @max-[820px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] @max-[820px]:gap-x-3 @max-[820px]:gap-y-2`}
-                              >
-                                <ResponsiveDataTableCell className="text-xs font-semibold @max-[820px]:col-start-1 @max-[820px]:row-start-1">
-                                  {frequencyLabel(configuration.frequency)}
-                                </ResponsiveDataTableCell>
-                                <ResponsiveDataTableCell className="min-w-0 break-words text-xs @max-[820px]:col-start-1 @max-[820px]:row-start-2">
-                                  <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
-                                    Cutoffs
-                                  </span>
-                                  {cutoffLabel(configuration)}
-                                </ResponsiveDataTableCell>
-                                <ResponsiveDataTableCell className="text-xs @max-[820px]:col-start-2 @max-[820px]:row-start-1 @max-[820px]:text-right">
-                                  <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
-                                    Effective
-                                  </span>
-                                  {formatDate(configuration.effectiveFrom)} –{" "}
-                                  {configuration.effectiveTo
-                                    ? formatDate(configuration.effectiveTo)
-                                    : "Present"}
-                                </ResponsiveDataTableCell>
-                                <ResponsiveDataTableCell className="min-w-0 text-xs @max-[820px]:col-span-2 @max-[820px]:col-start-1 @max-[820px]:row-start-3">
-                                  <span className="line-clamp-2">
-                                    <span className="mr-1.5 hidden text-[#65718a] @max-[820px]:inline">
-                                      Reason
-                                    </span>
-                                    {configuration.changeReason}
-                                  </span>
-                                </ResponsiveDataTableCell>
-                                <ResponsiveDataTableCell className="@max-[820px]:col-start-2 @max-[820px]:row-start-2 @max-[820px]:justify-self-end">
-                                  <span className="mr-1.5 hidden text-xs text-[#65718a] @max-[820px]:inline">
-                                    Status
-                                  </span>
-                                  <Pill tone={badge.tone}>{badge.label}</Pill>
-                                </ResponsiveDataTableCell>
-                                <ResponsiveDataTableCell className="flex justify-center @max-[820px]:col-start-2 @max-[820px]:justify-end">
-                                  <Button
-                                    variant="rowAction"
-                                    size={null}
-                                    aria-label={`View schedule effective ${formatDate(configuration.effectiveFrom)}`}
-                                    onClick={() =>
-                                      setSelectedSchedule(configuration)
-                                    }
-                                  >
-                                    <Eye size={14} aria-hidden="true" />
-                                    <HoverTooltip>
-                                      View schedule details
-                                    </HoverTooltip>
-                                  </Button>
-                                </ResponsiveDataTableCell>
-                              </ResponsiveDataTableRow>
-                            )
-                          })
-                      )}
-                    </ResponsiveDataTableBody>
-                  </ResponsiveDataTable>
-                ) : (
-                  <EmptyState
-                    icon={CalendarRange}
-                    title="No payroll schedule configured"
-                    description="Add an effective-dated schedule when payroll frequency and cutoff dates are ready."
-                    size="md"
-                  />
-                )}
+                        })
+                    )}
+                  </ResponsiveDataTableBody>
+                </ResponsiveDataTable>
                 {!settings.loading && history.length > 0 && (
                   <TablePaginationFooter
                     {...pageRange(page, schedulePageSize, history.length)}
@@ -1058,6 +1054,10 @@ function PayrollAudit() {
                 rowClassName={auditGrid + " min-h-12"}
                 cellClassNames={["", "", "", ""]}
               />
+            ) : data?.total === 0 ? (
+              <DataTableEmptyRow colSpan={4}>
+                No payroll audit events in this category.
+              </DataTableEmptyRow>
             ) : (
               data?.rows.map((event) => (
                 <ResponsiveDataTableRow
@@ -1088,12 +1088,6 @@ function PayrollAudit() {
             )}
           </ResponsiveDataTableBody>
         </ResponsiveDataTable>
-      )}
-      {data?.total === 0 && (
-        <EmptyState
-          title="No Payroll audit events in this category"
-          size="sm"
-        />
       )}
       {data && data.total > data.pageSize && (
         <TablePaginationFooter

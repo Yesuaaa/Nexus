@@ -57,6 +57,15 @@ export function leaveDate(value: unknown, label: string) {
   return date
 }
 
+/** Search window for the leave list. Unlike a request, it has no length limit. */
+export function leaveFilterRange(fromValue: unknown, toValue: unknown) {
+  const startDate = leaveDate(fromValue, "start")
+  const endDate = leaveDate(toValue, "end")
+  if (endDate < startDate)
+    fail(400, "Choose an end date on or after the start date")
+  return { startDate, endDate }
+}
+
 export function leaveRange(startValue: unknown, endValue: unknown) {
   const startDate = leaveDate(startValue, "start")
   const endDate = leaveDate(endValue, "end")

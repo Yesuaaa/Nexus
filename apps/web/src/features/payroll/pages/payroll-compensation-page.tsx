@@ -32,6 +32,7 @@ import {
   SidePanelSection,
 } from "@/components/ui/side-panel"
 import {
+  DataTableEmptyRow,
   ResponsiveDataTable,
   ResponsiveDataTableBody,
   ResponsiveDataTableCell,
@@ -290,23 +291,6 @@ export function PayrollCompensationPage() {
               </Button>
             }
           />
-        ) : !list.loading && list.rows.length === 0 ? (
-          <EmptyState
-            icon={Banknote}
-            title={
-              hasFilters
-                ? status === "CONFIGURED" && list.data?.total === 0
-                  ? "No compensation configurations found"
-                  : "No matching employees"
-                : "No employees found"
-            }
-            description={
-              hasFilters
-                ? "Adjust the search or filters to see other employees."
-                : "Employees appear here after they are added to Employee Management."
-            }
-            size="lg"
-          />
         ) : (
           <>
             {!list.loading && allEmployeesAreUnconfigured && !hasFilters && (
@@ -358,6 +342,14 @@ export function PayrollCompensationPage() {
                       "",
                     ]}
                   />
+                ) : list.rows.length === 0 ? (
+                  <DataTableEmptyRow colSpan={8}>
+                    {hasFilters
+                      ? status === "CONFIGURED" && list.data?.total === 0
+                        ? "No compensation configurations found."
+                        : "No employees match your search or filters."
+                      : "No employees found."}
+                  </DataTableEmptyRow>
                 ) : (
                   list.rows.map((row) => (
                     <ResponsiveDataTableRow

@@ -16,7 +16,7 @@ import {
   Plus,
   UsersRound,
 } from "lucide-react"
-import { sileo } from "sileo"
+import { sileo } from "@/lib/toast"
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"

@@ -7,7 +7,10 @@ const Table = React.forwardRef<HTMLTableElement, React.ComponentProps<"table">>(
     <div className="relative min-w-0 w-full overflow-auto">
       <table
         ref={ref}
-        className={cn("w-full caption-bottom text-xs", className)}
+        className={cn(
+          "w-full table-fixed caption-bottom text-xs [&_td]:break-words",
+          className,
+        )}
         {...props}
       />
     </div>
