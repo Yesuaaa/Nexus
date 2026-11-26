@@ -8,7 +8,7 @@ import { useDatePreferences } from "@/features/settings/providers/preferences-pr
 
 import Link from "next/link"
 import Image from "next/image"
-import { type FormEvent, useEffect, useRef, useState } from "react"
+import { type FormEvent, useRef, useState } from "react"
 import {
   CalendarDays,
   CreditCard,
@@ -90,21 +90,14 @@ import {
   workflowInput,
   workflowMoney,
 } from "./workflow-primitives"
+import { useCurrentTime } from "@/lib/use-current-time"
+import { canRespondToQuotation } from "../model/workflow"
 import { errorMessage } from "@/lib/error-message"
 
 type CardProps = {
   workflow: Workflow
   controls: WorkflowControls
   onPrepareQuotation?: () => void
-}
-
-function useCurrentTime() {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 30_000)
-    return () => clearInterval(timer)
-  }, [])
-  return now
 }
 
 export function FileSubmissionCard({
@@ -753,12 +746,7 @@ export function QuotationProposalCard({
   const [declineNote, setDeclineNote] = useState<string | null>(null)
   const latest = quotation.id === workflow.quotations.at(-1)?.id
   const valid = new Date(quotation.validUntil).getTime() > now
-  const respond =
-    workflow.permissions.isClient &&
-    latest &&
-    valid &&
-    quotation.status === "SENT" &&
-    workflow.state === "CLIENT_APPROVAL"
+  const respond = canRespondToQuotation(workflow, quotation, now)
   return (
     <WorkflowCard
       title={`Quotation · version ${quotation.version}`}

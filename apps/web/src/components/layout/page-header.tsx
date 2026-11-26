@@ -45,6 +45,7 @@ export function PageHeader({
   headingId,
   tone = "admin",
   mobileActions = "icon",
+  titleSize = "default",
   className,
 }: {
   title: ReactNode
@@ -54,6 +55,7 @@ export function PageHeader({
   headingId?: string
   tone?: keyof typeof descriptionTones
   mobileActions?: "icon" | "stack"
+  titleSize?: "default" | "small"
   className?: string
 }) {
   const compact = Boolean(actions) && mobileActions === "icon"
@@ -79,7 +81,10 @@ export function PageHeader({
           <h1
             id={headingId}
             tabIndex={headingId ? -1 : undefined}
-            className="m-0 min-w-0 text-[clamp(21px,2vw,25px)] leading-[1.25] font-[650] tracking-[-0.03em] text-foreground [overflow-wrap:anywhere]"
+            className={cn(
+              "m-0 min-w-0 leading-[1.25] font-[650] tracking-[-0.03em] text-foreground [overflow-wrap:anywhere]",
+              titleSize === "small" ? "text-xl" : "text-[clamp(21px,2vw,25px)]",
+            )}
           >
             {title}
           </h1>

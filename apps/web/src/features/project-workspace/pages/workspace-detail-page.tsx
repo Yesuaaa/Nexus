@@ -23,6 +23,7 @@ import {
 import { ProjectSummary } from "../components/project-summary"
 import { ProjectSummarySkeleton } from "../components/project-summary-skeleton"
 import { WorkspaceOverview } from "../components/workspace-overview"
+import { WorkspaceBoard } from "../components/workspace-board"
 import { WorkspaceNotes } from "../components/workspace-notes"
 import { WorkspaceRequests } from "../components/workspace-requests"
 import { PlanEditor, emptyPlan } from "../components/plan-editor"
@@ -31,6 +32,7 @@ import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
 import { OverviewPanel, RowsSkeleton } from "@/components/ui/overview-panel"
 import { Pill } from "@/components/ui/pill"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   statusLabel,
   statusTone,
@@ -130,6 +132,7 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
   const loadError = project.data?.error || project.error
   const error = actionError || (project.loading ? "" : loadError)
   const tab = readDetailTab(searchParams.get("tab"))
+  const [workView, setWorkView] = useState("list")
   const detailPath = `/project-workspace/${encodeURIComponent(id)}`
   function tabHref(next: DetailTab) {
     const query = new URLSearchParams(searchParams.toString())
@@ -224,6 +227,14 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
             )
           ? "Send every deliverable to the client first."
           : "This workspace has no active services to complete."
+  const workViewSelector = (
+    <Tabs value={workView} onValueChange={setWorkView}>
+      <TabsList aria-label="Work view">
+        <TabsTrigger value="list">List</TabsTrigger>
+        <TabsTrigger value="board">Board</TabsTrigger>
+      </TabsList>
+    </Tabs>
+  )
   return (
     <main className={`${contentClass} p-[clamp(16px,2.1vw,32px)]`}>
       {error && (
@@ -406,20 +417,31 @@ export function WorkspaceDetailPage({ id }: { id: string }) {
                     </Button>
                   </div>
                 </OverviewPanel>
-              ) : (
-                <WorkspaceOverview
+              ) : workView === "board" ? (
+                <WorkspaceBoard
+                  viewSwitcher={workViewSelector}
                   workspace={workspace}
-                  busy={busy}
                   onUpdated={updateWorkspaceAndNotify}
-                  onEditPlan={(stream) =>
-                    setEditing({
-                      projectId: stream.id,
-                      name: stream.serviceName,
-                      updatedAt: stream.updatedAt,
-                      plan: structuredClone(stream.plan ?? emptyPlan()),
-                    })
-                  }
                 />
+              ) : (
+                <>
+                  <div className="mb-4 flex justify-end">
+                    {workViewSelector}
+                  </div>
+                  <WorkspaceOverview
+                    workspace={workspace}
+                    busy={busy}
+                    onUpdated={updateWorkspaceAndNotify}
+                    onEditPlan={(stream) =>
+                      setEditing({
+                        projectId: stream.id,
+                        name: stream.serviceName,
+                        updatedAt: stream.updatedAt,
+                        plan: structuredClone(stream.plan ?? emptyPlan()),
+                      })
+                    }
+                  />
+                </>
               ))}
             {tab === "deliverables" && (
               <WorkspaceDeliverables

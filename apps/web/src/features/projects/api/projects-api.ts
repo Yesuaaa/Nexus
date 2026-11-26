@@ -83,6 +83,8 @@ export type ClientProjectSummary = {
   completedTasks: number
   taskCount: number
   deliverableCount: number
+  memberCount?: number
+  memberInitials?: string[]
 }
 
 export const getProject = (id: string, signal?: AbortSignal) =>

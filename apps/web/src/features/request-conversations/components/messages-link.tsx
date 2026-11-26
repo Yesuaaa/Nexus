@@ -17,6 +17,7 @@ import {
 import { listConversations } from "../api/request-conversations-api"
 import { listInternalConversations } from "../api/internal-conversations-api"
 import { listProjectConversations } from "../api/project-conversations-api"
+import { useDashboardConversations } from "../hooks/use-dashboard-conversations"
 import {
   unreadMessagesEvent,
   type UnreadMessagesUpdate,
@@ -34,6 +35,7 @@ function AccountMessagesLink({
   const pathname = usePathname()
   // The open inbox already refreshes its active list and publishes its count.
   const inboxKind = pathname === "/messages" ? view : null
+  const dashboardOwnsLists = useDashboardConversations() !== null
   const [counts, setCounts] = useState({
     requests: 0,
     internal: 0,
@@ -55,29 +57,36 @@ function AccountMessagesLink({
       loading = true
       // Keep the last known count when one source is temporarily unavailable.
       await Promise.allSettled([
-        ...(inboxKind !== "service" && inboxKind !== "unified"
+        ...(!dashboardOwnsLists &&
+        inboxKind !== "service" &&
+        inboxKind !== "unified"
           ? [listConversations(undefined, controller.signal)]
           : []),
         ...(internal && inboxKind !== "internal"
           ? [listInternalConversations(undefined, controller.signal)]
           : []),
-        ...(projects && inboxKind !== "project" && inboxKind !== "unified"
+        ...(projects &&
+        !dashboardOwnsLists &&
+        inboxKind !== "project" &&
+        inboxKind !== "unified"
           ? [listProjectConversations("active", undefined, controller.signal)]
           : []),
       ])
       loading = false
     }
     window.addEventListener(unreadMessagesEvent, update)
-    void refresh()
-    const stopRefresh = watchVisibleRefresh(() => void refresh(), {
-      intervalMs: 30_000,
-    })
+    if (!dashboardOwnsLists) void refresh()
+    const stopRefresh = dashboardOwnsLists
+      ? undefined
+      : watchVisibleRefresh(() => void refresh(), {
+          intervalMs: 30_000,
+        })
     return () => {
       controller.abort()
-      stopRefresh()
+      stopRefresh?.()
       window.removeEventListener(unreadMessagesEvent, update)
     }
-  }, [internal, projects, inboxKind])
+  }, [internal, projects, inboxKind, dashboardOwnsLists])
 
   const unreadCount =
     counts.requests +

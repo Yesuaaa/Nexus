@@ -2,7 +2,7 @@
 
 import { FormInput } from "@/components/ui/form-input"
 
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { TaskDetailsPanel } from "./task-details-panel"
 import { Eye, Pencil } from "lucide-react"
 import { Alert } from "@/components/ui/alert"
@@ -41,6 +41,8 @@ export function TaskRowActions({
   onUpdated,
   disabled,
   editOnly = false,
+  card = false,
+  cardContent,
 }: {
   workspaceId: string
   stream: ProjectWorkspaceWorkstream
@@ -48,6 +50,8 @@ export function TaskRowActions({
   onUpdated: (workspace: ProjectWorkspaceDetail) => void
   disabled: boolean
   editOnly?: boolean
+  card?: boolean
+  cardContent?: ReactNode
 }) {
   const [mode, setMode] = useState<"view" | "edit" | null>(null)
   const [draft, setDraft] = useState(task)
@@ -87,8 +91,18 @@ export function TaskRowActions({
   }
   return (
     <>
-      <div className="flex justify-center">
-        {editOnly ? (
+      <div className={card ? "w-full" : "flex justify-center"}>
+        {card ? (
+          <Button
+            id={`task-actions-${task.id}`}
+            variant="ghost"
+            size="boardCard"
+            aria-label={`View ${task.title}`}
+            onClick={() => setMode("view")}
+          >
+            {cardContent ?? task.title}
+          </Button>
+        ) : editOnly ? (
           <button
             type="button"
             className={`${rowActionButton} border-transparent! bg-[#203f8c]! text-white! hover:bg-[#172f70]!`}
@@ -128,6 +142,7 @@ export function TaskRowActions({
           stream={stream}
           onClose={() => setMode(null)}
           onEdit={edit}
+          editDisabled={disabled}
         />
       )}
       <Modal

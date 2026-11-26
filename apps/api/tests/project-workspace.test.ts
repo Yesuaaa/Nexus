@@ -722,6 +722,164 @@ test(
           await persistedProjectPlan(booking.project.id),
           expectedUpdatedPlan,
         )
+        const deniedColumn = await request(
+          `/${workspaceId}/columns`,
+          staff.id,
+          "POST",
+          { name: "Review" },
+        )
+        assert.equal(deniedColumn.status, 403)
+        const createColumn = await request(
+          `/${workspaceId}/columns`,
+          head.id,
+          "POST",
+          { name: "Review" },
+        )
+        assert.equal(
+          createColumn.status,
+          200,
+          await createColumn.clone().text(),
+        )
+        const createdBoard = (await createColumn.json()) as {
+          kanbanColumns: { id: string; name: string }[]
+        }
+        const column = createdBoard.kanbanColumns[0]!
+        assert.equal(column.name, "Review")
+        const firstColumn = await request(
+          `/${workspaceId}/columns`,
+          head.id,
+          "POST",
+          { name: "First", afterColumnId: "IN_PROGRESS" },
+        )
+        assert.equal(firstColumn.status, 200)
+        const firstBoard = (await firstColumn.json()) as {
+          kanbanColumns: { id: string; name: string }[]
+        }
+        assert.deepEqual(
+          firstBoard.kanbanColumns.map((item) => item.name),
+          ["First", "Review"],
+        )
+        const duplicateColumn = await request(
+          `/${workspaceId}/columns`,
+          head.id,
+          "POST",
+          { name: " review " },
+        )
+        assert.equal(duplicateColumn.status, 409)
+        const removedFirst = await request(
+          `/${workspaceId}/columns/${firstBoard.kanbanColumns[0]!.id}`,
+          head.id,
+          "DELETE",
+        )
+        assert.equal(removedFirst.status, 200)
+        const foreignColumn = await prisma.workspaceKanbanColumn.create({
+          data: { workspaceKey: "group:foreign", name: "Other", position: 0 },
+        })
+        const foreignMove = await request(
+          `${projectPath}/tasks/${addedTask.id}`,
+          staff.id,
+          "PATCH",
+          { status: "IN_PROGRESS", columnId: foreignColumn.id },
+        )
+        assert.equal(foreignMove.status, 404)
+        const foreignRename = await request(
+          `/${workspaceId}/columns/${foreignColumn.id}`,
+          head.id,
+          "PATCH",
+          { name: "Wrong" },
+        )
+        assert.equal(foreignRename.status, 404)
+        const moved = await request(
+          `${projectPath}/tasks/${addedTask.id}`,
+          staff.id,
+          "PATCH",
+          { status: "IN_PROGRESS", columnId: column.id },
+        )
+        assert.equal(moved.status, 200, await moved.clone().text())
+        const reloadedBoard = (await (
+          await request(`/${workspaceId}`, head.id)
+        ).json()) as {
+          kanbanAssignments: { taskId: string; columnId: string }[]
+          workstreams: { id: string; plan: ProjectWorkPlan | null }[]
+        }
+        assert.ok(
+          reloadedBoard.kanbanAssignments.some(
+            (item) =>
+              item.taskId === addedTask.id && item.columnId === column.id,
+          ),
+        )
+        assert.equal(
+          planFromResponse(reloadedBoard).phases[0]!.tasks.find(
+            (task) => task.id === addedTask.id,
+          )!.status,
+          "IN_PROGRESS",
+        )
+        const latestProject = await prisma.project.findUniqueOrThrow({
+          where: { id: booking.project.id },
+        })
+        const retained = await request(`${projectPath}/plan`, head.id, "PUT", {
+          plan: expectedUpdatedPlan,
+          expectedUpdatedAt: latestProject.updatedAt.toISOString(),
+        })
+        assert.equal(retained.status, 200, await retained.clone().text())
+        assert.equal(
+          await prisma.workspaceKanbanAssignment.count({
+            where: { taskId: addedTask.id },
+          }),
+          1,
+        )
+        const renamedColumn = await request(
+          `/${workspaceId}/columns/${column.id}`,
+          head.id,
+          "PATCH",
+          { name: "Reviewing" },
+        )
+        assert.equal(renamedColumn.status, 200)
+        const deletedColumn = await request(
+          `/${workspaceId}/columns/${column.id}`,
+          head.id,
+          "DELETE",
+        )
+        assert.equal(deletedColumn.status, 200)
+        assert.equal(
+          await prisma.workspaceKanbanAssignment.count({
+            where: { taskId: addedTask.id },
+          }),
+          0,
+        )
+        assert.deepEqual(await readProjectPlan(head.id), expectedUpdatedPlan)
+
+        const staleSave = await request(`${projectPath}/plan`, head.id, "PUT", {
+          plan: addedPlan,
+          expectedUpdatedAt: originalProject.updatedAt.toISOString(),
+        })
+        assert.equal(staleSave.status, 409)
+        assert.deepEqual(
+          await persistedProjectPlan(booking.project.id),
+          expectedUpdatedPlan,
+        )
+        for (const status of ["COMPLETED", "CANCELLED"] as const) {
+          await prisma.project.update({
+            where: { id: booking.project.id },
+            data: { status },
+          })
+          const terminalUpdate = await request(
+            `${projectPath}/tasks/${addedTask.id}`,
+            staff.id,
+            "PATCH",
+            { status: "DONE" },
+          )
+          assert.equal(terminalUpdate.status, 409)
+          assert.deepEqual(
+            await persistedProjectPlan(booking.project.id),
+            expectedUpdatedPlan,
+          )
+        }
+        await prisma.project.update({
+          where: { id: booking.project.id },
+          data: { status: "PLANNED" },
+        })
+
         const planningLogs = await prisma.projectManagementLog.findMany({
           where: { projectId: booking.project.id, source: "planning" },
         })
@@ -776,6 +934,23 @@ test(
         assert.deepEqual(
           await persistedProjectPlan(second.project.id),
           secondPlanBeforeOutOfScopeRequest,
+        )
+
+        const concurrent = await Promise.all([
+          request(`${projectPath}/tasks/nex004-scope-task`, staff.id, "PATCH", {
+            status: "DONE",
+          }),
+          request(`${projectPath}/tasks/${addedTask.id}`, staff.id, "PATCH", {
+            status: "DONE",
+          }),
+        ])
+        assert.deepEqual(
+          concurrent.map((response) => response.status),
+          [200, 200],
+        )
+        const finalPlan = await readProjectPlan(staff.id)
+        assert.ok(
+          finalPlan.phases[0]!.tasks.every((task) => task.status === "DONE"),
         )
       },
     )

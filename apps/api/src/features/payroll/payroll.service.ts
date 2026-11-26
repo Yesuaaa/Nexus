@@ -9,6 +9,7 @@ import {
   type Prisma,
 } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
+import { manilaCalendarDay } from "../../shared/calendar-date.js"
 import { fail } from "../../shared/http-error.js"
 import { paginate, insensitive } from "../../shared/query/pagination.js"
 import {
@@ -54,18 +55,7 @@ const configurationSelect = {
   createdAt: true,
 } satisfies Prisma.PayrollConfigurationSelect
 
-export function manilaToday() {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Manila",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date())
-  const values = Object.fromEntries(
-    parts.map(({ type, value }) => [type, value]),
-  )
-  return new Date(`${values.year}-${values.month}-${values.day}T00:00:00.000Z`)
-}
+export const manilaToday = manilaCalendarDay
 
 function daysBefore(date: Date) {
   return new Date(date.getTime() - 86_400_000)

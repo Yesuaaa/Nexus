@@ -9,6 +9,8 @@ import {
   getServiceImageStorage,
   ServiceImageStorageError,
   serviceImagePublicUrl,
+  uploadLocalServiceImage,
+  removeLocalServiceImage,
 } from "./service-image-storage.js"
 import { servicesRepository } from "./services.repository.js"
 import {
@@ -66,7 +68,9 @@ function persistenceInput(
 
 async function uploadImage(dataUrl: string) {
   try {
-    return await getServiceImageStorage().upload(dataUrl)
+    return process.env.SERVICE_IMAGE_STORAGE === "local"
+      ? await uploadLocalServiceImage(dataUrl)
+      : await getServiceImageStorage().upload(dataUrl)
   } catch (error) {
     if (error instanceof ServiceImageStorageError) {
       throw new ServicesError(503, error.message)
@@ -78,7 +82,8 @@ async function uploadImage(dataUrl: string) {
 async function removeImageBestEffort(path: string | null) {
   if (!path) return
   try {
-    await getServiceImageStorage().remove(path)
+    if (path.startsWith("local-services/")) await removeLocalServiceImage(path)
+    else await getServiceImageStorage().remove(path)
   } catch (error) {
     console.error(`Failed to remove obsolete service image ${path}`, error)
   }

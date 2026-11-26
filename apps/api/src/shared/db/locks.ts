@@ -10,6 +10,7 @@
  * A transaction that locks rows in several of these tables must take them in
  * this order, which every existing transaction follows:
  *
+ *   ServiceRequest → Department → Invoice → BillingConfiguration / BillingPaymentMethod
  *   ServiceRequest → Department → Project → ProjectMilestone → ProjectNote
  *   → ProjectNoteRevision
  *
@@ -30,6 +31,10 @@ export type LockableTable =
   | "AttendanceAdjustment"
   | "LeaveRequest"
   | "ServiceRequest"
+  | "Invoice"
+  | "Expense"
+  | "BillingConfiguration"
+  | "BillingPaymentMethod"
   | "Department"
   | "Team"
   | "Project"
@@ -57,6 +62,10 @@ const lockableTables: ReadonlySet<string> = new Set<LockableTable>([
   "AttendanceAdjustment",
   "LeaveRequest",
   "ServiceRequest",
+  "Invoice",
+  "Expense",
+  "BillingConfiguration",
+  "BillingPaymentMethod",
   "Department",
   "Team",
   "Project",

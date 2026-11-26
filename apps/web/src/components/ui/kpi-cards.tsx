@@ -15,7 +15,7 @@ export type KpiMetric = {
   chart?: ReactNode
 }
 
-export type KpiCardVariant = "default" | "blue"
+export type KpiCardVariant = "default" | "blue" | "compact"
 
 function MiniGraph({
   values,
@@ -93,6 +93,7 @@ export function KpiCards({
   className?: string
 }) {
   const isBlue = variant === "blue"
+  const isCompact = variant === "compact"
 
   return (
     <section
@@ -112,6 +113,7 @@ export function KpiCards({
             key={metric.label}
             className={cn(
               "relative min-w-0 rounded-xl border border-[#dfe6eb] bg-[#f8fafb] p-4 shadow-[0_2px_8px_rgb(30_55_80_/_5%)]",
+              isCompact && "bg-background p-3.5",
               isBlue &&
                 "overflow-hidden rounded-2xl border-0 bg-[#294c96] p-5 text-white shadow-[0_8px_24px_rgb(26_58_128_/_10%)] transition-shadow duration-300 hover:shadow-[0_14px_34px_rgb(26_58_128_/_22%)] motion-reduce:transition-none",
             )}
@@ -123,10 +125,17 @@ export function KpiCards({
               />
             )}
             <div className="relative z-20 flex min-w-0 items-center gap-2.5">
-              {isBlue ? (
-                <span className="grid size-10 shrink-0 place-items-center rounded-xl border-2 border-current bg-[rgb(22_48_105_/_10%)]">
+              {isBlue || isCompact ? (
+                <span
+                  className={cn(
+                    "grid shrink-0 place-items-center",
+                    isBlue
+                      ? "size-10 rounded-xl border-2 border-current bg-[rgb(22_48_105_/_10%)]"
+                      : "size-8 rounded-lg bg-[#edf3fc]",
+                  )}
+                >
                   <Icon
-                    className="text-white"
+                    className={isBlue ? "text-white" : metric.iconClassName}
                     size={17}
                     strokeWidth={1.8}
                     aria-hidden="true"
@@ -142,7 +151,8 @@ export function KpiCards({
               )}
               <h2
                 className={cn(
-                  "m-0 truncate text-xs font-medium",
+                  "m-0 min-w-0 text-xs font-medium",
+                  !isCompact && "truncate",
                   isBlue ? "text-white/85" : "text-[#65718a]",
                 )}
               >
@@ -176,6 +186,8 @@ export function KpiCards({
                 <p
                   className={cn(
                     "mt-3 mb-0 text-2xl leading-none font-semibold tracking-[-0.025em] tabular-nums",
+                    isCompact &&
+                      "mt-2 break-words leading-tight [overflow-wrap:anywhere]",
                     isBlue ? "text-white" : "text-foreground",
                     showCharts && hasChart && "pr-[84px]",
                   )}
@@ -187,7 +199,8 @@ export function KpiCards({
                 </p>
                 <p
                   className={cn(
-                    "mt-1.5 mb-0 truncate text-[11px]",
+                    "mt-1.5 mb-0",
+                    isCompact ? "text-xs" : "truncate text-[11px]",
                     isBlue ? "text-white/70" : "text-[#738096]",
                   )}
                 >

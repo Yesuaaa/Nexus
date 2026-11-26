@@ -56,7 +56,6 @@ test("Staff receive project and Workforce Compliance workspaces", () => {
   assert.deepEqual(moduleEntries(account("STAFF")), [
     ["Project Management", "/project-workspace"],
     ["Workforce Compliance", "/attendance/check-ins"],
-    ["Billing & Finance", null],
   ])
 })
 
@@ -71,7 +70,6 @@ test("a current department head receives Service Operations without changing Sta
       ["Service Operations", "/request-inbox/overview"],
       ["Project Management", "/project-workspace"],
       ["Workforce Compliance", "/attendance/overview"],
-      ["Billing & Finance", null],
     ],
   )
 })
@@ -81,7 +79,7 @@ test("the selector returns only the Admin operational workspaces", () => {
     ["Service Operations", "/services"],
     ["People & HR", "/employees"],
     ["Workforce Compliance", "/attendance/overview"],
-    ["Billing & Finance", null],
+    ["Billing & Finance", "/billing-finance/overview"],
   ])
 })
 
@@ -92,7 +90,7 @@ test("Superadmin receives operational modules alongside Administration", () => {
     ["People & HR", "/employees"],
     ["Workforce Compliance", "/attendance/time-logs/overview"],
     ["Administration", "/accounts"],
-    ["Billing & Finance", null],
+    ["Billing & Finance", "/billing-finance/overview"],
   ])
 })
 
@@ -104,7 +102,7 @@ test("permission-limited accounts never receive a denied module entry route", ()
     [
       ["Service Operations", "/clients"],
       ["Workforce Compliance", "/attendance/check-ins"],
-      ["Billing & Finance", null],
+      ["Billing & Finance", "/billing-finance/overview"],
     ],
   )
   assert.deepEqual(
@@ -114,11 +112,10 @@ test("permission-limited accounts never receive a denied module entry route", ()
     [
       ["People & HR", "/departments"],
       ["Workforce Compliance", "/attendance/check-ins"],
-      ["Billing & Finance", null],
+      ["Billing & Finance", "/billing-finance/overview"],
     ],
   )
-  assert.deepEqual(
-    moduleEntries(account("SUPERADMIN", { permissions: [] })),
-    [],
-  )
+  assert.deepEqual(moduleEntries(account("SUPERADMIN", { permissions: [] })), [
+    ["Billing & Finance", "/billing-finance/overview"],
+  ])
 })

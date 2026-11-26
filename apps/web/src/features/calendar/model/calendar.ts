@@ -1,3 +1,10 @@
+export const calendarTimeZone = "Asia/Manila"
+export const calendarTimeLabel = new Intl.DateTimeFormat("en-PH", {
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+  timeZone: calendarTimeZone,
+})
 export type CalendarEvent = {
   id: string
   type: "consultation" | "meeting" | "milestone" | "task" | "leave"
@@ -30,7 +37,7 @@ export type CalendarResponse = {
 export function calendarEventDate(event: CalendarEvent) {
   return event.allDay && event.startDate
     ? event.startDate
-    : new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Manila" }).format(
+    : new Intl.DateTimeFormat("sv-SE", { timeZone: calendarTimeZone }).format(
         new Date(event.startsAt),
       )
 }
@@ -39,7 +46,7 @@ export function calendarEventStatus(event: CalendarEvent, today: string) {
   if (event.completed) return "Completed"
   if (
     event.deadline &&
-    new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Manila" }).format(
+    new Intl.DateTimeFormat("sv-SE", { timeZone: calendarTimeZone }).format(
       new Date(event.startsAt),
     ) < today
   )

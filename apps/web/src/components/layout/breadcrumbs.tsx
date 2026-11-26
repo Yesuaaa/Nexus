@@ -75,6 +75,7 @@ const routeLabels: Record<string, string> = {
   dashboard: "Dashboard",
   profile: "My Profile",
   "billing-logs": "Billing Logs",
+  "billing-finance": "Billing & Finance",
   settings: "Settings",
   messages: "Messages",
   projects: "Projects",

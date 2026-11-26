@@ -19,8 +19,10 @@ import { getProjectWorkspace } from "./workspace-details.service.js"
 import {
   getStaffContext,
   lockAndRevalidateProjectForEdit,
+  terminalProjectStatuses,
 } from "./workspace-access.js"
 import { writeWorkspaceEvent } from "./workspace-activity.js"
+import { projectWorkspaceIdentity } from "./workspace-identity.js"
 
 export async function saveProjectPlan(
   userId: string,
@@ -112,6 +114,23 @@ export async function saveProjectPlan(
         409,
         "The plan changed while you were editing. Reload before saving again.",
       )
+    await tx.workspaceKanbanAssignment.deleteMany({
+      where: {
+        projectId,
+        OR: [
+          { taskId: { notIn: [...nextTaskIds] } },
+          {
+            taskId: {
+              in: plan.phases.flatMap((phase) =>
+                phase.tasks
+                  .filter((task) => task.status !== "IN_PROGRESS")
+                  .map((task) => task.id),
+              ),
+            },
+          },
+        ],
+      },
+    })
     await writeWorkspaceEvent(
       tx,
       project.requestId!,
@@ -157,7 +176,13 @@ export async function updateProjectTask(
   projectId: string,
   taskId: string,
   status: ProjectTaskStatus,
+  columnId: string | null = null,
 ) {
+  if (columnId && status !== "IN_PROGRESS")
+    throw new ServiceRequestsError(
+      400,
+      "Custom columns require In Progress status",
+    )
   if (!["NOT_STARTED", "IN_PROGRESS", "DONE"].includes(status))
     throw new ServiceRequestsError(400, "Choose a valid task status")
   await getPrisma()!.$transaction(async (tx) => {
@@ -179,6 +204,21 @@ export async function updateProjectTask(
       .flatMap(({ tasks }) => tasks)
       .find(({ id }) => id === taskId)
     if (!current) throw new ServiceRequestsError(404, "Task not found")
+    const workspaceKey = projectWorkspaceIdentity(project)
+    if (
+      columnId &&
+      !(await tx.workspaceKanbanColumn.findFirst({
+        where: { id: columnId, workspaceKey },
+      }))
+    )
+      throw new ServiceRequestsError(404, "Column not found")
+    await tx.workspaceKanbanAssignment.deleteMany({
+      where: { workspaceKey, projectId, taskId },
+    })
+    if (columnId)
+      await tx.workspaceKanbanAssignment.create({
+        data: { workspaceKey, projectId, taskId, columnId },
+      })
     const nextPlan: ProjectWorkPlan = {
       phases: plan.phases.map((phase) => ({
         ...phase,
@@ -290,6 +330,110 @@ export async function addProjectTask(
       },
       { id: task.id, label: task.title },
     )
+  })
+  return getProjectWorkspace(userId, workspaceId)
+}
+export async function mutateKanbanColumn(
+  userId: string,
+  workspaceId: string,
+  action: "create" | "rename" | "delete",
+  columnId: string | null,
+  input: unknown,
+) {
+  const workspace = await getProjectWorkspace(userId, workspaceId)
+  if (
+    !workspace.canManage ||
+    (workspace.kind === "group" && !workspace.canRename)
+  )
+    throw new ServiceRequestsError(403, "You cannot manage workspace columns")
+  const project = workspace.workstreams.find(
+    (stream) => !terminalProjectStatuses.includes(stream.status),
+  )
+  if (!project)
+    throw new ServiceRequestsError(409, "Archived projects cannot be edited")
+  const name =
+    input &&
+    typeof input === "object" &&
+    "name" in input &&
+    typeof input.name === "string"
+      ? input.name.trim()
+      : ""
+  if (action !== "delete" && (!name || name.length > 120))
+    throw new ServiceRequestsError(
+      400,
+      "Enter a column name of up to 120 characters",
+    )
+  await getPrisma()!.$transaction(async (tx) => {
+    const context = await getStaffContext(tx, userId)
+    const { project: scoped } = await lockAndRevalidateProjectForEdit(
+      tx,
+      userId,
+      context,
+      workspaceId,
+      project.id,
+    )
+    const workspaceKey = projectWorkspaceIdentity(scoped)
+    if (action !== "delete") {
+      const duplicate = await tx.workspaceKanbanColumn.findFirst({
+        where: {
+          workspaceKey,
+          name: { equals: name, mode: "insensitive" },
+          ...(action === "rename" && columnId ? { id: { not: columnId } } : {}),
+        },
+        select: { id: true },
+      })
+      if (duplicate)
+        throw new ServiceRequestsError(
+          409,
+          "A column with this name already exists",
+        )
+    }
+    if (action === "create") {
+      const columns = await tx.workspaceKanbanColumn.findMany({
+        where: { workspaceKey },
+        orderBy: [{ position: "asc" }, { id: "asc" }],
+      })
+      const requestedAfter =
+        input &&
+        typeof input === "object" &&
+        "afterColumnId" in input &&
+        typeof input.afterColumnId === "string"
+          ? input.afterColumnId
+          : null
+      let insertAt = columns.length
+      if (requestedAfter === "IN_PROGRESS") insertAt = 0
+      else if (requestedAfter) {
+        const afterIndex = columns.findIndex(({ id }) => id === requestedAfter)
+        if (afterIndex < 0)
+          throw new ServiceRequestsError(400, "Choose a valid column placement")
+        insertAt = afterIndex + 1
+      }
+      const position =
+        insertAt === 0
+          ? (columns[0]?.position ?? 0)
+          : columns[insertAt - 1]!.position + 1
+      for (let index = columns.length - 1; index >= insertAt; index--) {
+        const column = columns[index]!
+        await tx.workspaceKanbanColumn.update({
+          where: { id: column.id },
+          data: { position: column.position + 1 },
+        })
+      }
+      await tx.workspaceKanbanColumn.create({
+        data: { workspaceKey, name, position },
+      })
+    } else {
+      const result =
+        action === "rename"
+          ? await tx.workspaceKanbanColumn.updateMany({
+              where: { id: columnId ?? "", workspaceKey },
+              data: { name },
+            })
+          : await tx.workspaceKanbanColumn.deleteMany({
+              where: { id: columnId ?? "", workspaceKey },
+            })
+      if (!result.count) throw new ServiceRequestsError(404, "Column not found")
+    }
   })
   return getProjectWorkspace(userId, workspaceId)
 }

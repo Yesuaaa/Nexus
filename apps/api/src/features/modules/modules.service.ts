@@ -4,12 +4,23 @@ import {
   hasAdministrativeCapability,
   hasPayrollCapability,
   PayrollCapability,
+  hasBillingCapability,
+  BillingCapability,
   type AuthorizationActor,
 } from "../auth/auth.capabilities.js"
 import { fail } from "../../shared/http-error.js"
 
 export { moduleRegistry }
-type ModuleRegistration = (typeof moduleRegistry)[keyof typeof moduleRegistry]
+type ModuleRegistration = {
+  title: string
+  description: string
+  implemented: boolean
+  administrativePath: string | null
+  icon: string
+  color: string
+  staffOnly?: boolean
+  workspaceParent?: string
+}
 type ModuleRegistry = Readonly<Record<string, ModuleRegistration>>
 
 export function getAdministrativeModule(
@@ -19,8 +30,12 @@ export function getAdministrativeModule(
 ) {
   const canReadPayroll =
     id === "payroll" && hasPayrollCapability(actor, PayrollCapability.READ)
+  const canReadBilling =
+    id === "billing-finance" &&
+    hasBillingCapability(actor, BillingCapability.READ)
   if (
     !canReadPayroll &&
+    !canReadBilling &&
     !hasAdministrativeCapability(actor, AdministrativeCapability.MODULE_ACCESS)
   )
     fail(403, "Administrative module access is required")

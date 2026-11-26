@@ -1,11 +1,8 @@
 "use client"
-import {
-  useDatePreferences,
-  usePreferences,
-} from "@/features/settings/providers/preferences-provider"
+import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
 import Link from "next/link"
-import { useCallback, useEffect, useState } from "react"
+import { useState } from "react"
 import { Bell, CheckCheck } from "lucide-react"
 import { sileo } from "@/lib/toast"
 import { apiRequest } from "@/features/auth/api/auth-api"
@@ -17,59 +14,12 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { dropdownMenuClass } from "@/components/ui/dropdown-styles"
 import { iconButtonClass } from "@/components/layout/styles"
-import { watchVisibleRefresh } from "@/lib/visible-refresh"
-
-type Notification = {
-  id: string
-  requestId: string | null
-  summary: string
-  type: string
-  entityId: string | null
-  createdAt: string
-  readAt: string | null
-}
-type Notifications = { notifications: Notification[]; unreadCount: number }
+import { useWorkflowInbox } from "./workflow-notification-provider"
 
 export function WorkflowNotifications() {
   const { formatDateTime } = useDatePreferences()
-  const { preferences } = usePreferences()
-  const [result, setResult] = useState<Notifications | null>(null)
-  const [error, setError] = useState(false)
+  const { result, error, load } = useWorkflowInbox()
   const [markingRead, setMarkingRead] = useState(false)
-  const load = useCallback(async (signal?: AbortSignal) => {
-    try {
-      const value = await apiRequest<Notifications>(
-        "/api/request-workflows/notifications",
-        { signal },
-      )
-      if (!signal?.aborted) {
-        setResult(value)
-        setError(false)
-      }
-    } catch {
-      if (!signal?.aborted) {
-        setResult(null)
-        setError(true)
-      }
-    }
-  }, [])
-  useEffect(() => {
-    const controller = new AbortController()
-    let loading = false
-    const refresh = () => {
-      if (loading) return
-      loading = true
-      void load(controller.signal).finally(() => {
-        loading = false
-      })
-    }
-    void Promise.resolve().then(refresh)
-    const stopRefresh = watchVisibleRefresh(refresh, { intervalMs: 30_000 })
-    return () => {
-      controller.abort()
-      stopRefresh()
-    }
-  }, [load, preferences.workflowNotifications])
   async function read(id: string) {
     try {
       await apiRequest(

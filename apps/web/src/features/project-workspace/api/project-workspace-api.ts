@@ -221,6 +221,8 @@ export type ProjectWorkspaceDetail = Omit<
   "workstreams"
 > & {
   workstreams: ProjectWorkspaceWorkstream[]
+  kanbanColumns: { id: string; name: string }[]
+  kanbanAssignments: { projectId: string; taskId: string; columnId: string }[]
   activity: {
     id: string
     type: string
@@ -491,10 +493,11 @@ export const updateProjectTask = (
   projectId: string,
   taskId: string,
   status: ProjectTaskStatus,
+  columnId: string | null = null,
 ) =>
   apiRequest<ProjectWorkspaceDetail>(
     `/api/project-workspace/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}`,
-    { method: "PATCH", body: JSON.stringify({ status }) },
+    { method: "PATCH", body: JSON.stringify({ status, columnId }) },
   )
 
 const deliverablePath = (
@@ -723,3 +726,22 @@ async function downloadProjectWorkspaceFile(path: string, fileName: string) {
   anchor.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
+
+export const mutateKanbanColumn = (
+  workspaceId: string,
+  action: "create" | "rename" | "delete",
+  columnId: string | null,
+  name = "",
+  afterColumnId?: string,
+) =>
+  apiRequest<ProjectWorkspaceDetail>(
+    `/api/project-workspace/${encodeURIComponent(workspaceId)}/columns${columnId ? `/${encodeURIComponent(columnId)}` : ""}`,
+    {
+      method:
+        action === "create" ? "POST" : action === "rename" ? "PATCH" : "DELETE",
+      body: JSON.stringify({
+        name,
+        ...(afterColumnId ? { afterColumnId } : {}),
+      }),
+    },
+  )

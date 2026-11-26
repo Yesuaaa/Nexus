@@ -8,6 +8,18 @@ const eventDescriptions: Record<
   Exclude<ServiceLogEvent, "WORKFLOW_ACTION_COMPLETED">,
   string
 > = {
+  INVOICE_PAYMENT_RECORDED: "Recorded an invoice payment.",
+  INVOICE_PAYMENT_ALLOCATED: "Allocated a commencement payment to an invoice.",
+  INVOICE_CANCELLED: "Cancelled an invoice.",
+  INVOICE_ISSUED: "Issued an invoice.",
+  INVOICE_CREATED: "Created an invoice draft.",
+  INVOICE_EDITED: "Updated an invoice draft.",
+  EXPENSE_CREATED: "Recorded an expense.",
+  EXPENSE_EDITED: "Updated an expense.",
+  EXPENSE_DELETED: "Deleted an expense.",
+  BILLING_SETTINGS_UPDATED: "Updated billing configuration.",
+  PAYMENT_METHOD_CREATED: "Added a billing payment method.",
+  PAYMENT_METHOD_DELETED: "Removed a billing payment method.",
   SERVICE_CREATED: "Created a service offering.",
   SERVICE_UPDATED: "Updated a service offering.",
   SERVICE_STATUS_CHANGED: "Changed a service offering's availability.",

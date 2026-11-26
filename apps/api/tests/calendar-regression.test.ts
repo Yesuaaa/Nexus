@@ -215,3 +215,41 @@ test("[P20-API-003] consultation action validation rejects impossible leap-day d
     /invalid date/i,
   )
 })
+
+test("meeting and consultation validators preserve valid dates and offsets", () => {
+  for (const [day, valid] of [
+    ["2032-02-29", true],
+    ["2031-02-29", false],
+    ["2032-02-30", false],
+    ["2032-04-31", false],
+    ["2032-04-30", true],
+    ["2032-05-01", true],
+  ] as const) {
+    const schedule = {
+      startsAt: day + "T00:15:00+08:00",
+      endsAt: day + "T01:15:00+08:00",
+      location: "Online",
+      notes: "",
+    }
+    const meeting = () =>
+      parseMeeting({
+        ...schedule,
+        clientActionId: randomUUID(),
+        bookingIds: [],
+      })
+    const consultation = () =>
+      parseAction({
+        ...schedule,
+        actionId: randomUUID(),
+        expectedVersion: 1,
+        type: "SCHEDULE_CONSULTATION",
+      })
+    if (valid) {
+      assert.doesNotThrow(meeting)
+      assert.doesNotThrow(consultation)
+    } else {
+      assert.throws(meeting, /valid meeting date and time/i)
+      assert.throws(consultation, /invalid date/i)
+    }
+  }
+})

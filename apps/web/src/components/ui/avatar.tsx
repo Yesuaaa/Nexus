@@ -13,11 +13,15 @@ export function Avatar({
   name,
   className,
   imageUrl,
+  size = "default",
+  initials,
   fallback = "?",
 }: {
   name: string | null | undefined
   className?: string
   imageUrl?: string | null
+  size?: "default" | "sm"
+  initials?: string
   /** Shown when the name has no letters. */
   fallback?: string
 }) {
@@ -30,7 +34,8 @@ export function Avatar({
     <span
       aria-hidden="true"
       className={cn(
-        "relative grid aspect-square size-9 shrink-0 place-items-center overflow-hidden rounded-full bg-[#e9edf6] text-[11px] font-semibold text-[#294a9b]",
+        "relative grid aspect-square shrink-0 place-items-center overflow-hidden rounded-full bg-[#e9edf6] font-semibold text-[#294a9b]",
+        size === "sm" ? "size-6 text-[9px]" : "size-9 text-[11px]",
         className,
       )}
     >
@@ -42,7 +47,7 @@ export function Avatar({
           onError={() => setFailedUrl(imageUrl!)}
         />
       ) : (
-        getInitials(name) || fallback
+        (initials ?? getInitials(name)) || fallback
       )}
     </span>
   )

@@ -25,7 +25,7 @@ export function OverviewPanel({
   description?: string
   action?: ReactNode
   titleClassName?: string
-  variant?: "default" | "table"
+  variant?: "default" | "table" | "compact" | "highlight"
   className?: string
   children: ReactNode
 }) {
@@ -39,6 +39,10 @@ export function OverviewPanel({
         variant === "table"
           ? "overflow-hidden border-[#e8ebef] bg-background"
           : "border-[#eceef1] p-5 max-[560px]:p-4",
+        variant === "compact" &&
+          "bg-background p-4 shadow-[0_1px_3px_rgb(30_55_80_/_4%)]",
+        variant === "highlight" &&
+          "border-[#cfdbed] bg-[#f2f6fc] p-4 shadow-[0_2px_8px_rgb(30_55_80_/_5%)]",
         className,
       )}
     >
@@ -71,7 +75,13 @@ export function OverviewPanel({
         </div>
         {action}
       </div>
-      <div className={variant === "table" ? "p-4" : "mt-4"}>{children}</div>
+      <div
+        className={
+          variant === "table" ? "p-4" : variant === "default" ? "mt-4" : "mt-3"
+        }
+      >
+        {children}
+      </div>
     </section>
   )
 }

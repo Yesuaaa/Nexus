@@ -61,6 +61,7 @@ export type InquiryListing = {
   total: number
   page: number
   pageSize: number
+  counts: Record<InquiryStatus | "total", number>
 }
 
 export type InquiryInput = {

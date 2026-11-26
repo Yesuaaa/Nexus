@@ -17,6 +17,7 @@ import {
   MessageSquareText,
   MessagesSquare,
   MoveLeft,
+  Settings,
   UsersRound,
   WalletCards,
 } from "lucide-react"
@@ -84,6 +85,7 @@ const navigationIcons: Partial<Record<RoutePolicyId, NavIcon>> = {
   clients: Contact,
   departments: DepartmentIcon,
   services: ServiceIcon,
+  "service-inquiries": Inbox,
   "service-requests": ClipboardList,
   "module-service-operations": ClipboardList,
   calendar: CalendarDays,
@@ -532,6 +534,65 @@ export function Sidebar({
   }
 
   function renderPolicy(policy: RoutePolicy) {
+    if (policy.id === "module-billing-pages") {
+      const root = "/billing-finance"
+      const link = (href: string, label: string) => ({
+        href: `${root}/${href}`,
+        label,
+      })
+      const groups: NavGroup[] = [
+        {
+          kind: "group",
+          label: "Billing & Finance",
+          icon: ClipboardList,
+          visible: policy.canAccess,
+          links: [
+            link("overview", "Overview"),
+            {
+              ...link("management", "Management"),
+              match: (path: string) =>
+                path === `${root}/management` ||
+                path.startsWith(`${root}/management/`),
+            },
+          ],
+        },
+        {
+          kind: "group",
+          label: "Reports",
+          icon: Gauge,
+          visible: policy.canAccess,
+          links: [
+            {
+              ...link("expenses", "Expenses"),
+              match: (path: string) =>
+                path === `${root}/expenses` ||
+                path === `${root}/reports/expense-summary`,
+            },
+            link("reports/revenue", "Revenue"),
+            link("reports/collections", "Collections"),
+            link("reports/receivables", "Receivables"),
+          ],
+        },
+        {
+          kind: "group",
+          label: "Settings",
+          icon: Settings,
+          visible: policy.canAccess,
+          links: [
+            link("settings/billing-configuration", "Billing Configuration"),
+            link("settings/payment-methods", "Payment Methods"),
+            link("settings/invoice-numbering", "Invoice Numbering"),
+          ],
+        },
+      ]
+      return (
+        <div key={policy.id}>
+          {renderGroup(groups[0])}
+          {renderGroup(groups[1])}
+          {renderGroup(groups[2])}
+        </div>
+      )
+    }
     if (policy.id === "module-payroll")
       return renderGroup(payrollModuleGroup(policy.canAccess))
 

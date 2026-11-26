@@ -1,3 +1,5 @@
+import { parsePage } from "../../shared/query/pagination.js"
+import { listClientOutstandingActions } from "./workflow.client-actions.js"
 import { json, Router } from "express"
 import { recordIdParam } from "../../shared/validation.js"
 import { requireAuth } from "../auth/auth.middleware.js"
@@ -11,15 +13,37 @@ import {
 import { actOnWorkflow } from "./workflow.service.js"
 import { getWorkflow } from "./workflow.snapshot.js"
 import { listClientBillingPayments } from "./workflow.billing.js"
+import { listClientInvoices } from "../billing/client-invoices.js"
 
 export const requestWorkflowRouter = Router()
 requestWorkflowRouter.use(requireAuth)
+requestWorkflowRouter.get("/outstanding-actions", async (request, response) => {
+  const user = request.auth!.user
+  if (user.role !== "USER") {
+    response.status(403).json({ error: "Client access required" })
+    return
+  }
+  const page = parsePage(request.query.page)
+  if (page === null) {
+    response.status(400).json({ error: "Invalid page" })
+    return
+  }
+  response.json(await listClientOutstandingActions(user.id, page))
+})
 requestWorkflowRouter.get("/billing", async (request, response) => {
   if (request.auth!.user.role !== "USER")
     return response
       .status(403)
       .json({ error: "Billing Logs are available to clients" })
   response.json(await listClientBillingPayments(request.auth!.user.id))
+})
+requestWorkflowRouter.get("/billing/invoices", async (request, response) => {
+  if (request.auth!.user.role !== "USER")
+    return response
+      .status(403)
+      .json({ error: "Billing Logs are available to clients" })
+  response.set("Cache-Control", "private, no-store")
+  return response.json(await listClientInvoices(request.auth!.user.id))
 })
 requestWorkflowRouter.get("/notifications", async (request, response) => {
   response.json(await listWorkflowNotifications(request.auth!.user.id))

@@ -11,6 +11,7 @@ export type ProjectConversationSummary = {
   participants: { id: string; fullName: string | null }[]
   updatedAt: string
   lastMessage: RequestMessage | null
+  lastTeamMessage?: RequestMessage | null
   unreadCount: number
 }
 export type ProjectConversationList = {

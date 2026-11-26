@@ -25,6 +25,13 @@ export const PayrollCapability = {
 export type PayrollCapability =
   (typeof PayrollCapability)[keyof typeof PayrollCapability]
 
+export const BillingCapability = {
+  READ: "billing:read",
+  MANAGE: "billing:manage",
+} as const
+export type BillingCapability =
+  (typeof BillingCapability)[keyof typeof BillingCapability]
+
 export const OperationalCapability = {
   ASSIGNED_STAFF: "staff:assigned-operation",
   DEPARTMENT_HEAD: "department-head:assigned-operation",
@@ -58,6 +65,17 @@ export type OperationalAccess =
 
 function isActive(actor: AuthorizationActor): boolean {
   return actor.isActive && actor.accountDeletedAt === null
+}
+
+export function hasBillingCapability(
+  actor: AuthorizationActor,
+  capability: BillingCapability,
+): boolean {
+  if (!isActive(actor)) return false
+  if (capability === BillingCapability.READ)
+    return actor.role === Role.ADMIN || actor.role === Role.SUPERADMIN
+  if (capability === BillingCapability.MANAGE) return actor.role === Role.ADMIN
+  return false
 }
 
 /** Does not bypass requireRole(), feature permissions, or workflow validation. */

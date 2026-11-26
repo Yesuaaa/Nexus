@@ -29,6 +29,7 @@ import {
   type RequestMessage,
 } from "../api/request-conversations-api"
 import { Avatar } from "@/components/ui/avatar"
+import { conversationRowTones } from "@/components/ui/button-variants"
 import {
   ConversationListItem,
   ProjectConversationListItem,
@@ -894,8 +895,8 @@ function ConversationInbox({
                         "flex items-center gap-3 rounded-xl px-3 py-3 no-underline transition-colors",
                         focusRing,
                         selected
-                          ? "bg-[#203f8c] text-white"
-                          : "text-[#182235] hover:bg-[#e9eef5] hover:text-[#203a78]",
+                          ? conversationRowTones.selected
+                          : conversationRowTones.idle,
                         railCollapsed &&
                           "relative mx-auto h-14 w-full max-w-14 justify-center gap-0 px-0 max-[767px]:h-auto max-[767px]:w-full max-[767px]:justify-start max-[767px]:gap-3 max-[767px]:px-3",
                       )}

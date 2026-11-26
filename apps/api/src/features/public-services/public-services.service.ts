@@ -25,7 +25,9 @@ function present(
   })
   return {
     ...publicData,
-    imageUrl: safeHttpsUrl(serviceImagePublicUrl(imagePath)),
+    imageUrl: imagePath?.startsWith("local-services/")
+      ? serviceImagePublicUrl(imagePath)
+      : safeHttpsUrl(serviceImagePublicUrl(imagePath)),
     pricing: pricingTemplate?.isPublic ? price(pricingTemplate) : null,
     packages: packages.map(
       ({
@@ -89,12 +91,13 @@ export const publicServicesService = {
       fingerprint,
     })
   },
-  async listInquiries(page: unknown, status: unknown) {
+  async listInquiries(page: unknown, status: unknown, query?: unknown) {
     return publicServicesRepository.listInquiries(
       pageInput(page),
       status === undefined || status === "ALL"
         ? undefined
         : statusInput(status),
+      searchInput(query),
     )
   },
   async review(id: unknown, actorId: string, body: unknown) {

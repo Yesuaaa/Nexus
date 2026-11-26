@@ -6,7 +6,7 @@ import type {
 } from "../api/project-workspace-api"
 
 export type ProjectOverviewSection =
-  "work" | "deliverables" | "notes" | "requests" | "team"
+  "work" | "deliverables" | "notes" | "requests" | "team" | "activity"
 
 export type ProjectOverviewAttentionItem = {
   id: string

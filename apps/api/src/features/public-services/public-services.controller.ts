@@ -47,6 +47,7 @@ serviceInquiriesRouter.get(
       await publicServicesService.listInquiries(
         request.query.page,
         request.query.status,
+        request.query.q,
       ),
     )
   },

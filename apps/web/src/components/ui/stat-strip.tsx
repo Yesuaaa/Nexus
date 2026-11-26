@@ -36,6 +36,7 @@ export function StatStrip({
   compact = false,
   wrapCaption = false,
   hoverEffects = true,
+  wrapLabels = false,
   className,
 }: {
   items: StatStripItem[]
@@ -46,6 +47,7 @@ export function StatStrip({
   compact?: boolean
   wrapCaption?: boolean
   hoverEffects?: boolean
+  wrapLabels?: boolean
   className?: string
 }) {
   return (
@@ -78,7 +80,8 @@ export function StatStrip({
               </span>
               <h2
                 className={cn(
-                  "m-0 truncate text-xs font-medium text-[#65718a]",
+                  "m-0 text-xs font-medium text-[#65718a]",
+                  wrapLabels ? "break-words" : "truncate",
                   href && hoverEffects && "group-hover:text-[#203f8c]",
                 )}
               >

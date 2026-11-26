@@ -45,6 +45,7 @@ services:
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
       SUPABASE_SERVICE_IMAGES_BUCKET: ${SUPABASE_SERVICE_IMAGES_BUCKET:-service-images}
+      SERVICE_IMAGE_STORAGE: local
       CHOKIDAR_USEPOLLING: "true"
       NODE_ENV: development
       PAYROLL_LOCAL_SIMULATOR: "true"
@@ -52,6 +53,7 @@ services:
     volumes:
       - ./apps/api/src:/workspace/apps/api/src
       - ./apps/api/prisma:/workspace/apps/api/prisma
+      - ./apps/api/uploads/service-images:/workspace/apps/api/uploads/service-images
       - ./apps/api/prisma.config.ts:/workspace/apps/api/prisma.config.ts:ro
     ports:
       - "${API_PORT:-3001}:3001"

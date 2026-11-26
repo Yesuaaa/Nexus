@@ -7,7 +7,10 @@ import {
 } from "../auth/auth.capabilities.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 import { readWorkPlan } from "./templates.js"
-import { parseWorkspaceIdentity } from "./workspace-identity.js"
+import {
+  parseWorkspaceIdentity,
+  projectWorkspaceIdentity,
+} from "./workspace-identity.js"
 import {
   activityCounts,
   projectInclude,
@@ -472,9 +475,25 @@ export async function getProjectWorkspace(userId: string, workspaceId: string) {
             take: 100,
           })
         : []
+      const workspaceKey = projectWorkspaceIdentity(projects[0])
+      const columns = await tx.workspaceKanbanColumn.findMany({
+        where: { workspaceKey },
+        orderBy: { position: "asc" },
+      })
+      const assignments = await tx.workspaceKanbanAssignment.findMany({
+        where: { workspaceKey, projectId: { in: projectIds } },
+      })
       return {
         ...workspace,
         workstreams: detailedWorkstreams,
+        kanbanColumns: columns.map(({ id, name }) => ({ id, name })),
+        kanbanAssignments: assignments.map(
+          ({ projectId, taskId, columnId }) => ({
+            projectId,
+            taskId,
+            columnId,
+          }),
+        ),
         activity: events.map(({ workflow, ...event }) => ({
           ...event,
           summary: safeProjectActivitySummary(event.type, event.summary),
