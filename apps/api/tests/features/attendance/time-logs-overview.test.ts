@@ -114,7 +114,8 @@ test(
       where: { id: deleted.user.id },
       data: { accountDeletedAt: new Date() },
     })
-    for (const path of ["/departments", overview]) {
+    // PG-015-F001-A016-T003 extends the existing bearer matrix to Records.
+    for (const path of ["/departments", overview, "/employees", "/records"]) {
       for (const token of [
         undefined,
         "invalid",
@@ -134,6 +135,30 @@ test(
       assert.deepEqual(Object.keys((await response.json()) as object), [
         "error",
       ])
+    }
+    const manager = await actor("records-admin", "ADMIN")
+    const head = await actor("records-head", "STAFF")
+    const department = await prisma.department.create({
+      data: { name: "Scoped", headId: head.user.id },
+    })
+    const outside = await prisma.department.create({
+      data: { name: "Outside" },
+    })
+    for (const path of ["/employees", "/records"]) {
+      assert.equal(
+        (await read(path + "?departmentId=" + outside.id, manager.token))
+          .status,
+        200,
+      )
+      assert.equal(
+        (await read(path + "?departmentId=" + department.id, head.token))
+          .status,
+        200,
+      )
+      assert.equal(
+        (await read(path + "?departmentId=" + outside.id, head.token)).status,
+        403,
+      )
     }
   },
 )

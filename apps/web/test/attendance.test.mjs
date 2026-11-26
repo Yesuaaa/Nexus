@@ -272,6 +272,40 @@ test("all attendance navigation pages preserve module ownership and role boundar
   // PG-014-F001-A001-T002
   const timeLogs = "/attendance/time-logs/overview"
   const head = { ...staff, headOf: { id: "dept", name: "Design" } }
+  // PG-015-F001-A001-T001
+  for (const records of [
+    "/attendance/time-logs/records",
+    "/attendance/records",
+  ]) {
+    assert.equal(canAccessRoute(head, records), true)
+    assert.equal(
+      getActiveWorkspaceModuleId(head, records),
+      "attendance-monitoring",
+    )
+    assert.equal(canAccessRoute({ ...head, isActive: false }, records), false)
+    assert.equal(canAccessRoute(staff, records), false)
+    assert.equal(canAccessRoute({ ...staff, role: "USER" }, records), false)
+    for (const role of ["ADMIN", "SUPERADMIN"]) {
+      const permitted = {
+        ...staff,
+        role,
+        permissions: [Permissions.EMPLOYEES_READ],
+      }
+      assert.equal(canAccessRoute(permitted, records), true)
+      assert.equal(
+        getActiveWorkspaceModuleId(permitted, records),
+        "attendance-monitoring",
+      )
+      assert.equal(
+        canAccessRoute({ ...permitted, permissions: [] }, records),
+        false,
+      )
+      assert.equal(
+        canAccessRoute({ ...permitted, isActive: false }, records),
+        false,
+      )
+    }
+  }
   assert.equal(canAccessRoute(head, timeLogs), true)
   assert.equal(canAccessRoute({ ...head, isActive: false }, timeLogs), false)
   assert.equal(canAccessRoute({ ...staff, role: "USER" }, timeLogs), false)

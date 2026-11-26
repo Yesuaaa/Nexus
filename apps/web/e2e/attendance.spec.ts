@@ -1185,12 +1185,14 @@ test("attendance employee search keeps a single pending state until results sett
   try {
     await page.goto("/attendance/time-logs/records")
     const table = page.getByRole("table", { name: "Employees", exact: true })
-    await expect(
-      table.getByRole("button", { name: "View logs for Attendance staff" }),
-    ).toBeVisible()
     const search = page.getByRole("searchbox", {
       name: "Search attendance employees",
     })
+    // Search for the seeded row because fixture growth can move it off page one.
+    await search.fill("BROWSER-staff")
+    await expect(
+      table.getByRole("button", { name: "View logs for Attendance staff" }),
+    ).toBeVisible()
     await search.fill("No matching employee")
     await searchStarted
     await expect(table).toHaveAttribute("aria-busy", "true")
@@ -4201,6 +4203,9 @@ test("a reactivated employee can clock in after a manager reconciles a suspended
     await signIn(reviewer, role)
     await reviewer.goto("/attendance/time-logs/records")
     await reviewer
+      .getByRole("searchbox", { name: "Search attendance employees" })
+      .fill("BROWSER-recovery")
+    await reviewer
       .getByRole("button", { name: "View logs for Attendance recovery" })
       .click()
     await reviewer
@@ -4359,6 +4364,9 @@ test.describe("WC-I3-F02 reconciliation timestamps", () => {
       await page.clock.setFixedTime(new Date("2026-11-13T12:00:00Z"))
       await signIn(page, "admin")
       await page.goto("/attendance/time-logs/records")
+      await page
+        .getByRole("searchbox", { name: "Search attendance employees" })
+        .fill(`BROWSER-${actor}`)
       await page
         .getByRole("button", { name: `View logs for Attendance ${actor}` })
         .click()

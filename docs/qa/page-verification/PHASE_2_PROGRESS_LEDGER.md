@@ -579,3 +579,23 @@ Typecheck regenerated apps/web/next-env.d.ts to point at non-dev generated route
 - **Integration:** Real page, Express, Prisma and isolated PGlite. Playwright forwards attendance requests, bypassing the Next.js API rewrite. Initial retry-case HTTP 503 responses were synthetic. Successful sibling and retry reads were real.
 - **Preservation:** Existing assertions and historical PG-001 through PG-013 classifications remain preserved. Production code, permissions, schema and migrations were unchanged. PG-015 was not started.
 - **Checks and reports:** `pnpm format`, `pnpm lint`, `pnpm typecheck` and `git diff --check` exited 0. The four Phase 2.2 reports are under phase-2/PG-014/.
+
+## PG-015 Phase 2.1 discovery and design
+
+- **Status:** Source discovery and test design complete for /attendance/time-logs/records, AttendanceRecordsPage, Workforce Compliance. Phase 1 identity matches current source. Manager reads remain distinct from the employees:manage reconciliation write.
+- **Baseline:** Branch 293-test-full-system-audit-for-verifying-recent-changes, HEAD ea0b8703fc518ac49151bc81c7ac7744f96a4c9c. Entry was clean and one commit after the previously reported HEAD. That commit contains PG-014 tests and QA documentation.
+- **Design:** 20 atomic behaviors, 47 records, 45 implementable (3 Unit, 14 API including 2 opt-in PostgreSQL cases, 16 Browser, 12 Integration). There are 22 proposed new declarations, 3 additive assertion groups, 20 existing-sufficient records and 2 deferred contracts for incomplete-range presentation and route-remount filter/view persistence.
+- **Boundaries:** Browser fixture forwarding exercises real Express, Prisma and isolated PGlite while bypassing the Next.js API rewrite. Existing mocked responses remain distinguished. A new disposable PostgreSQL plan verifies reconciliation locks independently of the historical PG-012 blocker.
+- **Preservation:** No PG-015 execution or defect attribution. The shared row-action menu has a PG-015 keyboard verification scenario. PG-001 through PG-014 findings remain as documented, including PG-014's 36/36 and two deferred contracts. Seven PG-015 reports are under phase-2/PG-015/.
+- **Checks:** pnpm format initially exited 1 because the Windows shared-store lock was inaccessible. With store access, pnpm format, pnpm lint and pnpm typecheck each exited 0. The final targeted Prettier check and git diff --check exited 0. No automated tests ran.
+
+## PG-015 Phase 2.2 implementation and focused verification
+
+- **Status:** Implementation complete. All 45 implementable records have outcomes. 44 passed and PG-015-F001-A010-T002 reproduced PG-004-D-001. Two product contracts remain deferred. Verification is partially complete with the confirmed shared defect.
+- **Baseline:** Branch 293-test-full-system-audit-for-verifying-recent-changes at ea0b8703fc518ac49151bc81c7ac7744f96a4c9c. The task-entry modifications were seven PG-015 design reports and the ledger. All were preserved. No staged or production, permission, schema, or migration changes.
+- **Counts:** 47 unique records, 22 new declarations, three additive groups, 20 existing-sufficient and two contract-blocked. Final runnable outcomes are 3 Unit, 14 API including both PostgreSQL cases, 15 Browser and 12 Integration passed, with one Browser failure.
+- **Focused runs:** Unit 15/15, final API/PGlite 83/83, final combined Chromium 28/29 with one worker and no retries. Eleven browser/Express/PGlite declarations and three mocked compatibility declarations passed. Fourteen of 15 new mocked Chromium tests passed. Initial fixture and locator failures were triaged without removing existing assertions.
+- **PostgreSQL:** A019-T001 observed two independent lock waiters, one 200/one 409 and one grouped close. A019-T002 observed the placement race, no write effects on 409, and 200 on a fresh request. Both used freshly migrated and verified empty PostgreSQL 18.4 databases in the owned loopback cluster. Database and cluster cleanup completed.
+- **Shared menu:** At 390, 820 and 1440 CSS pixels keyboard activation reported expanded but exposed no accessible View details action. Pointer activation opened the same row. The final combined and focused replay reproduced this defect. PG-004-D-001 remains open and associated with PG-015.
+- **Contracts and integration:** A007-T003 incomplete date presentation and A020-T003 remount filter/view state remain deferred. Browser fixture forwarding reached real Express/Prisma/PGlite and bypassed the Next.js API rewrite. Earlier page outcomes and blockers remain preserved.
+- **Checks and reports:** pnpm format, pnpm lint, pnpm typecheck and git diff --check exited 0. The four Phase 2.2 reports are under phase-2/PG-015/. PG-016 was not started.
