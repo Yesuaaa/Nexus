@@ -599,3 +599,22 @@ Typecheck regenerated apps/web/next-env.d.ts to point at non-dev generated route
 - **Shared menu:** At 390, 820 and 1440 CSS pixels keyboard activation reported expanded but exposed no accessible View details action. Pointer activation opened the same row. The final combined and focused replay reproduced this defect. PG-004-D-001 remains open and associated with PG-015.
 - **Contracts and integration:** A007-T003 incomplete date presentation and A020-T003 remount filter/view state remain deferred. Browser fixture forwarding reached real Express/Prisma/PGlite and bypassed the Next.js API rewrite. Earlier page outcomes and blockers remain preserved.
 - **Checks and reports:** pnpm format, pnpm lint, pnpm typecheck and git diff --check exited 0. The four Phase 2.2 reports are under phase-2/PG-015/. PG-016 was not started.
+
+## PG-016 Phase 2.1 discovery and design
+
+- Source discovery and test design complete for /billing-logs, inline BillingLogsPage, client Service Operations history. Entry was clean on branch 293-test-full-system-audit-for-verifying-recent-changes at 81edb92d0e78f387eca6297430679c0b7628dfd3. The intervening commit committed PG-015 tests and evidence.
+- Twelve atomic behaviors and 19 case records. Nine new declarations, three additive groups, six existing-sufficient and one contract-blocked preview error UX. Eighteen implementable records comprise 1 Unit, 4 API, 12 Browser and 1 Integration.
+- Existing mocked billing scenarios and API/PGlite ownership assertions are preserved. Proposed browser/Express/PGlite integration bypasses Next rewrite. No dedicated PostgreSQL requirement identified.
+- PG-001 through PG-015 findings remain preserved, including PG-015 shared-menu failure and two deferred contracts. No PG-016 tests ran or source/fixtures changed. Seven design reports added.
+- Quality checks pnpm format, pnpm lint and pnpm typecheck exited 0. Final git diff --check exited 0. Automated tests were not run.
+
+## PG-016 Phase 2.2 implementation and focused verification
+
+- **Status:** Implementation complete, verification partially complete. All 18 implementable records have outcomes, 17 passed and PG-016-F001-A012-T001 reproduced the new PG-016-D-001 dialog focus-return defect. Preview-error UX A008-T003 remains contract-blocked.
+- **Baseline:** Branch 293-test-full-system-audit-for-verifying-recent-changes at 81edb92d0e78f387eca6297430679c0b7628dfd3. The entry ledger and seven untracked design reports were preserved. No files staged or production, permissions, schema or migrations changed.
+- **Implementation:** Nine new declarations, three additive groups, six existing-sufficient records preserved. The three additions extend due ordering, conditional summary values, and protected file bytes/headers/identity. Two isolated test fixture helpers support real client/payment/file persistence.
+- **Execution:** Unit 1/1, API/PGlite plus workflow compatibility 21/21, final new API pair 2/2. Corrected Chromium 13/14, including 1/1 real browser/Express/PGlite integration and 3/3 internal-role compatibility declarations. One worker, zero retries. Totals overlap case records.
+- **Security and finance:** Two client workflows were isolated. Own billing and protected receipt succeeded, foreign files returned 404, and payment/workflow/file snapshots were unchanged after reads. Exact Decimal and independent PHP display values passed. No financial transaction or provider call executed.
+- **Defect:** At 390, 820 and 1440 CSS pixels Escape closes the proof dialog but fails to return focus to the original View proof button. Combined and dedicated replay reproduced PG-016-D-001. Existing PG-004-D-001 remains separately recorded.
+- **Boundary and contracts:** Actual Next page with billing/file requests forwarded to real Express/Prisma/PGlite. Account/shell bootstrap is mocked; Next.js API rewrite bypassed. Preview-error feedback remains deferred. Earlier page outcomes and blockers retain their classifications.
+- **Reports and checks:** Four execution reports under phase-2/PG-016/. pnpm format, pnpm lint, pnpm typecheck and git diff --check exited 0. PG-017 was not started.

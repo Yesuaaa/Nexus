@@ -1017,6 +1017,48 @@ test(
         assert.ok(!serialized.includes("sha256"))
         assert.ok(!serialized.includes("passwordHash"))
         assert.ok(!serialized.includes("clientVisible"))
+        // PG-016-F001-A011-T001: independent protected-file identity and bytes.
+        const proofName = "PG-016 résumé (copy).txt"
+        const proofContent = "Synthetic client receipt only."
+        const publicProof = await upload(client, proofName, proofContent)
+        const downloaded = await fetch(`${path()}/files/${publicProof.id}`, {
+          headers: client.headers,
+        })
+        assert.equal(downloaded.status, 200)
+        assert.equal(await downloaded.text(), proofContent)
+        assert.equal(
+          downloaded.headers.get("content-type"),
+          "text/plain; charset=utf-8",
+        )
+        assert.equal(
+          downloaded.headers.get("content-length"),
+          String(Buffer.byteLength(proofContent)),
+        )
+        assert.equal(
+          downloaded.headers.get("x-content-type-options"),
+          "nosniff",
+        )
+        assert.equal(
+          downloaded.headers.get("content-security-policy"),
+          "sandbox; default-src 'none'",
+        )
+        assert.equal(
+          downloaded.headers.get("content-disposition"),
+          "attachment; filename=\"download.txt\"; filename*=UTF-8''PG-016%20r%C3%A9sum%C3%A9%20%28copy%29.txt",
+        )
+        for (const [requestId, fileId, actor] of [
+          [request.id, publicProof.id, otherClient],
+          [anotherRequest.id, publicProof.id, otherClient],
+          [request.id, "pg016-missing", client],
+        ] as const) {
+          const denied = await fetch(`${path(requestId)}/files/${fileId}`, {
+            headers: actor.headers,
+          })
+          assert.equal(denied.status, 404)
+          const text = await denied.text()
+          assert.ok(!text.includes(proofContent))
+          assert.ok(!text.includes(proofName))
+        }
       },
     )
 
