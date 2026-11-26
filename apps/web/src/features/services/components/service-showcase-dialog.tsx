@@ -1,8 +1,8 @@
 "use client"
 
 import Image from "next/image"
-import { useCallback, useEffect, useRef } from "react"
-import { gsap } from "gsap"
+import { motion, useReducedMotion } from "motion/react"
+import { useHoverLabel } from "@/components/ui/use-hover-label"
 import { ArrowRight, ChevronDown, Plus } from "lucide-react"
 import { CloseIcon } from "@/components/layout/icons"
 import { focusRing } from "@/components/layout/styles"
@@ -30,62 +30,15 @@ export function ServiceShowcaseDialog({
   const { open, handleOpenChange, closeAfterTransition } =
     useAnimatedPanelClose(onClose)
   const restoreFocus = useRestoreFocus()
-  const nameRef = useRef<HTMLSpanElement>(null)
-  const typeTweenRef = useRef<gsap.core.Tween | null>(null)
+  const reducedMotion = useReducedMotion()
+  const {
+    labelRef: nameRef,
+    show: showExplore,
+    restore: restoreServiceName,
+  } = useHoverLabel(service.name, "Explore")
   const departmentLabel =
     service.departments.map((department) => department.name).join(" · ") ||
     "EXP Service"
-
-  const animateIcon = useCallback((icon: HTMLSpanElement | null) => {
-    if (!icon) return
-    const media = gsap.matchMedia()
-    media.add("(prefers-reduced-motion: no-preference)", () => {
-      gsap.to(icon, {
-        y: -6,
-        duration: 1.6,
-        ease: "sine.inOut",
-        repeat: -1,
-        yoyo: true,
-      })
-    })
-
-    return () => media.revert()
-  }, [])
-
-  useEffect(
-    () => () => {
-      typeTweenRef.current?.kill()
-    },
-    [],
-  )
-
-  function showExplore() {
-    const name = nameRef.current
-    if (!name) return
-    typeTweenRef.current?.kill()
-
-    const target = "Explore"
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      name.textContent = target
-      return
-    }
-
-    const progress = { characters: 0 }
-    name.textContent = ""
-    typeTweenRef.current = gsap.to(progress, {
-      characters: target.length,
-      duration: 0.5,
-      ease: "none",
-      onUpdate: () => {
-        name.textContent = target.slice(0, Math.ceil(progress.characters))
-      },
-    })
-  }
-
-  function restoreServiceName() {
-    typeTweenRef.current?.kill()
-    if (nameRef.current) nameRef.current.textContent = service.name
-  }
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -118,12 +71,19 @@ export function ServiceShowcaseDialog({
             className="pointer-events-none absolute inset-0 flex min-w-0 flex-col p-6 text-white max-[560px]:p-5"
             aria-hidden="true"
           >
-            <span
-              ref={animateIcon}
+            <motion.span
+              initial={{ y: 0 }}
+              animate={{ y: reducedMotion ? 0 : -6 }}
+              transition={{
+                duration: reducedMotion ? 0 : 1.6,
+                ease: (progress) => (1 - Math.cos(Math.PI * progress)) / 2,
+                repeat: reducedMotion ? 0 : Infinity,
+                repeatType: "reverse",
+              }}
               className="grid size-14 shrink-0 place-items-center rounded-2xl border-2 border-current bg-[rgb(22_48_105_/_10%)] max-[560px]:size-12"
             >
               <ServiceIcon iconKey={service.iconKey} />
-            </span>
+            </motion.span>
             <span className="mt-auto flex min-w-0 items-end justify-between gap-4">
               <span
                 ref={nameRef}

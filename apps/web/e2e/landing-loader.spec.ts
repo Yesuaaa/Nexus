@@ -9,7 +9,7 @@ test("a fresh homepage visit shows the logo loader and releases the page", async
   await expect(loader).toBeVisible()
   await expect(loader).toBeHidden({ timeout: 10000 })
   await expect(
-    page.getByRole("link", { name: "Explore services", exact: true }).first(),
+    page.getByRole("link", { name: "Explore Services", exact: true }).first(),
   ).toBeVisible()
 })
 
@@ -22,7 +22,7 @@ test("reduced motion releases the homepage and navigation does not replay the in
     page.getByRole("status", { name: "Loading Converyn" }),
   ).toBeHidden()
   await page
-    .getByRole("link", { name: "Explore services", exact: true })
+    .getByRole("link", { name: "Explore Services", exact: true })
     .first()
     .click()
   await expect(page).toHaveURL(/\/explore\/services/)

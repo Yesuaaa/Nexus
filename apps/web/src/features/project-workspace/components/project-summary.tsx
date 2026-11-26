@@ -55,9 +55,7 @@ export function ProjectSummary({
   )
   const completed = summary.tasks.completed
   const totalTasks = summary.tasks.total
-  const percent = totalTasks
-    ? Math.round((completed / totalTasks) * 100)
-    : 0
+  const percent = totalTasks ? Math.round((completed / totalTasks) * 100) : 0
   const completedPhases = phases.filter(
     (phase) =>
       phase.tasks.length > 0 &&

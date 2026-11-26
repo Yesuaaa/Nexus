@@ -3,7 +3,8 @@
 import Link from "next/link"
 import { ArrowUpRight, ChevronDown, Menu, X } from "lucide-react"
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { useInView, useReducedMotion } from "framer-motion"
+import { animate, useInView, useReducedMotion } from "motion/react"
+import type { AnimationPlaybackControls } from "motion/react"
 
 const headerClass =
   "sticky top-0 z-40 bg-(--landing-paper)/45 backdrop-blur-[1.5px] [border-bottom:1px_solid_var(--landing-line)]"
@@ -360,20 +361,27 @@ export function LandingMotion({
     )
       return
 
-    const animations = new Set<Animation>()
+    const animations = new Set<AnimationPlaybackControls>()
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
           if (!entry.isIntersecting) continue
-          const animation = entry.target.animate(
-            [
-              { opacity: 0.35, transform: "translateY(26px)" },
-              { opacity: 1, transform: "translateY(0)" },
-            ],
-            { duration: 750, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+          const animation = animate(
+            entry.target,
+            {
+              opacity: [0.35, 1],
+              transform: ["translateY(26px)", "translateY(0)"],
+            },
+            {
+              duration: 0.75,
+              ease: [0.22, 1, 0.36, 1],
+              onComplete: () => {
+                animation.cancel()
+                animations.delete(animation)
+              },
+            },
           )
           animations.add(animation)
-          animation.onfinish = () => animations.delete(animation)
           observer.unobserve(entry.target)
         }
       },

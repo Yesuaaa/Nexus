@@ -4,7 +4,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
-import { gsap } from "gsap"
+import { useCardImageReveal } from "@/components/ui/use-card-image-reveal"
 import { useHoverLabel } from "@/components/ui/use-hover-label"
 import { SearchField } from "@/components/ui/search-field"
 import {
@@ -17,6 +17,7 @@ import {
 import { focusRing } from "@/components/layout/styles"
 import { cn } from "@/lib/utils"
 import { serviceIconOptions } from "@/features/services/components/service-icon"
+import { ProjectsRevealMotion } from "@/features/projects/components/projects-hero-motion"
 import {
   ArrowUpRight,
   ArrowLeft,
@@ -117,48 +118,17 @@ function PublicServiceCard({
   index: number
 }) {
   const cardRef = useRef<HTMLElement>(null)
-  const revealRef = useRef<HTMLSpanElement>(null)
+  const { revealRef, showReveal, hideReveal } = useCardImageReveal(cardRef, 1)
   const [imageFailed, setImageFailed] = useState(false)
   const { labelRef, show, restore } = useHoverLabel(service.name)
 
-  useEffect(() => {
-    const reveal = revealRef.current
-    return () => gsap.killTweensOf(reveal)
-  }, [])
-
-  function showReveal(clientX?: number, clientY?: number) {
-    const card = cardRef.current
-    const reveal = revealRef.current
-    if (!card || !reveal) return
-    const bounds = card.getBoundingClientRect()
-    const x = (clientX ?? bounds.left + bounds.width / 2) - bounds.left
-    const y = (clientY ?? bounds.top + bounds.height / 2) - bounds.top
-    const reduced = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches
-    gsap.killTweensOf(reveal)
-    gsap.set(reveal, { clipPath: `circle(0px at ${x}px ${y}px)`, scale: 1 })
-    gsap.to(reveal, {
-      clipPath: `circle(${Math.hypot(bounds.width, bounds.height)}px at ${x}px ${y}px)`,
-      scale: 1,
-      duration: reduced ? 0 : 0.55,
-      ease: "power3.out",
-    })
+  function showCard(clientX?: number, clientY?: number) {
+    showReveal(clientX, clientY)
     show()
   }
 
-  function hideReveal() {
-    const reveal = revealRef.current
-    if (!reveal) return
-    gsap.killTweensOf(reveal)
-    gsap.to(reveal, {
-      clipPath: "circle(0px at 50% 50%)",
-      scale: 1,
-      duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? 0
-        : 0.4,
-      ease: "power3.inOut",
-    })
+  function hideCard() {
+    hideReveal()
     restore()
   }
 
@@ -167,19 +137,19 @@ function PublicServiceCard({
       ref={cardRef}
       className="group relative aspect-[7/9] w-full overflow-hidden rounded-[10px] bg-[#203f8c] text-white"
       data-has-image={!!service.imageUrl && !imageFailed}
-      onMouseEnter={(event) => showReveal(event.clientX, event.clientY)}
+      onMouseEnter={(event) => showCard(event.clientX, event.clientY)}
       onMouseLeave={(event) => {
-        if (!event.currentTarget.contains(document.activeElement)) hideReveal()
+        if (!event.currentTarget.contains(document.activeElement)) hideCard()
       }}
       onFocusCapture={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) showReveal()
+        if (!event.currentTarget.contains(event.relatedTarget)) showCard()
       }}
       onBlurCapture={(event) => {
         if (
           !event.currentTarget.contains(event.relatedTarget) &&
           !event.currentTarget.matches(":hover")
         )
-          hideReveal()
+          hideCard()
       }}
     >
       <span
@@ -285,17 +255,22 @@ export function PublicServicesPage() {
 
   return (
     <>
-      <div className={styles.intro}>
-        <h1>
-          FIND YOUR NEXT
-          <br />
-          <span className="!text-[#203f8c]">STARTING POINT.</span>
-        </h1>
-        <p>
-          Explore our services, discover what fits, and share what you have in
-          mind. A conversation comes before any commitment.
-        </p>
-      </div>
+      <ProjectsRevealMotion duration={0.15}>
+        <div
+          className={`${styles.intro} motion-safe:[[data-public-reveal=pending]_&]:opacity-0`}
+          data-projects-reveal
+        >
+          <h1>
+            FIND YOUR NEXT
+            <br />
+            <span className="!text-[#203f8c]">STARTING POINT.</span>
+          </h1>
+          <p>
+            Explore our services, discover what fits, and share what you have in
+            mind. A conversation comes before any commitment.
+          </p>
+        </div>
+      </ProjectsRevealMotion>
       <div
         aria-hidden="true"
         className="relative left-1/2 mb-5 h-px w-screen -translate-x-1/2 bg-[#d7d6d2]"
