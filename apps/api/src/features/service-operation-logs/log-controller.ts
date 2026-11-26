@@ -7,6 +7,7 @@ import {
   AdministrativeCapability,
 } from "../auth/auth.capabilities.js"
 import { fail } from "../../shared/http-error.js"
+import { containsText } from "../../shared/query/pagination.js"
 import { isRecordId } from "../../shared/validation.js"
 import { retentionMs } from "./log-retention.js"
 import { serviceLogEvents } from "./log-writer.js"
@@ -127,7 +128,7 @@ serviceLogsRouter.get("/", async (req, res) => {
     async (tx) => {
       const matchingCurrentActors = search
         ? await tx.user.findMany({
-            where: { fullName: { contains: search, mode: "insensitive" } },
+            where: { fullName: containsText(search) },
             select: { id: true },
           })
         : []
@@ -137,19 +138,19 @@ serviceLogsRouter.get("/", async (req, res) => {
             AND: [
               {
                 OR: [
-                  { actorName: { contains: search, mode: "insensitive" } },
-                  { actorId: { contains: search, mode: "insensitive" } },
-                  { subjectId: { contains: search, mode: "insensitive" } },
-                  { targetLabel: { contains: search, mode: "insensitive" } },
-                  { requestId: { contains: search, mode: "insensitive" } },
+                  { actorName: containsText(search) },
+                  { actorId: containsText(search) },
+                  { subjectId: containsText(search) },
+                  { targetLabel: containsText(search) },
+                  { requestId: containsText(search) },
                   ...(searchIsCorrelationId
                     ? [{ correlationId: { equals: search } }]
                     : []),
-                  { endpoint: { contains: search, mode: "insensitive" } },
-                  { event: { contains: search, mode: "insensitive" } },
-                  { action: { contains: search, mode: "insensitive" } },
-                  { failureCode: { contains: search, mode: "insensitive" } },
-                  { failureReason: { contains: search, mode: "insensitive" } },
+                  { endpoint: containsText(search) },
+                  { event: containsText(search) },
+                  { action: containsText(search) },
+                  { failureCode: containsText(search) },
+                  { failureReason: containsText(search) },
                   ...(matchingCurrentActors.length
                     ? [
                         {

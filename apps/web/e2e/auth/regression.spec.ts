@@ -387,11 +387,17 @@ test.describe("Authentication and session regression", () => {
     expect(await missing.text()).toContain("Page not found")
   })
 
-  test("anonymous home and protected deep links redirect to login", async ({
+  test("anonymous landing stays public and protected deep links redirect to login", async ({
     page,
   }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" })
+    await page.goto("/")
+    await expect(page).toHaveURL(/\/$/)
+    await expect(
+      page.getByRole("heading", { name: /Creative ideas/i }),
+    ).toBeVisible()
+
     for (const path of [
-      "/",
       "/dashboard",
       "/accounts",
       "/departments",
@@ -438,10 +444,9 @@ test.describe("Authentication and session regression", () => {
     })
   }
 
-  test("login preserves the loader, session, success toast, and sign-out", async ({
+  test("login preserves the session, success toast, and sign-out", async ({
     page,
   }) => {
-    await page.emulateMedia({ reducedMotion: "no-preference" })
     await mockApi(page, "ADMIN")
     await page.goto("/internal/login")
     await page
@@ -449,10 +454,10 @@ test.describe("Authentication and session regression", () => {
       .fill(testAccounts.ADMIN.email)
     await page.getByLabel("Password", { exact: true }).fill("CorrectHorse123!")
     await page.getByRole("button", { name: "Sign In", exact: true }).click()
-    const loader = page.getByRole("status", { name: "Opening your account" })
-    await expect(loader.getByRole("img", { name: "Converyn" })).toBeVisible()
     await expect(page).toHaveURL(/\/module$/)
-    await expect(loader).toHaveCount(0)
+    await expect(
+      page.getByRole("status", { name: "Opening your account" }),
+    ).toHaveCount(0)
     expect(
       await page.evaluate(() => sessionStorage.getItem("nexus.auth.token")),
     ).toBe("test-session")
@@ -482,66 +487,28 @@ test.describe("Authentication and session regression", () => {
     ).toBeNull()
   })
 
-  for (const [device, width, height] of [
-    ["desktop", 1440, 900],
-    ["tablet", 820, 1180],
-    ["mobile", 390, 844],
-  ] as const) {
-    test(`login reveals the app from the rendered logo on ${device}`, async ({
-      page,
-    }) => {
-      await page.setViewportSize({ width, height })
-      await page.emulateMedia({ reducedMotion: "no-preference" })
-      await mockApi(page, "ADMIN")
-      await page.goto("/internal/login")
-      await page.addStyleTag({
-        content:
-          '[aria-label="Opening your account"] svg[role="img"] { translate: 24px -16px; }',
-      })
-      await page
-        .getByLabel("Email address", { exact: true })
-        .fill(testAccounts.ADMIN.email)
-      await page
-        .getByLabel("Password", { exact: true })
-        .fill("CorrectHorse123!")
-      await page.getByRole("button", { name: "Sign In", exact: true }).click()
-
-      const loader = page.getByRole("status", { name: "Opening your account" })
-      const opening = loader.locator('mask rect[fill="black"]')
-      await expect(opening).toHaveCSS("clip-path", /^circle\(/)
-      const sample = await opening.evaluate((rect) => {
-        const overlay = rect.closest('[role="status"]')!
-        const artwork = overlay.querySelector("[data-logo-fill]")!
-        const bounds = artwork.getBoundingClientRect()
-        const circle = getComputedStyle(rect).clipPath.match(
-          /^circle\(([\d.]+)px at ([\d.]+)px ([\d.]+)px\)$/,
-        )
-        const x = bounds.x + bounds.width / 2
-        const y = bounds.y + bounds.height / 2
-        return {
-          circle: circle?.slice(1).map(Number),
-          x,
-          y,
-          blocksPointer: overlay.contains(document.elementFromPoint(x, y)),
-          blocksFocus: Boolean(
-            document
-              .querySelector('main[aria-label="Workspace selector"]')
-              ?.closest("[inert]"),
-          ),
-        }
-      })
-      expect(sample.circle?.[1]).toBeCloseTo(sample.x, 2)
-      expect(sample.circle?.[2]).toBeCloseTo(sample.y, 2)
-      expect(sample.x).toBeGreaterThan(width / 2 + 20)
-      expect(sample.y).toBeLessThan(height / 2 - 12)
-      expect(sample.blocksPointer).toBe(true)
-      expect(sample.blocksFocus).toBe(true)
-      await expect(loader).toHaveCount(0)
-      await expect(
-        page.getByRole("main", { name: "Workspace selector" }),
-      ).toBeVisible()
+  test("the homepage and its services link work without JavaScript", async ({
+    browser,
+    baseURL,
+  }) => {
+    const context = await browser.newContext({
+      baseURL,
+      javaScriptEnabled: false,
     })
-  }
+    try {
+      const page = await context.newPage()
+      await page.goto("/")
+      await expect(
+        page.getByRole("heading", { name: /CREATIVE IDEAS/ }),
+      ).toBeVisible()
+      await page
+        .getByRole("link", { name: "Explore services", exact: true })
+        .click()
+      await expect(page).toHaveURL("/explore/services")
+    } finally {
+      await context.close()
+    }
+  })
 
   test("module selection reveals the destination from the clicked point", async ({
     page,
@@ -732,37 +699,61 @@ test.describe("Authentication and session regression", () => {
     expect(await storedTokens(page)).toEqual([null, null])
   })
 
-  test("registration keeps the existing API contract and opens the Client dashboard", async ({
-    page,
-  }) => {
-    await mockApi(page, "USER")
-    await page.goto("/register")
-    await page.getByLabel("Full name", { exact: true }).fill("Test Person")
-    await page.getByLabel("Contact number", { exact: true }).fill("09123456789")
-    await page
-      .getByLabel("Email address", { exact: true })
-      .fill(testAccounts.USER.email)
-    await page.getByLabel("Password", { exact: true }).fill("CorrectHorse123!")
-    await page
-      .getByLabel("Confirm Password", { exact: true })
-      .fill("CorrectHorse123!")
-    const submitted = page.waitForRequest("**/api/auth/register")
-    await page
-      .getByRole("button", { name: "Create Account", exact: true })
-      .click()
-    expect((await submitted).postDataJSON()).toEqual({
-      fullName: "Test Person",
-      contactNumber: "09123456789",
-      email: testAccounts.USER.email,
-      password: "CorrectHorse123!",
-    })
-    await expect(page).toHaveURL(/\/dashboard$/)
-    await expect(page.locator('[data-role="USER"]')).toBeVisible()
-    expect(await storedTokens(page)).toEqual(["test-session", "test-refresh"])
-    await expect(
-      page.getByRole("status", { name: "Opening your account" }),
-    ).toHaveCount(0)
-  })
+  for (const inquiry of [false, true]) {
+    test(
+      inquiry
+        ? "registration resumes the selected service inquiry"
+        : "registration keeps the existing API contract and opens the Client dashboard",
+      async ({ page }) => {
+        await mockApi(page, "USER")
+        await page.goto(inquiry ? "/register?service=service-1" : "/register")
+        if (inquiry) {
+          await expect(
+            page.getByRole("link", { name: "Sign in", exact: true }),
+          ).toHaveAttribute("href", "/login?service=service-1")
+        }
+        await page.getByLabel("Full name", { exact: true }).fill("Test Person")
+        await page
+          .getByLabel("Contact number", { exact: true })
+          .fill("09123456789")
+        await page
+          .getByLabel("Email address", { exact: true })
+          .fill(testAccounts.USER.email)
+        await page
+          .getByLabel("Password", { exact: true })
+          .fill("CorrectHorse123!")
+        await page
+          .getByLabel("Confirm Password", { exact: true })
+          .fill("CorrectHorse123!")
+        const submitted = page.waitForRequest("**/api/auth/register")
+        await page
+          .getByRole("button", { name: "Create Account", exact: true })
+          .click()
+        expect((await submitted).postDataJSON()).toEqual({
+          fullName: "Test Person",
+          contactNumber: "09123456789",
+          email: testAccounts.USER.email,
+          password: "CorrectHorse123!",
+        })
+        if (inquiry) {
+          await expect(page).toHaveURL("/services?service=service-1")
+          await expect(
+            page.getByRole("heading", { name: "Test Service", exact: true }),
+          ).toBeVisible()
+        } else {
+          await expect(page).toHaveURL("/dashboard")
+        }
+        await expect(page.locator('[data-role="USER"]')).toBeVisible()
+        expect(await storedTokens(page)).toEqual([
+          "test-session",
+          "test-refresh",
+        ])
+        await expect(
+          page.getByRole("status", { name: "Opening your account" }),
+        ).toHaveCount(0)
+      },
+    )
+  }
 
   test("stored Filipino language hydrates and survives auth navigation", async ({
     page,

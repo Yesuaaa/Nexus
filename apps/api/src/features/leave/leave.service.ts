@@ -24,6 +24,7 @@ import { workforceLogContext } from "../workforce-compliance-logs/write-context.
 import {
   expectedLeaveVersion,
   leaveObject,
+  leaveFilterRange,
   leaveRange,
   leaveStatus,
   leaveText,
@@ -535,7 +536,7 @@ export function createLeaveService(clock: Clock = () => new Date()) {
         "to",
       ])
       const range =
-        input.from || input.to ? leaveRange(input.from, input.to) : null
+        input.from || input.to ? leaveFilterRange(input.from, input.to) : null
       const page = parsePage(input.page)
       const search = parseQueryString(input.search)
       const status = leaveStatus(input.status)

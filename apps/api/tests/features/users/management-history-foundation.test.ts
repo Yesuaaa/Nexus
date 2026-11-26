@@ -474,6 +474,22 @@ test(
             await writeAccountManagementChange(tx, operation, input)
           for (const input of workforces)
             await writeWorkforceManagementChange(tx, operation, input)
+          // Payroll preference changes require an Admin operation.
+          await writeWorkforceManagementChange(
+            tx,
+            createManagementOperation({
+              ...auth,
+              user: { ...actor, role: Role.ADMIN },
+            }),
+            {
+              ...payroll,
+              subjectType: "PAYROLL_CONFIGURATION",
+              subjectId: "preferences",
+              action: "PAYROLL_PREFERENCES_UPDATED",
+              changedFields: ["showCompanyLogo"],
+              changes: { showCompanyLogo: { before: true, after: false } },
+            },
+          )
         })
         assert.deepEqual(
           [
@@ -876,6 +892,7 @@ test(
               "compensation",
               "period",
               "run",
+              "preferences",
             ].includes(row.subjectId),
           )
         }

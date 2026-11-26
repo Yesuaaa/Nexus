@@ -936,6 +936,28 @@ for (const role of ["STAFF", "ADMIN", "SUPERADMIN"] as const) {
   })
 }
 
+test("a client keeps the waiting state while no live stream exists yet", async ({
+  page,
+}) => {
+  const state = stateFixture(false)
+  await mock(page, state, "USER")
+  let streamAttempts = 0
+  await page.route("**/api/request-conversations/*/events", (route) => {
+    streamAttempts++
+    return route.fulfill({
+      status: 404,
+      json: { error: "Conversation not found" },
+    })
+  })
+  await openMessages(page, "USER")
+  const waiting = page.getByText(/Messaging opens when a department head/)
+  await expect(waiting).toBeVisible()
+  // The stream retries quietly instead of reporting lost access.
+  await expect.poll(() => streamAttempts).toBeGreaterThan(1)
+  await expect(waiting).toBeVisible()
+  await expect(page.getByText("Conversation not found")).toHaveCount(0)
+})
+
 for (const width of [1440, 390]) {
   test(`acceptance opens a two-way conversation at ${width}px`, async ({
     page,

@@ -38,7 +38,8 @@ const copy = {
     loginSubtitle: "Sign in to your Converyn client account",
     workforceLoginSubtitle:
       "Enter your Converyn workforce credentials to access operations.",
-    registerSubtitle: "Create your Converyn account",
+    registerSubtitle:
+      "Create your Converyn account to continue your inquiry or booking.",
     loginHeroLine1: "Empower Your",
     loginHeroLine2: "Digital Solutions",
     loginHeroLine3: "Journey",

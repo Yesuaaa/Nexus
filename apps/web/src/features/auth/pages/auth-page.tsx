@@ -1,15 +1,16 @@
 "use client"
 
 import { useEffect, useState, useSyncExternalStore } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { sileo } from "@/lib/toast"
 import {
   ApiError,
   clearToken,
   getCurrentAccount,
   getToken,
 } from "../api/auth-api"
-import { useAuthTransition } from "../providers/auth-provider"
 import { AuthLayout } from "../components/auth-layout"
 import { AuthContent } from "../components/auth-form"
 import { AuthHeader } from "../components/auth-header"
@@ -21,6 +22,14 @@ import {
 } from "../content/auth-copy"
 import type { AuthLanguage, AuthMode, AuthPortal } from "../model/types"
 import { landingPathForRole } from "../model/auth-portal"
+import type { Role } from "../model/roles"
+import { withInquiryService } from "@/features/public-services/model/service-inquiry-link"
+
+function authDestination(role: Role, inquiryService?: string) {
+  return role === "USER" && inquiryService
+    ? withInquiryService("/services", inquiryService)
+    : landingPathForRole(role)
+}
 
 function subscribeLanguage(onChange: () => void) {
   window.addEventListener("storage", onChange)
@@ -42,9 +51,11 @@ function getServerSession() {
 export function AuthPage({
   mode,
   portal = "client",
+  inquiryService,
 }: {
   mode: AuthMode
   portal?: AuthPortal
+  inquiryService?: string
 }) {
   const router = useRouter()
   const hasSession = useSyncExternalStore(
@@ -69,7 +80,7 @@ export function AuthPage({
       })
       .then((session) => {
         if (active && session)
-          router.replace(landingPathForRole(session.user.role))
+          router.replace(authDestination(session.user.role, inquiryService))
       })
       .catch((reason: unknown) => {
         if (!active) return
@@ -83,11 +94,18 @@ export function AuthPage({
     return () => {
       active = false
     }
-  }, [router, revision])
+  }, [router, revision, inquiryService])
 
   // Public content is useful before hydration. Existing sessions still go
   // through the server account check before entering the protected portal.
-  if (guest || !hasSession) return <AuthFormPage mode={mode} portal={portal} />
+  if (guest || !hasSession)
+    return (
+      <AuthFormPage
+        mode={mode}
+        portal={portal}
+        inquiryService={inquiryService}
+      />
+    )
   return (
     <main className="grid min-h-dvh place-content-center gap-4 bg-[var(--portal-canvas)] px-6 text-center text-sm text-[#5a6f95]">
       <h1 className="m-0 text-xl font-semibold text-[#203f8c]">
@@ -122,11 +140,13 @@ export function AuthPage({
 function AuthFormPage({
   mode,
   portal,
+  inquiryService,
 }: {
   mode: AuthMode
   portal: AuthPortal
+  inquiryService?: string
 }) {
-  const { beginLoginTransition: onLoggedIn } = useAuthTransition()
+  const router = useRouter()
   const storedLanguage = useSyncExternalStore(
     subscribeLanguage,
     getStoredAuthLanguage,
@@ -135,6 +155,17 @@ function AuthFormPage({
   const [selectedLanguage, setLanguage] = useState<AuthLanguage | null>(null)
   const language = selectedLanguage ?? storedLanguage
   const copy = getAuthCopy(language)
+
+  function onLoggedIn(nextMode: AuthMode, role: Role) {
+    router.replace(authDestination(role, inquiryService))
+    sileo.success({
+      title:
+        nextMode === "register" ? copy.accountCreated : copy.welcomeBackToast,
+      description:
+        nextMode === "register" ? copy.welcomeToExp : copy.signedInToast,
+      position: "top-center",
+    })
+  }
 
   function changeLanguage(next: AuthLanguage) {
     setLanguage(next)
@@ -176,10 +207,7 @@ function AuthFormPage({
             "© 2026 Converyn Inc. All rights reserved."
           ) : (
             <>
-              <span>{copy.about}</span>
-              <span>{copy.terms}</span>
-              <span>{copy.privacy}</span>
-              <span>{copy.cookies}</span>
+              <Link href="/">{copy.about}</Link>
               <span>{copy.copyright}</span>
             </>
           )}
@@ -191,6 +219,7 @@ function AuthFormPage({
         mode={mode}
         portal={portal}
         copy={copy}
+        inquiryService={inquiryService}
         onLoggedIn={onLoggedIn}
       />
     </AuthLayout>

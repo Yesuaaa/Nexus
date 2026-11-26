@@ -15,7 +15,11 @@ import {
 import { getPrisma } from "../../lib/db.js"
 import { fail } from "../../shared/http-error.js"
 import { isRecordId, recordIdParam } from "../../shared/validation.js"
-import { paginate, parsePage } from "../../shared/query/pagination.js"
+import {
+  containsText,
+  paginate,
+  parsePage,
+} from "../../shared/query/pagination.js"
 import {
   requireAuth,
   requirePermission,
@@ -288,10 +292,10 @@ payrollDocumentsRouter.get("/payslips", read, async (req, res) => {
     ...(search
       ? {
           OR: [
-            { reference: { contains: search, mode: "insensitive" } },
+            { reference: containsText(search) },
             {
               item: {
-                employeeNameSnapshot: { contains: search, mode: "insensitive" },
+                employeeNameSnapshot: containsText(search),
               },
             },
             {
@@ -299,7 +303,7 @@ payrollDocumentsRouter.get("/payslips", read, async (req, res) => {
                 calculation: {
                   run: {
                     period: {
-                      cutoffLabel: { contains: search, mode: "insensitive" },
+                      cutoffLabel: containsText(search),
                     },
                   },
                 },
@@ -553,19 +557,19 @@ function requestFilters(
   )
   const searchTerms: Prisma.PayrollEmployeeRequestWhereInput[] = search
     ? [
-        { id: { contains: search, mode: "insensitive" } },
+        { id: containsText(search) },
         {
           messages: {
             some: {
               isAdmin: false,
-              body: { contains: search, mode: "insensitive" },
+              body: containsText(search),
             },
           },
         },
         {
           payslip: {
             is: {
-              reference: { contains: search, mode: "insensitive" },
+              reference: containsText(search),
             },
           },
         },

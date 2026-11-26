@@ -99,6 +99,7 @@ export function ClientProjectsTable({
   onRowsSettled,
   error,
   onRetry,
+  emptyMessage = "No projects match",
 }: {
   projects: ClientProjectSummary[]
   formatDate: (value: Date | string) => string
@@ -107,6 +108,7 @@ export function ClientProjectsTable({
   onRowsSettled?: () => void
   error?: string
   onRetry?: () => void
+  emptyMessage?: string
 }) {
   return (
     <ClientRowTable
@@ -126,7 +128,7 @@ export function ClientProjectsTable({
         { className: "w-[120px]", label: "Actions" },
       ]}
       rowClassName="h-[66px] align-middle"
-      emptyContent="No projects match"
+      emptyContent={emptyMessage}
       error={error}
       onRetry={onRetry}
       onRowsSettled={onRowsSettled}

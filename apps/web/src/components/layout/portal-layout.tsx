@@ -7,7 +7,6 @@ import { signOut } from "@/features/auth/api/auth-api"
 import { useAccount } from "@/features/auth/hooks/use-account"
 import { loginPathForRole } from "@/features/auth/model/auth-portal"
 import { AccountContext } from "@/features/auth/providers/account-context"
-import { useAuthTransition } from "@/features/auth/providers/auth-provider"
 import { PreferencesProvider } from "@/features/settings/providers/preferences-provider"
 import { isRouteDenied } from "@/features/workspaces/model/route-policy"
 import { BreadcrumbLabelProvider } from "./breadcrumbs"
@@ -21,8 +20,7 @@ const stateClassName =
 export function PortalLayout({ children }: { children: ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
-  const { markDestinationReady } = useAuthTransition()
-  const { account, error } = useAccount(markDestinationReady)
+  const { account, error } = useAccount()
   const denied = !!account && isRouteDenied(account, pathname)
   const legacyInternalDashboard =
     account?.role !== "USER" && !!account && pathname === "/dashboard"
