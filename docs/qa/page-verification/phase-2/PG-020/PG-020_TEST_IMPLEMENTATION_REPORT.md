@@ -8,4 +8,12 @@ Test-only infrastructure: apps/api/tests/support/pg020-browser-server.ts and app
 
 Browser -> Next 5273 -> unchanged `/api/:path*` rewrite -> loopback fixture upstream 5274 -> Express -> Prisma -> PGlite. Real auth/me and notifications are observed upstream; browser response origins remain Next; private/foreign notice sentinels are absent; persisted notification snapshots remain equal. No page.route/route.fetch forwarding substitutes for the rewrite.
 
-See [execution outcomes](PG-020_TEST_EXECUTION_RESULTS.md) for all 29 records. Fifteen existing-sufficient records retain their original declarations; two responsive records have failed prerequisites and remain unverified.
+See [execution outcomes](PG-020_TEST_EXECUTION_RESULTS.md) for all 29 records. At the initial implementation checkpoint, fifteen existing-sufficient records retained their original declarations and two responsive records were unverified. The recovery addendum below supersedes that checkpoint status while preserving its initial failure evidence.
+
+## Verification-recovery addendum (2026-11-26)
+
+The two Client-navigation cases now pass at 1440px and 390px. The shared `mockApi` fixture explicitly fulfills the source-defined anonymous `GET /api/public/services` request with a typed empty listing before its unchanged Bearer assertion for protected endpoints. The navigation test now verifies that public request’s `GET` method, `q=&page=1` query, HTTP 200 response, and absent Authorization header. It checks that `/` remains the public landing page, then directly opens `/dashboard` and retains the `/module` redirect and original sidebar, workspace-selector, responsive drawer, and overflow checks.
+
+The same directly related suite exposed a stale accessible-name locator in an existing internal-role shell test. It searched for “Open account menu,” while `AccountMenu` sets `aria-label="Account menu"`; the locator was aligned to that exact source name without removing the click, logout, or token assertions.
+
+Final focused browser outcomes: workspace-selector 22/22, anonymous/protected-route and expired-session selections 2/2, Dashboard 14/14. These commands overlap and do not change the 29 unique case count. The final case reconciliation is 28 PASS and 1 PARTIAL: A011-T002’s timer in-flight guard and cleanup are asserted, but actual transport abortion and late-response suppression are not independently observed. The 23-hypothesis assessment is 22/23 VERIFIED CONTROL within mapped assertions; ABUSE-018 retains this limitation. The existing real Next rewrite integration remains 1/1 from its prior execution because it uses a separate fixture and does not import the modified shared mock.
