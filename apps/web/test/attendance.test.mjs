@@ -269,6 +269,31 @@ test("all attendance navigation pages preserve module ownership and role boundar
         assert.equal(canAccessRoute({ ...staff, role }, link.href), false)
     }
 
+  // PG-014-F001-A001-T002
+  const timeLogs = "/attendance/time-logs/overview"
+  const head = { ...staff, headOf: { id: "dept", name: "Design" } }
+  assert.equal(canAccessRoute(head, timeLogs), true)
+  assert.equal(canAccessRoute({ ...head, isActive: false }, timeLogs), false)
+  assert.equal(canAccessRoute({ ...staff, role: "USER" }, timeLogs), false)
+  for (const role of ["ADMIN", "SUPERADMIN"]) {
+    const privileged = {
+      ...staff,
+      role,
+      permissions: [Permissions.EMPLOYEES_READ],
+    }
+    assert.equal(canAccessRoute(privileged, timeLogs), true, role)
+    assert.equal(
+      canAccessRoute({ ...privileged, isActive: false }, timeLogs),
+      false,
+      role,
+    )
+    assert.equal(
+      canAccessRoute({ ...privileged, permissions: [] }, timeLogs),
+      false,
+      role,
+    )
+  }
+
   // PG-011-F001-A001-T001: the canonical Leave route follows the attendance
   // role and permission policy for both self-service and administrative users.
   const leaveRoute = "/attendance/requests/leave"

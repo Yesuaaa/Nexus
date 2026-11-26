@@ -559,3 +559,23 @@ Typecheck regenerated apps/web/next-env.d.ts to point at non-dev generated route
 | pnpm lint                       | Passed, exit code 0 with --max-warnings 0.                                                            |
 | pnpm typecheck                  | Passed, exit code 0 for web and API; incidental Next type references restored to task-entry contents. |
 | git diff --check                | Passed, exit code 0 after final documentation edits.                                                  |
+
+## PG-014 Phase 2.1 discovery and design
+
+- **Status:** Source discovery and test design complete. Phase 1 identity matches the current Time Logs Overview route at /attendance/time-logs/overview in Workforce Compliance. The implemented page uses manager scope only.
+- **Baseline:** Branch 293-test-full-system-audit-for-verifying-recent-changes at 2937d849710629994d918555b79c44921968cc67 with a clean entry tree. PG-013 implementation and evidence were committed in 1ba5ffef. Historical PG-001 through PG-013 findings and status entries are preserved above.
+- **Design:** 19 atomic behaviors and 38 unique cases. Of these, 36 are implementable (2 Unit, 11 API, 12 Browser, 11 Integration), with 17 new declarations, 8 additive assertion groups and 11 existing-sufficient cases. Two contracts are deferred: cleared-date presentation and any stronger in-flight scope-change guarantee.
+- **Boundary:** Existing fixture-based browser integration forwards attendance requests to real Express with Prisma/PGlite. The Next.js API rewrite is bypassed and the existing 503 injection is mocked. No PostgreSQL-specific test or new proxy fixture is required for the implementable design.
+- **Regression preservation:** No PG-014 execution or defect attribution. Existing shared keyboard-menu, 820px, transfer/reverification and PostgreSQL environment classifications are preserved. Seven design reports are under phase-2/PG-014/. No source or test changes were authorized.
+- **Checks:** `pnpm format` initially exited 1 on the Windows pnpm shared store lock and passed with exit 0 when retried with store access. `pnpm lint` and `pnpm typecheck` exited 0 with store access. `git diff --check` exited 0. No automated test suites ran.
+
+## PG-014 Phase 2.2 implementation and focused verification
+
+- **Status:** Implementation complete and focused verification complete. All 36 implementable records passed. Two product contracts remain deferred. No PG-014 application defect, intermittent failure or environment blocker remained.
+- **Baseline:** Branch 293-test-full-system-audit-for-verifying-recent-changes and HEAD 2937d849710629994d918555b79c44921968cc67 matched discovery. The entry ledger modification and all seven untracked design reports were preserved. No files were staged.
+- **Cases:** 38 unique records. Implemented 17 new declarations and eight additive groups. Preserved 11 existing-sufficient records. The 36 passing records comprise 2 Unit, 11 API, 12 Browser and 11 Integration. A004-T003 (cleared-date presentation) and A019-T003 (in-flight scope guarantee) remain contract-blocked.
+- **Focused results:** Unit 23/23 and API/PGlite 32/32. Six real browser/Express/PGlite declarations and five mocked Superadmin compatibility declarations passed in the combined Chromium run. The 11 mocked PG-014 declarations passed on the isolated rerun. Browser execution used one worker and zero retries, with 390, 820 and 1440 CSS pixel checks where specified. Runner declaration totals overlap the per-case inventory.
+- **Triage:** Initial compile errors were resolved in test source. An omitted Records directory mock and a missing ACCESS_TOKEN_EXPIRED fixture code accounted for two initial mocked browser failures. Both cases passed after fixture correction. The cap returned 200 for 10,000 scoped rows and 400 for 10,001.
+- **Integration:** Real page, Express, Prisma and isolated PGlite. Playwright forwards attendance requests, bypassing the Next.js API rewrite. Initial retry-case HTTP 503 responses were synthetic. Successful sibling and retry reads were real.
+- **Preservation:** Existing assertions and historical PG-001 through PG-013 classifications remain preserved. Production code, permissions, schema and migrations were unchanged. PG-015 was not started.
+- **Checks and reports:** `pnpm format`, `pnpm lint`, `pnpm typecheck` and `git diff --check` exited 0. The four Phase 2.2 reports are under phase-2/PG-014/.

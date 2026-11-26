@@ -3063,11 +3063,20 @@ test("time log overview preserves available figures during partial failures and 
     expect(response.status()).toBe(200)
     const main = page.getByRole("main", { name: "Attendance workspace" })
     const figures = main.getByLabel("Time log figures")
+    const selector = main.getByRole("combobox", {
+      name: "Time logs department",
+    })
     await expect(figures).toHaveAttribute("aria-busy", "false")
     await expect(
       main.getByRole("button", { name: "Retry", exact: true }),
     ).toBeVisible()
     if (failed === "departments") {
+      // PG-014-F001-A009-T002
+      await selector.click()
+      await expect(page.getByRole("option")).toHaveText([
+        "All permitted departments",
+      ])
+      await page.keyboard.press("Escape")
       const data = await response.json()
       await expect(
         figures
@@ -3076,6 +3085,13 @@ test("time log overview preserves available figures during partial failures and 
           .getByRole("definition"),
       ).toHaveText(String(data.checkIns.total))
     } else {
+      // PG-014-F001-A010-T002
+      await expect(
+        main.getByText("Record summaries unavailable."),
+      ).toBeVisible()
+      await expect(
+        main.getByRole("region", { name: "Coverage" }).getByRole("definition"),
+      ).toHaveText(["—", "—", "—", "—"])
       await expect(
         figures.getByRole("definition").filter({ hasText: "—" }),
       ).toHaveCount(4)
@@ -3084,7 +3100,24 @@ test("time log overview preserves available figures during partial failures and 
       ).toBeEnabled()
     }
     await page.unroute(pattern)
+    const retryReads: string[] = []
+    const trackRead = (request: import("@playwright/test").Request) => {
+      const pathname = new URL(request.url()).pathname
+      if (
+        ["/api/attendance/overview", "/api/attendance/departments"].includes(
+          pathname,
+        )
+      )
+        retryReads.push(pathname)
+    }
+    page.on("request", trackRead)
+    const retried = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/api/attendance/" + failed,
+    )
     await main.getByRole("button", { name: "Retry", exact: true }).click()
+    const retryResponse = await retried
+    expect(retryResponse.status()).toBe(200)
     await expect(
       main.getByRole("button", { name: "Retry", exact: true }),
     ).toHaveCount(0)
@@ -3093,6 +3126,26 @@ test("time log overview preserves available figures during partial failures and 
       figures.getByRole("definition").filter({ hasText: "—" }),
     ).toHaveCount(0)
     await assertNoPageOverflow(page)
+    page.off("request", trackRead)
+    expect(retryReads).toEqual(["/api/attendance/" + failed])
+    if (failed === "departments") {
+      const { departments } = (await retryResponse.json()) as {
+        departments: { name: string }[]
+      }
+      await selector.click()
+      await expect(page.getByRole("option")).toHaveText([
+        "All permitted departments",
+        ...departments.map(({ name }) => name),
+      ])
+      await page.keyboard.press("Escape")
+    } else {
+      const query = new URL(retryResponse.url()).searchParams
+      expect(Object.fromEntries(query)).toEqual({
+        from: await main.getByLabel("Attendance from date").inputValue(),
+        to: await main.getByLabel("Attendance through date").inputValue(),
+        departmentId: "",
+      })
+    }
   }
 })
 
@@ -3875,6 +3928,64 @@ test("WC-06-F02 reports and exports a suspended session until reconciliation", a
     closed: 0,
   }
   await expectDistribution(onlySuspended, departmentFilter)
+  // PG-014-F001-A006-T001: suspended is excluded from the open figure.
+  const timeLogFigures = page.getByLabel("Time log figures")
+  await expect(timeLogFigures.getByRole("definition")).toHaveText([
+    "1",
+    "1",
+    "0",
+    "0",
+  ])
+  await expect(
+    timeLogFigures.getByText("Needs review", { exact: true }),
+  ).toHaveCount(0)
+
+  // PG-014-F001-A005-T002: clearing the department preserves the date pair.
+  const timeLogDepartment = page.getByRole("combobox", {
+    name: "Time logs department",
+  })
+  const chooserReads: string[] = []
+  const trackDepartment = (request: import("@playwright/test").Request) => {
+    if (new URL(request.url()).pathname === "/api/attendance/departments")
+      chooserReads.push(request.url())
+  }
+  page.on("request", trackDepartment)
+  await timeLogDepartment.click()
+  const resetResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return (
+      url.pathname === "/api/attendance/overview" &&
+      url.searchParams.get("departmentId") === ""
+    )
+  })
+  await page
+    .getByRole("option", { name: "All permitted departments", exact: true })
+    .click()
+  const reset = await resetResponse
+  expect(reset.status()).toBe(200)
+  expect(Object.fromEntries(new URL(reset.url()).searchParams)).toEqual({
+    from: date,
+    to: date,
+    departmentId: "",
+  })
+  await expect(
+    timeLogFigures.getByRole("definition").locator("span:first-child"),
+  ).toHaveText(["4", "4", "1", "2"])
+  await expect(
+    timeLogFigures.getByText("Needs review", { exact: true }),
+  ).toBeVisible()
+  page.off("request", trackDepartment)
+  expect(chooserReads).toEqual([])
+  await timeLogDepartment.click()
+  await page
+    .getByRole("option", { name: "WC06 reporting", exact: true })
+    .click()
+  await expect(timeLogFigures.getByRole("definition")).toHaveText([
+    "1",
+    "1",
+    "0",
+    "0",
+  ])
   expect((await read<Records>("records", nextDate)).workdays).toEqual([])
   await selectDate(nextDate)
   await expect(page.getByText("No check-ins in this period.")).toBeVisible()

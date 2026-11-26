@@ -1419,10 +1419,18 @@ test(
             isPaid: false,
           },
         })
-        await prisma.attendanceWorkSession.create({
+        const workingSession = await prisma.attendanceWorkSession.create({
           data: {
             employeeId: working.employee.id,
             startedAt: new Date("2026-11-10T10:00:00+08:00"),
+          },
+        })
+        // PG-014-F001-A016-T002: a paid open break still counts as working.
+        await prisma.attendanceBreak.create({
+          data: {
+            sessionId: workingSession.id,
+            startedAt: new Date("2026-11-10T10:15:00+08:00"),
+            isPaid: true,
           },
         })
         const open = await prisma.attendanceWorkSession.create({
@@ -1494,6 +1502,15 @@ test(
           },
         )
         assert.equal(checkIns.recentActivity.length, 8)
+        for (const event of checkIns.recentActivity) {
+          assert.deepEqual(Object.keys(event).sort(), [
+            "action",
+            "at",
+            "employeeName",
+            "id",
+          ])
+          assert.ok(!event.employeeName.includes("@"))
+        }
         assert.ok(
           checkIns.recentActivity.every(
             (event) => event.employeeName !== other.employee.fullName,
