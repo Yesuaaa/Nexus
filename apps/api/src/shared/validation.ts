@@ -78,6 +78,19 @@ export function isEmployeeMobileNumber(value: string): boolean {
   return employeeMobileNumberPattern.test(value)
 }
 
+/**
+ * ISO date-time whose calendar date exists. `Date.parse` alone rolls
+ * impossible dates over, reading Feb 30 as Mar 1.
+ */
+export function isCalendarDateTime(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T/.exec(value)
+  if (!match || !Number.isFinite(Date.parse(value))) return false
+  const [year, month, day] = match.slice(1).map(Number)
+  const date = new Date(0)
+  date.setUTCFullYear(year, month - 1, day)
+  return date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+}
+
 /** Normalized `https:` URL without embedded credentials, or null. */
 export function safeHttpsUrl(value: string | null | undefined): string | null {
   if (!value) return null

@@ -2,6 +2,7 @@ import { Router } from "express"
 import { Role, type Prisma } from "../../generated/prisma/client.js"
 import { getPrisma } from "../../lib/db.js"
 import { fail } from "../../shared/http-error.js"
+import { containsText } from "../../shared/query/pagination.js"
 import { isRecordId } from "../../shared/validation.js"
 import {
   AdministrativeCapability,
@@ -122,7 +123,7 @@ projectLogsRouter.get("/", async (req, res) => {
     targetId: query.subjectId || undefined,
   }
   if (search) {
-    const matches = { contains: search, mode: "insensitive" } as const
+    const matches = containsText(search)
     const needle = search.toLowerCase()
     const events = Object.keys(projectLogEvents).filter(
       (event) =>

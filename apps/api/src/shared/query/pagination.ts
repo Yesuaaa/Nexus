@@ -74,6 +74,17 @@ export async function paginate<Row>(
 
 export type InsensitiveFilter = { contains: string; mode: "insensitive" }
 
+/**
+ * Case-insensitive `contains` filter matching `search` literally. Prisma passes
+ * `contains` to LIKE unescaped, so `%` and `_` would act as wildcards.
+ */
+export function containsText(search: string): InsensitiveFilter {
+  return {
+    contains: search.replace(/[\\%_]/g, "\\$&"),
+    mode: "insensitive",
+  }
+}
+
 /** Keys of `Where` that accept a string `contains` filter. */
 type TextField<Where> = {
   [Key in keyof Where]-?: InsensitiveFilter extends Where[Key] ? Key : never
@@ -93,7 +104,7 @@ export function insensitive<Where>(
   fields: readonly SearchField<Where>[],
 ): { OR?: Where[] } {
   if (!search) return {}
-  const filter: InsensitiveFilter = { contains: search, mode: "insensitive" }
+  const filter = containsText(search)
   return {
     OR: fields.map((field) =>
       typeof field === "function"
