@@ -1,14 +1,9 @@
 import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { test } from "node:test"
+import type { Role } from "../../../src/generated/prisma/client.js"
 import { issueSession } from "../../../src/features/auth/auth.service.js"
 import { startPgliteApp } from "../../support/pglite-app.js"
-import { createManagementContext } from "./management/context.js"
-import { accessAndPolicies } from "./management/access-and-policies.js"
-import { requestsAndReviews } from "./management/requests-and-reviews.js"
-import { auditAndMonitoring } from "./management/audit-and-monitoring.js"
-import { overviews } from "./management/overviews.js"
-import { personalOverview } from "./management/personal-overview.js"
 
 test(
   "attendance management policies, department scope, and correction approvals",

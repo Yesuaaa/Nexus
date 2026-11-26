@@ -618,3 +618,34 @@ Typecheck regenerated apps/web/next-env.d.ts to point at non-dev generated route
 - **Defect:** At 390, 820 and 1440 CSS pixels Escape closes the proof dialog but fails to return focus to the original View proof button. Combined and dedicated replay reproduced PG-016-D-001. Existing PG-004-D-001 remains separately recorded.
 - **Boundary and contracts:** Actual Next page with billing/file requests forwarded to real Express/Prisma/PGlite. Account/shell bootstrap is mocked; Next.js API rewrite bypassed. Preview-error feedback remains deferred. Earlier page outcomes and blockers retain their classifications.
 - **Reports and checks:** Four execution reports under phase-2/PG-016/. pnpm format, pnpm lint, pnpm typecheck and git diff --check exited 0. PG-017 was not started.
+
+## PG-017 - Phase 2.1 design complete; repository gates blocked
+
+Discovery and test design complete for `/booked-services`; no PG-017 tests were implemented or executed. The seven reports under `phase-2/PG-017/` define 16 atomic features and 33 cases: 13 new, 4 additive, 15 existing-sufficient and 1 contract-blocked; 32 implementable (API 10, mocked browser 21, integration 1). The two-client browser/Express/PGlite plan intercepts and forwards requests, bypassing the Next rewrite. PostgreSQL concurrent snapshot verification is optional future shared-infrastructure work, not a mandatory page test. No new PG-017 runtime defect is confirmed.
+
+Branch `293-test-full-system-audit-for-verifying-recent-changes`, HEAD `483511d7e9415e520521fb665df43ec1f1334968`; recovery entry retained the seven untracked drafts and modified ledger, index empty. PG-016 is committed in `de967eac`. Repository-wide `pnpm format` exit 2, `pnpm lint` exit 1, and `pnpm typecheck` exit 1 because of existing attendance test issues, including the parse error at `apps/web/e2e/attendance.spec.ts:7593`; lint also reports six unused imports in `apps/api/tests/features/attendance/management.test.ts:6-11`. Both files match HEAD and require separately authorized repair. Preserve all PG-001 through PG-016 outcomes, including PG-004-D-001, PG-016-D-001, intermittent findings and PostgreSQL environment blockers. Phase 2.2 remains unauthorized and normal repository execution is blocked.
+
+### Quality-gate maintenance before PG-017
+
+Partial: six unused API test imports removed; browser attendance spec remains unparseable because the split-suite merge left a truncated duplicate and conflicting registrations. Independent API typecheck also exposed an existing missing `Role` type import. Repository format/lint/typecheck remain blocked. No functional defect or historical finding was resolved; Phase 2.2 remains unauthorized. See [maintenance report](QA_GATE_RECOVERY_BEFORE_PG_017.md).
+
+### Quality-gate recovery stage 2
+
+Partial: the truncated duplicate overtime fragment was reconciled against the complete split test and removed; the missing API `Role` type import was added. Targeted lint/format, API typecheck, isolated management tests (25/25), repository format and lint pass. Web/repository typecheck and Playwright discovery remain blocked by the retained monolith and duplicate split registrations. Historical findings remain unchanged; PG-017 Phase 2.2 remains blocked and unauthorized. See [stage 2 report](QA_GATE_RECOVERY_STAGE_2_REPORT.md).
+
+### Stage 3 architecture investigation
+
+Partial: inventory identifies 73 monolithic and 74 split declarations; 34 whole declarations match ignoring whitespace, while 39 require action/assertion and fixture reconciliation. No Stage 3 test source edit or retirement was made. Current web typecheck remains failing; discovery and focused verification remain outstanding. Prior outcomes and PG-017 design remain unchanged. See [Stage 3 report](QA_GATE_RECOVERY_STAGE_3_REPORT.md).
+
+### Stage 3 recovery completed
+
+Complete after full AST/action/assertion reconciliation: all 73 parent Attendance declarations are preserved in the maintained split modules; the complete split-only overtime test remains. Five richer bodies/search setups were reconciled. One shared hook registration now serves 74 source declarations / 90 expanded cases. Web/API typechecks, discovery, repository format/lint/typecheck and diff check pass. Focused browser rerun passed 8/8 after a documented employee-search precondition correction (initial 1 failed, 7 not run). Historical application defects, intermittency and PostgreSQL blockers remain unchanged. PG-017 reports are preserved; Phase 2.2 is ready for separate authorization and has not begun. See [Stage 3 report](QA_GATE_RECOVERY_STAGE_3_REPORT.md).
+
+## PG-017 Phase 2.2 implementation and focused verification
+
+- **Status:** Implementation and focused verification complete; 32/32 implementable cases passed. PG-017-F001-A010-T002 remains contract-blocked for deep-link focus. No PG-017 application defect, final intermittency or environment blocker was confirmed.
+- **Inventory:** 16 atoms, 33 records: 13 new declarations, four additive groups, 15 existing-sufficient cases and one deferred contract. API 10, Browser 21, Integration 1 approved records. No separate unit or PostgreSQL concurrency case added.
+- **Execution:** API/PGlite and affected request compatibility 35/35, Booked Services Chromium 22/22 (21 mocked expansions plus one integration), shared preview/navigation compatibility 3/3, route/status helper compatibility 28/28. One browser worker, zero retries. These command totals overlap record coverage. Initial browser selection had 13 pass / nine test-defect failures; current-label and response-wait corrections led to the final passing rerun.
+- **Security/integration:** Real Next page, Express, Prisma and isolated PGlite; A-only list/detail, foreign detail 404, independent B list, unchanged ServiceRequest snapshot. Account/preferences/shell bootstrap mocked; production Next API rewrite bypassed. PostgreSQL concurrent snapshots remain optional future work, not verified by static PGlite tests.
+- **Preservation:** Stage 3 repairs, prior reports and seven PG-017 design reports are hash-preserved. All earlier defects, intermittent findings, contracts and PostgreSQL blockers retain their classifications. No production, permissions, schema or migration change. No full regression suite, commit or staged changes.
+- **Quality gates:** pnpm format, pnpm lint, pnpm typecheck and git diff --check exited 0. Four execution reports are under phase-2/PG-017/. PG-018 has not begun and requires separate authorization.
