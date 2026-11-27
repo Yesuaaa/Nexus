@@ -287,6 +287,8 @@ test(
       "streams stay alive during slow validation, queue changes, and still revoke access",
       { timeout: 25_000 },
       async (subtest) => {
+        // Drive the keep-alive independently of the PostgreSQL pool's idle timer.
+        subtest.mock.timers.enable({ apis: ["setInterval"] })
         const controller = new AbortController()
         subtest.after(() => controller.abort())
         const response = await fetch(
@@ -312,6 +314,10 @@ test(
         const blocked = new Promise<void>((resolve) => {
           unblock = resolve
         })
+        let markValidationStarted = () => {}
+        const validationStarted = new Promise<void>((resolve) => {
+          markValidationStarted = resolve
+        })
         subtest.after(unblock)
         const originalMethod = prisma.session.findFirst
         const originalFind = originalMethod.bind(prisma.session)
@@ -325,12 +331,15 @@ test(
           "findFirst",
           async (...args: Parameters<typeof originalFind>) => {
             checks++
+            markValidationStarted()
             await blocked
             return originalFind(...args)
           },
         )
         notify!()
         notify!()
+        await validationStarted
+        subtest.mock.timers.tick(10_000)
         await readUntil(() => received.includes(": keep-alive"))
         assert.equal(checks, 1)
         assert.equal(received.includes("event: messages-changed"), false)
