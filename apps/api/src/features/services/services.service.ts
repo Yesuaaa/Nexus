@@ -6,6 +6,10 @@ import {
 } from "../../lib/errors.js"
 import { safeHttpsUrl } from "../../shared/validation.js"
 import {
+  ImageNormalizationError,
+  normalizeImageDataUrlToWebp,
+} from "../../shared/image-normalization.js"
+import {
   getServiceImageStorage,
   ServiceImageStorageError,
   serviceImagePublicUrl,
@@ -66,8 +70,18 @@ function persistenceInput(
 
 async function uploadImage(dataUrl: string) {
   try {
-    return await getServiceImageStorage().upload(dataUrl)
+    const normalized = await normalizeImageDataUrlToWebp(dataUrl, {
+      maxInputBytes: 2 * 1024 * 1024,
+      maxOutputBytes: 2 * 1024 * 1024,
+      maxInputPixels: 25_000_000,
+      maxWidth: 2560,
+      maxHeight: 2560,
+    })
+    return await getServiceImageStorage().uploadWebp(normalized.data)
   } catch (error) {
+    if (error instanceof ImageNormalizationError) {
+      throw new ServicesError(400, error.message)
+    }
     if (error instanceof ServiceImageStorageError) {
       throw new ServicesError(503, error.message)
     }

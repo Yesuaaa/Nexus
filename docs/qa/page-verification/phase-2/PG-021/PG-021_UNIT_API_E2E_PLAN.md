@@ -1,0 +1,13 @@
+# PG-021 unit api e2e plan
+
+## Planned verification
+
+Unit checks pure schema transforms without persistence. PGlite runs the real middleware/router and checks persisted effects with isolated synthetic Admin, Staff, Employee, Department and Team data. Reuse the fixture's late-history failure seams and close the harness. Browser checks UI using mocked requests, isolated contexts, accessible controls, state-based waits and response gates. Use one worker and zero retries. The keyboard case expands across 1440 and 390 px. Candidate timer cancellation is separate from its inactive/key result rejection; there is no candidate transport abort claim. Detail and Head cancellation would require observed AbortSignal behavior.
+
+The integration case uses task-owned loopback Express/PGlite and a real Next server with API_PROXY_TARGET bound to it, valid local auth and no route interception for target requests. Confirm upstream receipt for assignment and readback, and inspect linked User/Employee state plus attributed history. Stop only owned servers and dispose database.
+
+The PostgreSQL case uses two authorized sessions and independent DB connections to put the same eligible Staff into the Head relation of two initially Head-less departments. Unique headId plus transaction-local synchronization warrants provider-specific evidence. Hold the first transaction before commit after its relation write using a test barrier; observe second entering competing operation before releasing. Require one successful claim, no second history, synchronized Staff/User/Employee placement and Head title. Exact losing response depends on supported conflict/eligibility branch. Use disposable migrated PostgreSQL; environment unverified.
+
+PLANNED — NOT EXECUTED. From repository root, `pnpm --filter @nexus/web exec playwright test e2e/departments/department-management.spec.ts e2e/shared/departments.spec.ts e2e/shared/department-member-workflows.spec.ts --workers=1 --retries=0`. Apply focused title selection to exclude adjacent routes. Existing API selection is `pnpm test:api "tests/features/departments/*.test.js" tests/department-integrity.test.ts`. The runner accepts arguments relative to its compiled API working directory and rewrites explicit .ts paths to .js. New integration/provider harnesses require Phase 2.2 review.
+
+31 atomic behaviors and 31 unique cases. 19 new, 1 additional, 10 existing-sufficient, 1 contract-blocked. 30 implementable (Browser 17, Unit 2, API/PGlite 9, Integration 1, PostgreSQL 1). 19 planned declarations, one existing declaration to extend, one additive group and one extra browser instance from the two-width keyboard case. 11 abuse hypotheses.
