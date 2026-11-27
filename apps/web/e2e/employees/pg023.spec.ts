@@ -227,7 +227,7 @@ async function fillCreate(dialog: Locator) {
 
 test("PG-023-F006-A001-T007 distinguishes pending, empty and failed employee searches", async ({
   page,
-}) => {  
+}) => {
   await restoreSession(page, "ADMIN")
   const pending = gate()
   let calls = 0
