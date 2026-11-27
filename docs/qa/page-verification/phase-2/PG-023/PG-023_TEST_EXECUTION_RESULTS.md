@@ -20,3 +20,63 @@ and all assertions. The focused rerun with grep T009, one worker, and zero
 retries exited 0. Format, lint, typecheck, and diff check exited 0 during
 the continuation. The Next generated references were restored to their
 continuation-entry contents.
+
+## Browser continuation from 94eb190d
+
+The first selection ran against the committed checkpoint plus the eleven new declarations:
+
+```text
+pnpm --filter @nexus/web exec playwright test e2e/employees/pg023.spec.ts --grep 'T007|T008|T011|T013|T014|T021|T023|T034|T035|T036|T038' --workers=1 --retries=0 --output=test-results/pg023-final
+```
+
+Exit 1. Six runner instances passed and five failed. T007 initially let the test clock advance during the timing assertion. T008 found the Department picker enabled after the API error. T014 looked for a Retry control labeled Try again. T021 looked for Edit Employee rather than Edit. T038 exposed the linked Employee ID validation message and the initial matcher expected different wording. The updated assertion checks the actual source-defined EXP-prefix guidance. The rerun retains the T008 disabled expectation and uses a soft assertion so independent recovery checks can execute.
+
+All browser fixtures in this selection use synthetic employee and department data, a real Chromium page, mocked API responses and one worker with zero retries. The restricted permission scenario in T034 is a UI fixture. These cases do not provide persistence evidence.
+
+The second focused command used the same browser and flags with grep
+T007|T008|T011|T013|T014|T021|T034|T038 and output test-results/pg023-rerun.
+Exit 1, six passed and two failed. T008 retained the enabled Department picker.
+T021 reached the edit form but client name validation blocked submission
+because the reused display name contained digits. The edit fixture now uses
+Jordan Reyes and supplies both department and team option responses.
+
+The third selection used grep T008|T014|T021|T034 and output
+test-results/pg023-confirm. Exit 1, three passed and one failed. T014 passed
+retry, rejected stale detail and restored focus to a surviving row. T021
+passed edit, conflict and retry. T034 passed member deletion and directory
+refresh plus the reduced-permission UI fixture. T008 still failed the enabled
+Department picker assertion. Its subsequent recovery, disabled submit,
+department change and team-scope assertions ran successfully.
+
+The three browser launchers were scoped to the local Playwright fixture
+and exited. The retained T031 and T032 PostgreSQL container cleanup is
+recorded above. Failure traces remain under the ignored Playwright output
+directories for review.
+
+## Retained command selections
+
+From apps/api, the focused selection was:
+
+```text
+node scripts/run-tests.mjs tests/features/employees/pg023-read.test.ts tests/features/employees/validation.test.ts tests/employee-integration.test.ts tests/features/employees/creation-attribution.test.ts tests/features/employees/update-attribution.test.ts tests/features/employees/account-lifecycle-attribution.test.ts
+```
+
+Exit 0, 55/55 instances after the test-path correction. The retained browser
+selection used pnpm --filter @nexus/web exec playwright test e2e/employees
+--workers=1 --retries=0 before the eleven continuation declarations. Exit 0,
+11/11. The web unit selection ran from apps/web using node --test
+--test-isolation=none test/employee-validation.test.mjs. Exit 0, 4/4.
+These older runs were recorded at the original 59167cbc checkpoint with
+Phase 2.2 working changes, before those changes were committed in 94eb190d.
+
+The final focused detail selection used pnpm --filter @nexus/web exec
+playwright test e2e/employees/pg023.spec.ts --grep T013 --workers=1
+--retries=0 --output=test-results/pg023-t013. Exit 0, one passed. It
+included the explicit team and start-date assertions.
+
+## Continuation quality gates
+
+The final test-source selection completed with pnpm format, pnpm lint,
+pnpm typecheck and git diff --check each exiting 0. Earlier pnpm store-lock
+denials and permitted reruns are retained in the historical implementation
+checkpoint. Next type references were restored from the continuation-entry bytes.

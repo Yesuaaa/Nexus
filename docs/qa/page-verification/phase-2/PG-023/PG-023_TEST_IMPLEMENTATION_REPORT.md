@@ -88,3 +88,9 @@ New registrations added in this continuation: T001, T009, T010, T032 and T033.
 Together with T004 and T037 this is seven of 18 planned additions. Existing
 declaration extensions and additive groups remain zero. T010 uses five viewport
 iterations in one registration. T031 is retained and T032 is new.
+
+## Continuation from the committed checkpoint
+
+The clean continuation entry was branch 293-test-full-system-audit-for-verifying-recent-changes at 94eb190deea91197e53bc94c9ade149d8487d687. The two earlier interim counts of 2/18 and 7/18 describe historical checkpoints.
+
+All 18 planned NEW declarations are now registered. The eleven added here are T007, T008, T011, T013, T014, T021, T023, T034, T035, T036 and T038 in apps/web/e2e/employees/pg023.spec.ts. T011 checks narrow and wide layout within one registration. Existing-declaration extensions and additive groups total zero. No registration variance was introduced. The full approved manifest above remains the source of the case oracles. The final verification records coverage limits separately from registration count.
