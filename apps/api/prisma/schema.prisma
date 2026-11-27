@@ -20,6 +20,12 @@ enum Role {
   USER
 }
 
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  CANCELLED
+}
+
 enum LeaveType {
   ANNUAL
   SICK
@@ -313,6 +319,23 @@ enum ProjectDeliverableStatus {
   SENT_TO_CLIENT
 }
 
+enum ProjectDeliverableSubmissionStatus {
+  IN_REVIEW
+  ESCALATED
+  REJECTED
+  APPROVED
+  SENT_TO_CLIENT
+  WITHDRAWN
+}
+
+enum ProjectNoteRevisionStatus {
+  SUBMITTED
+  ESCALATED
+  APPROVED
+  REVISION_REQUIRED
+  REJECTED
+}
+
 enum ProjectClientReviewStatus {
   APPROVED
   REVISION_REQUESTED
@@ -426,6 +449,13 @@ model User {
   projectMessages                   ProjectMessage[]
   projectConversationReads          ProjectConversationRead[]
   projects                          Project[]
+  authoredProjectNotes              ProjectNote[]                     @relation("ProjectNoteAuthor")
+  authoredProjectNoteRevisions      ProjectNoteRevision[]             @relation("ProjectNoteRevisionAuthor")
+  reviewedProjectNoteRevisions      ProjectNoteRevision[]             @relation("ProjectNoteRevisionReviewer")
+  publishedProjectNoteRevisions     ProjectNoteRevision[]             @relation("ProjectNoteRevisionPublisher")
+  unpublishedProjectNoteRevisions   ProjectNoteRevision[]             @relation("ProjectNoteRevisionUnpublisher")
+  submittedProjectDeliverables      ProjectDeliverableSubmission[]    @relation("ProjectDeliverableSubmissionAuthor")
+  reviewedProjectDeliverableHistory ProjectDeliverableSubmission[]    @relation("ProjectDeliverableSubmissionReviewer")
   createdProjectWorkspaces          ProjectWorkspaceGroup[]           @relation("ProjectWorkspaceCreator")
   clientProjectWorkspaces           ProjectWorkspaceGroup[]           @relation("ProjectWorkspaceClient")
   projectChangeRequests             ProjectChangeRequest[]            @relation("ProjectChangeRequester")
@@ -442,6 +472,10 @@ model User {
   createdPayrollPeriods             PayrollPeriod[]                   @relation("PayrollPeriodCreator")
   createdPayrollRuns                PayrollRun[]                      @relation("PayrollRunCreator")
   payrollCalculations               PayrollRunCalculation[]           @relation("PayrollCalculationCreator")
+  billingInvoices                   Invoice[]                         @relation("InvoiceClient")
+  createdBillingInvoices            Invoice[]                         @relation("InvoiceCreator")
+  createdInvoicePayments            InvoicePayment[]                  @relation("InvoicePaymentCreator")
+  createdExpenses                   Expense[]                         @relation("ExpenseCreator")
 
   @@index([departmentId])
   @@index([teamId])
@@ -591,6 +625,7 @@ model ServiceRequest {
   submissionKey           String?                      @db.VarChar(36)
   createdAt               DateTime                     @default(now())
   updatedAt               DateTime                     @updatedAt
+  invoices                Invoice[]
 
   @@unique([clientId, submissionKey])
   @@index([clientId, createdAt, id])
@@ -754,8 +789,10 @@ model Project {
   staff             ProjectStaff[]
   milestones        ProjectMilestone[]
   changeRequests    ProjectChangeRequest[]
+  notes             ProjectNote[]
   messages          ProjectMessage[]
   conversationReads ProjectConversationRead[]
+  invoices          Invoice[]
 
   @@index([clientId, createdAt, id])
   @@index([workspaceGroupId])
@@ -900,11 +937,11 @@ model CompensationComponent {
 }
 
 model PayrollPreferences {
-  id                              String  @id
-  revision                        Int
-  showCompanyLogo                 Boolean
-  showEmployeeId                  Boolean
-  requirePublicationConfirmation  Boolean
+  id                             String  @id
+  revision                       Int
+  showCompanyLogo                Boolean
+  showEmployeeId                 Boolean
+  requirePublicationConfirmation Boolean
   requireSimulationConfirmation  Boolean
 }
 
@@ -961,25 +998,25 @@ model PayrollRun {
 
 model PayrollRunCalculation {
   reconciliationExceptions PayrollReconciliationException[]
-  disbursement        PayrollDisbursementBatch?
-  id                  String                    @id @default(cuid())
-  runId               String
-  run                 PayrollRun                @relation(fields: [runId], references: [id], onDelete: Restrict)
-  revision            Int
-  status              PayrollCalculationStatus
-  calculatedAt        DateTime                  @default(now()) @db.Timestamptz(3)
-  createdById         String
-  createdBy           User                      @relation("PayrollCalculationCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  currency            String                    @default("PHP") @db.Char(3)
-  grossTotal          Decimal                   @default(0) @db.Decimal(14, 2)
-  deductionsTotal     Decimal                   @default(0) @db.Decimal(14, 2)
-  netTotal            Decimal                   @default(0) @db.Decimal(14, 2)
-  calculatedItemCount Int                       @default(0)
-  reviewItemCount     Int                       @default(0)
-  blockedItemCount    Int                       @default(0)
-  inputSnapshot       Json
-  items               PayrollRunItem[]
-  approvalEvents      PayrollApprovalEvent[]
+  disbursement             PayrollDisbursementBatch?
+  id                       String                           @id @default(cuid())
+  runId                    String
+  run                      PayrollRun                       @relation(fields: [runId], references: [id], onDelete: Restrict)
+  revision                 Int
+  status                   PayrollCalculationStatus
+  calculatedAt             DateTime                         @default(now()) @db.Timestamptz(3)
+  createdById              String
+  createdBy                User                             @relation("PayrollCalculationCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  currency                 String                           @default("PHP") @db.Char(3)
+  grossTotal               Decimal                          @default(0) @db.Decimal(14, 2)
+  deductionsTotal          Decimal                          @default(0) @db.Decimal(14, 2)
+  netTotal                 Decimal                          @default(0) @db.Decimal(14, 2)
+  calculatedItemCount      Int                              @default(0)
+  reviewItemCount          Int                              @default(0)
+  blockedItemCount         Int                              @default(0)
+  inputSnapshot            Json
+  items                    PayrollRunItem[]
+  approvalEvents           PayrollApprovalEvent[]
 
   @@unique([runId, revision], map: "payroll_run_calculation_revision_uq")
   @@index([runId, revision], map: "payroll_run_calculation_history_idx")
@@ -1109,6 +1146,7 @@ model WorkflowFile {
   signatures               WorkflowAgreement[]              @relation("AgreementSignature")
   payments                 WorkflowPayment[]
   deliverableMilestone     ProjectMilestone?
+  deliverableSubmission    ProjectDeliverableSubmission?
   clientDeliverableReviews ProjectDeliverableClientReview[]
 
   @@unique([requestId, uploaderId, uploadId])
@@ -1152,6 +1190,7 @@ model WorkflowQuotation {
   createdAt              DateTime                @default(now())
   approval               WorkflowApproval?
   project                Project?
+  invoices               Invoice[]
 
   @@unique([requestId, version])
 }
@@ -1196,6 +1235,113 @@ model WorkflowPayment {
   reference    String?               @db.VarChar(300)
   verifiedById String?
   verifiedAt   DateTime?
+  invoice      Invoice?
+}
+
+model Invoice {
+  id                String             @id @default(cuid())
+  invoiceNumber     String             @unique
+  clientId          String
+  client            User               @relation("InvoiceClient", fields: [clientId], references: [id], onDelete: Restrict)
+  requestId         String
+  request           ServiceRequest     @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  projectId         String?
+  project           Project?           @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  quotationId       String?
+  quotation         WorkflowQuotation? @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  workflowPaymentId String?            @unique
+  workflowPayment   WorkflowPayment?   @relation(fields: [workflowPaymentId], references: [id], onDelete: Restrict)
+  status            InvoiceStatus      @default(DRAFT)
+  description       String
+  total             Decimal            @db.Decimal(12, 2)
+  currency          String             @default("PHP") @db.VarChar(3)
+  issueDate         DateTime
+  dueDate           DateTime
+  issuedAt          DateTime?
+  issuedSnapshot    Json?
+  createdById       String
+  createdBy         User               @relation("InvoiceCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  version           Int                @default(0)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  payments          InvoicePayment[]
+
+  @@index([requestId, createdAt])
+  @@index([clientId, createdAt])
+}
+
+model InvoicePayment {
+  id             String   @id @default(cuid())
+  invoiceId      String
+  invoice        Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  amount         Decimal  @db.Decimal(12, 2)
+  paidAt         DateTime
+  reference      String?
+  note           String?
+  methodLabel    String?  @db.VarChar(100)
+  createdById    String
+  createdBy      User     @relation("InvoicePaymentCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  idempotencyKey String   @db.VarChar(36)
+  createdAt      DateTime @default(now())
+
+  @@unique([createdById, idempotencyKey])
+  @@index([invoiceId, createdAt])
+}
+
+model ProjectShowcaseEntry {
+  id               String   @id @default(uuid())
+  slug             String   @unique @db.VarChar(100)
+  name             String   @db.VarChar(120)
+  client           String   @db.VarChar(120)
+  type             String   @db.VarChar(100)
+  year             Int?
+  description      String   @db.VarChar(4000)
+  image            String   @db.VarChar(1000)
+  galleryLayout    String   @default("single-wide")
+  additionalImages String[] @default([])
+  position         Int      @default(100)
+  published        Boolean  @default(false)
+  featured         Boolean  @default(false)
+  fictional        Boolean  @default(false)
+  version          Int      @default(0)
+  archivedAt       DateTime?
+
+  @@index([published, position, slug])
+}
+
+model BillingConfiguration {
+  id              String   @id
+  defaultTerms    String   @default("") @db.VarChar(2000)
+  defaultDueDays  Int      @default(30)
+  invoicePrefix   String   @default("INV") @db.VarChar(20)
+  version         Int      @default(0)
+  updatedAt       DateTime @updatedAt
+}
+
+model BillingPaymentMethod {
+  id        String   @id @default(cuid())
+  label     String   @unique @db.VarChar(100)
+  createdAt DateTime @default(now())
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  description String   @db.VarChar(1000)
+  category    String   @db.VarChar(100)
+  amount      Decimal  @db.Decimal(12, 2)
+  currency    String   @default("PHP") @db.VarChar(3)
+  expenseDate DateTime
+  vendor      String?  @db.VarChar(300)
+  reference   String?  @db.VarChar(300)
+  note        String?  @db.VarChar(2000)
+  createdById String
+  createdBy   User     @relation("ExpenseCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  version     Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([expenseDate, id])
+  @@index([category, expenseDate])
 }
 
 model WorkflowEvent {
@@ -1299,22 +1445,22 @@ model LeaveRequestDay {
 }
 
 model LeaveDecision {
-  writerTransaction String? @default(dbgenerated("pg_current_xact_id()::text"))
-  id         String       @id @default(cuid())
-  requestId  String
-  request    LeaveRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
-  actorId    String
-  actor      User         @relation(fields: [actorId], references: [id], onDelete: Restrict)
-  actionId   String       @db.Uuid
-  action     LeaveAction
-  fromStatus LeaveStatus?
-  toStatus   LeaveStatus
-  note       String?      @db.VarChar(2000)
-  version    Int
-  createdAt  DateTime     @default(now()) @db.Timestamptz(3)
-  operationId String?    @db.Uuid
-  correlationId String?  @db.Uuid
-  actorRoleAtTime Role?
+  writerTransaction String?      @default(dbgenerated("pg_current_xact_id()::text"))
+  id                String       @id @default(cuid())
+  requestId         String
+  request           LeaveRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  actorId           String
+  actor             User         @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  actionId          String       @db.Uuid
+  action            LeaveAction
+  fromStatus        LeaveStatus?
+  toStatus          LeaveStatus
+  note              String?      @db.VarChar(2000)
+  version           Int
+  createdAt         DateTime     @default(now()) @db.Timestamptz(3)
+  operationId       String?      @db.Uuid
+  correlationId     String?      @db.Uuid
+  actorRoleAtTime   Role?
 
   @@unique([requestId, actorId, actionId])
   @@index([requestId, createdAt, id])
@@ -1370,8 +1516,83 @@ model ProjectMilestone {
   displayOrder     Int                              @default(0)
   updatedAt        DateTime                         @default(now()) @updatedAt
   clientReviews    ProjectDeliverableClientReview[]
+  submissions      ProjectDeliverableSubmission[]
 
   @@index([projectId, displayOrder])
+}
+
+model ProjectDeliverableSubmission {
+  id             String                             @id @default(cuid())
+  milestoneId    String
+  milestone      ProjectMilestone                   @relation(fields: [milestoneId], references: [id], onDelete: Restrict)
+  workflowFileId String                             @unique
+  workflowFile   WorkflowFile                       @relation(fields: [workflowFileId], references: [id], onDelete: Restrict)
+  submittedById  String
+  submittedBy    User                               @relation("ProjectDeliverableSubmissionAuthor", fields: [submittedById], references: [id], onDelete: Restrict)
+  version        Int
+  note           String?                            @db.VarChar(2000)
+  status         ProjectDeliverableSubmissionStatus
+  submittedAt    DateTime                           @default(now())
+  reviewedById   String?
+  reviewedBy     User?                              @relation("ProjectDeliverableSubmissionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt     DateTime?
+  feedback       String?                            @db.VarChar(2000)
+  escalatedAt    DateTime?
+  updatedAt      DateTime                           @updatedAt
+
+  @@unique([milestoneId, version])
+  @@index([milestoneId, submittedAt, id])
+  @@index([status, escalatedAt])
+}
+
+model ProjectNote {
+  id          String                @id @default(cuid())
+  projectId   String
+  project     Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User                  @relation("ProjectNoteAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  revisions   ProjectNoteRevision[]
+
+  @@index([projectId, updatedAt, id])
+}
+
+model ProjectNoteRevision {
+  id                     String                    @id @default(cuid())
+  noteId                 String
+  note                   ProjectNote               @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  revision               Int
+  content                String                    @db.VarChar(4000)
+  authorId               String
+  author                 User                      @relation("ProjectNoteRevisionAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  status                 ProjectNoteRevisionStatus @default(SUBMITTED)
+  submittedAt            DateTime                  @default(now())
+  reviewedById           String?
+  reviewedBy             User?                     @relation("ProjectNoteRevisionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt             DateTime?
+  feedback               String?                   @db.VarChar(2000)
+  escalatedAt            DateTime?
+  clientVisible          Boolean                   @default(false)
+  publishedAt            DateTime?
+  publishedById          String?
+  publishedBy            User?                     @relation("ProjectNoteRevisionPublisher", fields: [publishedById], references: [id], onDelete: SetNull)
+  supersededAt           DateTime?
+  supersededByRevisionId String?
+  supersededByRevision   ProjectNoteRevision?      @relation("ProjectNoteRevisionSupersession", fields: [supersededByRevisionId], references: [id], onDelete: SetNull)
+  supersededRevisions    ProjectNoteRevision[]     @relation("ProjectNoteRevisionSupersession")
+  unpublishedAt          DateTime?
+  unpublishedById        String?
+  unpublishedBy          User?                     @relation("ProjectNoteRevisionUnpublisher", fields: [unpublishedById], references: [id], onDelete: SetNull)
+  createdAt              DateTime                  @default(now())
+
+  @@unique([noteId, revision])
+  @@index([noteId, createdAt, id])
+  @@index([status, escalatedAt])
+  @@index([clientVisible, status])
+  @@index([publishedById])
+  @@index([supersededByRevisionId])
+  @@index([unpublishedById])
 }
 
 model ProjectDeliverableClientReview {
@@ -1487,14 +1708,14 @@ model AttendancePolicy {
 }
 
 model AttendancePolicyDay {
-  scheduledStartMinute Int?
-  scheduledEndMinute Int?
+  scheduledStartMinute        Int?
+  scheduledEndMinute          Int?
   scheduledUnpaidBreakMinutes Int?
-  policyId        String
-  policy          AttendancePolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
-  weekday         Int
-  isWorkingDay    Boolean
-  requiredMinutes Int
+  policyId                    String
+  policy                      AttendancePolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  weekday                     Int
+  isWorkingDay                Boolean
+  requiredMinutes             Int
 
   @@id([policyId, weekday])
 }
@@ -1519,31 +1740,31 @@ model AttendancePolicyAssignment {
 }
 
 model AttendanceWorkday {
-  scheduledStartAt        DateTime?                  @db.Timestamptz(3)
-  scheduledEndAt          DateTime?                  @db.Timestamptz(3)
+  scheduledStartAt            DateTime?                  @db.Timestamptz(3)
+  scheduledEndAt              DateTime?                  @db.Timestamptz(3)
   scheduledUnpaidBreakMinutes Int?
-  policyName              String
-  unpaidBreaksEnabled     Boolean
-  overnightRequiresReview Boolean
-  id                      String                     @id @default(cuid())
-  employeeId              String
-  employee                Employee                   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  assignmentId            String
-  assignment              AttendancePolicyAssignment @relation(fields: [assignmentId, employeeId], references: [id, employeeId], onDelete: Restrict)
-  workDate                DateTime                   @db.Date
-  timeZone                String
-  isWorkingDay            Boolean
-  requiredMinutes         Int
-  createdAt               DateTime                   @default(now()) @db.Timestamptz(3)
-  sessions                AttendanceWorkSession[]
-  audit                   AttendanceAudit[]
+  policyName                  String
+  unpaidBreaksEnabled         Boolean
+  overnightRequiresReview     Boolean
+  id                          String                     @id @default(cuid())
+  employeeId                  String
+  employee                    Employee                   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  assignmentId                String
+  assignment                  AttendancePolicyAssignment @relation(fields: [assignmentId, employeeId], references: [id, employeeId], onDelete: Restrict)
+  workDate                    DateTime                   @db.Date
+  timeZone                    String
+  isWorkingDay                Boolean
+  requiredMinutes             Int
+  createdAt                   DateTime                   @default(now()) @db.Timestamptz(3)
+  sessions                    AttendanceWorkSession[]
+  audit                       AttendanceAudit[]
 
   @@unique([employeeId, workDate])
   @@unique([id, employeeId])
 }
 
 model AttendanceWorkSession {
-  suspendedAt DateTime? @db.Timestamptz(3)
+  suspendedAt DateTime?              @db.Timestamptz(3)
   adjustments AttendanceAdjustment[]
   id          String                 @id @default(cuid())
   // A BEFORE INSERT trigger selects/creates the starting workday if omitted.
@@ -1570,26 +1791,26 @@ model AttendanceBreak {
 }
 
 model AttendanceAudit {
-  writerTransaction String? @default(dbgenerated("pg_current_xact_id()::text"))
-  id         String             @id @default(cuid())
+  writerTransaction String?            @default(dbgenerated("pg_current_xact_id()::text"))
+  id                String             @id @default(cuid())
   // Stable entity identity and snapshots also cover policy/rule/assignment changes.
-  entityType String
-  entityId   String
-  employeeId String?
-  employee   Employee?          @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  workdayId  String?
-  workday    AttendanceWorkday? @relation(fields: [workdayId], references: [id], onDelete: Restrict)
-  actorId    String?
-  actor      User?              @relation(fields: [actorId], references: [id], onDelete: Restrict)
-  action     String
-  reason     String
-  before     Json?
-  after      Json?
-  actionId   String             @unique
-  createdAt  DateTime           @default(now()) @db.Timestamptz(3)
-  operationId String?          @db.Uuid
-  correlationId String?        @db.Uuid
-  actorRoleAtTime Role?
+  entityType        String
+  entityId          String
+  employeeId        String?
+  employee          Employee?          @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  workdayId         String?
+  workday           AttendanceWorkday? @relation(fields: [workdayId], references: [id], onDelete: Restrict)
+  actorId           String?
+  actor             User?              @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  action            String
+  reason            String
+  before            Json?
+  after             Json?
+  actionId          String             @unique
+  createdAt         DateTime           @default(now()) @db.Timestamptz(3)
+  operationId       String?            @db.Uuid
+  correlationId     String?            @db.Uuid
+  actorRoleAtTime   Role?
 
   @@index([workdayId, createdAt])
   @@index([employeeId, createdAt])
@@ -1608,30 +1829,30 @@ enum AttendanceAdjustmentStatus {
 model AttendanceAdjustment {
   verifiedDepartmentId String?
   notifications        WorkflowNotification[]
-  type              String                     @default("CORRECTION") @db.VarChar(20)
-  overtimeMinutes   Int                        @default(0)
-  verifiedById      String?
-  verifiedBy        User?                      @relation("AttendanceVerifier", fields: [verifiedById], references: [id], onDelete: Restrict)
-  verifiedAt        DateTime?                  @db.Timestamptz(3)
-  verificationNote  String?                    @db.VarChar(2000)
-  id                String                     @id @default(cuid())
-  requestKey        String                     @unique
-  employeeId        String
-  employee          Employee                   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  sessionId         String?
-  session           AttendanceWorkSession?     @relation(fields: [sessionId], references: [id], onDelete: Restrict)
-  originalSession   Json?
-  proposedStartedAt DateTime                   @db.Timestamptz(3)
-  proposedEndedAt   DateTime                   @db.Timestamptz(3)
-  reason            String                     @db.VarChar(2000)
-  status            AttendanceAdjustmentStatus @default(PENDING)
-  requestedById     String
-  requestedBy       User                       @relation("AttendanceRequester", fields: [requestedById], references: [id], onDelete: Restrict)
-  reviewedById      String?
-  reviewedBy        User?                      @relation("AttendanceReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
-  reviewNote        String?                    @db.VarChar(2000)
-  createdAt         DateTime                   @default(now()) @db.Timestamptz(3)
-  reviewedAt        DateTime?                  @db.Timestamptz(3)
+  type                 String                     @default("CORRECTION") @db.VarChar(20)
+  overtimeMinutes      Int                        @default(0)
+  verifiedById         String?
+  verifiedBy           User?                      @relation("AttendanceVerifier", fields: [verifiedById], references: [id], onDelete: Restrict)
+  verifiedAt           DateTime?                  @db.Timestamptz(3)
+  verificationNote     String?                    @db.VarChar(2000)
+  id                   String                     @id @default(cuid())
+  requestKey           String                     @unique
+  employeeId           String
+  employee             Employee                   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  sessionId            String?
+  session              AttendanceWorkSession?     @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  originalSession      Json?
+  proposedStartedAt    DateTime                   @db.Timestamptz(3)
+  proposedEndedAt      DateTime                   @db.Timestamptz(3)
+  reason               String                     @db.VarChar(2000)
+  status               AttendanceAdjustmentStatus @default(PENDING)
+  requestedById        String
+  requestedBy          User                       @relation("AttendanceRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  reviewedById         String?
+  reviewedBy           User?                      @relation("AttendanceReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+  reviewNote           String?                    @db.VarChar(2000)
+  createdAt            DateTime                   @default(now()) @db.Timestamptz(3)
+  reviewedAt           DateTime?                  @db.Timestamptz(3)
 
   @@index([employeeId, createdAt, id])
   @@index([status, createdAt, id])
@@ -1803,41 +2024,64 @@ enum PayrollReconciliationExceptionStatus {
 }
 
 model PayrollReconciliationException {
-  calculationId  String
-  calculation    PayrollRunCalculation @relation(fields: [calculationId], references: [id], onDelete: Restrict)
-  category       String
-  subjectId      String
-  status         PayrollReconciliationExceptionStatus @default(OPEN)
-  firstEvidence  Json
-  lastEvidence   Json
-  firstDetectedAt DateTime @db.Timestamptz(3)
-  lastObservedAt  DateTime @db.Timestamptz(3)
+  calculationId   String
+  calculation     PayrollRunCalculation                @relation(fields: [calculationId], references: [id], onDelete: Restrict)
+  category        String
+  subjectId       String
+  status          PayrollReconciliationExceptionStatus @default(OPEN)
+  firstEvidence   Json
+  lastEvidence    Json
+  firstDetectedAt DateTime                             @db.Timestamptz(3)
+  lastObservedAt  DateTime                             @db.Timestamptz(3)
 
-  version        Int @default(0)
-  observed       Boolean @default(true)
-  decisions      PayrollReconciliationDecision[]
+  version   Int                             @default(0)
+  observed  Boolean                         @default(true)
+  decisions PayrollReconciliationDecision[]
 
   @@id([calculationId, category, subjectId])
 }
 
 model PayrollReconciliationDecision {
-  id             String   @id @default(cuid())
+  id             String                               @id @default(cuid())
   calculationId  String
   category       String
   subjectId      String
-  exception      PayrollReconciliationException @relation(fields: [calculationId, category, subjectId], references: [calculationId, category, subjectId], onDelete: Restrict, map: "payroll_reconcile_decision_exception_fk")
-  requestId      String   @db.Uuid
+  exception      PayrollReconciliationException       @relation(fields: [calculationId, category, subjectId], references: [calculationId, category, subjectId], onDelete: Restrict, map: "payroll_reconcile_decision_exception_fk")
+  requestId      String                               @db.Uuid
   version        Int
   actorId        String
   action         String
   previous       PayrollReconciliationExceptionStatus
   next           PayrollReconciliationExceptionStatus
-  reason         String   @db.VarChar(500)
+  reason         String                               @db.VarChar(500)
   classification String?
   assessment     String?
   evidence       Json
-  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  createdAt      DateTime                             @default(now()) @db.Timestamptz(3)
 
   @@unique([calculationId, category, subjectId, requestId], map: "payroll_reconcile_decision_request_uq")
   @@unique([calculationId, category, subjectId, version], map: "payroll_reconcile_decision_version_uq")
+}
+
+model WorkspaceKanbanColumn {
+  id           String   @id @default(cuid())
+  workspaceKey String
+  name         String   @db.VarChar(120)
+  position     Int
+  assignments  WorkspaceKanbanAssignment[]
+
+  @@unique([workspaceKey, position])
+  @@unique([workspaceKey, id])
+  @@index([workspaceKey])
+}
+
+model WorkspaceKanbanAssignment {
+  workspaceKey String
+  projectId    String
+  taskId       String
+  columnId     String
+  column       WorkspaceKanbanColumn @relation(fields: [workspaceKey, columnId], references: [workspaceKey, id], onDelete: Cascade)
+
+  @@id([workspaceKey, projectId, taskId])
+  @@index([columnId])
 }

@@ -7,7 +7,10 @@ import {
 } from "../auth/auth.capabilities.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
 import { readWorkPlan } from "./templates.js"
-import { parseWorkspaceIdentity } from "./workspace-identity.js"
+import {
+  parseWorkspaceIdentity,
+  projectWorkspaceIdentity,
+} from "./workspace-identity.js"
 import {
   activityCounts,
   projectInclude,
@@ -331,6 +334,122 @@ export async function getProjectWorkspace(userId: string, workspaceId: string) {
         true,
       )[0]
       if (kind === "ungrouped-project") workspace.canRename = false
+      const projectIds = projects.map(({ id: projectId }) => projectId)
+      const milestoneIds = projects.flatMap(({ milestones }) =>
+        milestones.map(({ id: milestoneId }) => milestoneId),
+      )
+      const [notes, changeRequests, submissions] = await Promise.all([
+        tx.projectNote.findMany({
+          where: { projectId: { in: projectIds } },
+          select: {
+            id: true,
+            projectId: true,
+            createdAt: true,
+            updatedAt: true,
+            createdBy: { select: { id: true, fullName: true } },
+            revisions: {
+              select: {
+                id: true,
+                revision: true,
+                content: true,
+                authorId: true,
+                status: true,
+                submittedAt: true,
+                reviewedAt: true,
+                feedback: true,
+                escalatedAt: true,
+                clientVisible: true,
+                publishedAt: true,
+                publishedById: true,
+                publishedBy: { select: { id: true, fullName: true } },
+                supersededAt: true,
+                supersededByRevisionId: true,
+                supersededByRevision: {
+                  select: { id: true, revision: true },
+                },
+                unpublishedAt: true,
+                unpublishedById: true,
+                unpublishedBy: { select: { id: true, fullName: true } },
+                author: { select: { id: true, fullName: true } },
+                reviewedBy: { select: { id: true, fullName: true } },
+              },
+              orderBy: [{ revision: "asc" }, { id: "asc" }],
+            },
+          },
+          orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+        }),
+        tx.projectChangeRequest.findMany({
+          where: { projectId: { in: projectIds } },
+          select: {
+            id: true,
+            projectId: true,
+            kind: true,
+            details: true,
+            status: true,
+            responseNote: true,
+            createdAt: true,
+            reviewedAt: true,
+            requestedBy: { select: { fullName: true } },
+          },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        }),
+        tx.projectDeliverableSubmission.findMany({
+          where: { milestoneId: { in: milestoneIds } },
+          select: {
+            id: true,
+            milestoneId: true,
+            version: true,
+            note: true,
+            status: true,
+            submittedAt: true,
+            submittedById: true,
+            submittedBy: { select: { id: true, fullName: true } },
+            reviewedAt: true,
+            feedback: true,
+            escalatedAt: true,
+            reviewedBy: { select: { id: true, fullName: true } },
+            workflowFile: {
+              select: {
+                id: true,
+                name: true,
+                mimeType: true,
+                size: true,
+                createdAt: true,
+              },
+            },
+          },
+          orderBy: [{ version: "desc" }, { id: "desc" }],
+        }),
+      ])
+      const notesByProject = new Map<string, typeof notes>()
+      for (const note of notes) {
+        const projectNotes = notesByProject.get(note.projectId) ?? []
+        projectNotes.push(note)
+        notesByProject.set(note.projectId, projectNotes)
+      }
+      const requestsByProject = new Map<string, typeof changeRequests>()
+      for (const changeRequest of changeRequests) {
+        const projectRequests =
+          requestsByProject.get(changeRequest.projectId) ?? []
+        projectRequests.push(changeRequest)
+        requestsByProject.set(changeRequest.projectId, projectRequests)
+      }
+      const submissionsByMilestone = new Map<string, typeof submissions>()
+      for (const submission of submissions) {
+        const milestoneSubmissions =
+          submissionsByMilestone.get(submission.milestoneId) ?? []
+        milestoneSubmissions.push(submission)
+        submissionsByMilestone.set(submission.milestoneId, milestoneSubmissions)
+      }
+      const detailedWorkstreams = workspace.workstreams.map((workstream) => ({
+        ...workstream,
+        notes: notesByProject.get(workstream.id) ?? [],
+        changeRequests: requestsByProject.get(workstream.id) ?? [],
+        milestones: workstream.milestones.map((milestone) => ({
+          ...milestone,
+          submissions: submissionsByMilestone.get(milestone.id) ?? [],
+        })),
+      }))
       const requestIds = projects.flatMap(({ requestId }) =>
         requestId ? [requestId] : [],
       )
@@ -356,8 +475,25 @@ export async function getProjectWorkspace(userId: string, workspaceId: string) {
             take: 100,
           })
         : []
+      const workspaceKey = projectWorkspaceIdentity(projects[0])
+      const columns = await tx.workspaceKanbanColumn.findMany({
+        where: { workspaceKey },
+        orderBy: { position: "asc" },
+      })
+      const assignments = await tx.workspaceKanbanAssignment.findMany({
+        where: { workspaceKey, projectId: { in: projectIds } },
+      })
       return {
         ...workspace,
+        workstreams: detailedWorkstreams,
+        kanbanColumns: columns.map(({ id, name }) => ({ id, name })),
+        kanbanAssignments: assignments.map(
+          ({ projectId, taskId, columnId }) => ({
+            projectId,
+            taskId,
+            columnId,
+          }),
+        ),
         activity: events.map(({ workflow, ...event }) => ({
           ...event,
           summary: safeProjectActivitySummary(event.type, event.summary),

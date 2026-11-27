@@ -3,6 +3,7 @@ import type { ProjectManagementDepartmentDetail } from "../../src/features/depar
 import type { ProjectWorkspace } from "../../src/features/projects/api/projects-api"
 import type {
   AdminProjectManagementWorkspaceDetails,
+  ProjectWorkspaceDetail,
   WorkspaceDirectoryRow,
 } from "../../src/features/project-workspace/api/project-workspace-api"
 import {
@@ -123,29 +124,75 @@ test("directory links and cancel distinguish a group and project with the same I
     await expect(
       page.getByRole("heading", { name: target.name, exact: true }),
     ).toBeVisible()
-    await expect(
-      page.getByRole("tablist", { name: "Project sections" }),
-    ).toBeVisible()
-    const tablist = page.getByRole("tablist", { name: "Project sections" })
-    const overviewTab = tablist.getByRole("tab", { name: "Overview" })
-    await overviewTab.focus()
-    await page.keyboard.press("ArrowRight")
-    await expect(tablist.getByRole("tab", { name: "Work" })).toHaveAttribute(
-      "aria-selected",
-      "true",
+    await page.waitForLoadState("networkidle")
+    const initialDetailRequestCount = detailRequests.filter((path) =>
+      path.endsWith(`/${target.rowId}`),
+    ).length
+    expect(initialDetailRequestCount).toBeGreaterThan(0)
+    const projectNavigation = page.getByRole("complementary", {
+      name: "Primary navigation",
+    })
+    const sectionNames = [
+      "Overview",
+      "Work",
+      "Deliverables",
+      "Notes",
+      "Requests",
+      "Team",
+      "Activity",
+    ]
+    for (const section of sectionNames) {
+      await expect(
+        projectNavigation.getByRole("link", { name: section, exact: true }),
+      ).toBeVisible()
+    }
+    const workLink = projectNavigation.getByRole("link", {
+      name: "Work",
+      exact: true,
+    })
+    await workLink.focus()
+    await page.keyboard.press("Enter")
+    await expect(page).toHaveURL(
+      `/project-workspace/${encodeURIComponent(target.rowId)}?tab=work`,
     )
-    await page.keyboard.press("ArrowLeft")
-    await expect(overviewTab).toHaveAttribute("aria-selected", "true")
+    await expect(workLink).toHaveAttribute("aria-current", "page")
+    await projectNavigation
+      .getByRole("link", { name: "Notes", exact: true })
+      .click()
+    await expect(page).toHaveURL(
+      `/project-workspace/${encodeURIComponent(target.rowId)}?tab=notes`,
+    )
+    await expect(
+      projectNavigation.getByRole("link", { name: "Notes", exact: true }),
+    ).toHaveAttribute("aria-current", "page")
     await page.setViewportSize({ width: 390, height: 844 })
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= window.innerWidth,
       ),
     ).toBe(true)
+    await page.getByRole("button", { name: "Open navigation menu" }).click()
+    await expect(
+      projectNavigation.getByRole("link", {
+        name: "Team",
+        exact: true,
+      }),
+    ).toBeVisible()
+    await projectNavigation
+      .getByRole("link", { name: "Team", exact: true })
+      .click()
+    await expect(page).toHaveURL(
+      `/project-workspace/${encodeURIComponent(target.rowId)}?tab=team`,
+    )
+    await page.getByRole("button", { name: "Open navigation menu" }).click()
+    await projectNavigation
+      .getByRole("link", { name: "Back to projects", exact: true })
+      .click()
+    await expect(page).toHaveURL("/project-workspace")
+    await page.setViewportSize({ width: 1280, height: 720 })
     expect(
       detailRequests.filter((path) => path.endsWith(`/${target.rowId}`)),
-    ).toHaveLength(1)
-    await page.goBack()
+    ).toHaveLength(initialDetailRequestCount)
   }
   expect(
     await page.evaluate(
@@ -169,6 +216,95 @@ test("directory links and cancel distinguish a group and project with the same I
   expect(writes).toEqual([
     "/api/project-workspace/ungrouped-project:shared-id/cancel",
   ])
+})
+
+test("Team Leads receive the same project-specific section navigation", async ({
+  page,
+}) => {
+  await restoreSession(page, "STAFF")
+  const identity = "ungrouped-project:lead-project"
+  const workspace: ProjectWorkspaceDetail = {
+    id: identity,
+    rowId: identity,
+    kind: "ungrouped-project",
+    name: "Team Lead project",
+    structure: "SEPARATE",
+    status: "IN_PROGRESS",
+    client: { id: "client", fullName: "Client" },
+    updatedAt: "2026-11-14T00:00:00Z",
+    activityCount: 0,
+    canCreate: false,
+    canManage: false,
+    canRename: false,
+    workstreams: [
+      {
+        id: "lead-project",
+        requestId: null,
+        name: "Team Lead project",
+        description: null,
+        serviceName: "Design service",
+        referenceNumber: null,
+        workflowState: null,
+        status: "IN_PROGRESS",
+        startDate: null,
+        createdAt: "2026-11-14T00:00:00Z",
+        updatedAt: "2026-11-14T00:00:00Z",
+        templateKey: null,
+        taskCount: 0,
+        completedTaskCount: 0,
+        plan: null,
+        milestones: [],
+        notes: [],
+        changeRequests: [],
+        isTeamLead: true,
+        hasTeamLead: true,
+        isDepartmentHead: false,
+        canReviewDeliverables: true,
+        canReviewRequests: false,
+        canUploadDeliverables: true,
+        staff: [
+          {
+            id: "lead-employee",
+            fullName: "Project Lead",
+            position: "Designer",
+            status: "ACTIVE",
+            profileSpecialties: [],
+            approvedAt: "2026-11-14T00:00:00Z",
+            isTeamLead: true,
+          },
+        ],
+        canAssign: false,
+      },
+    ],
+    activity: [],
+  }
+  await page.route("**/api/project-workspace/**", (route) => {
+    const path = decodeURIComponent(new URL(route.request().url()).pathname)
+    return path.endsWith(`/${identity}`)
+      ? route.fulfill({ json: workspace })
+      : route.fallback()
+  })
+
+  await page.goto(`/project-workspace/${encodeURIComponent(identity)}?tab=team`)
+  const sidebar = page.locator("#app-sidebar")
+  await expect(
+    sidebar.getByRole("link", { name: "Team", exact: true }),
+  ).toHaveAttribute("aria-current", "page")
+  for (const label of [
+    "Overview",
+    "Work",
+    "Deliverables",
+    "Notes",
+    "Requests",
+    "Team",
+    "Activity",
+  ])
+    await expect(
+      sidebar.getByRole("link", { name: label, exact: true }),
+    ).toBeVisible()
+  await expect(
+    sidebar.getByRole("link", { name: "Back to projects" }),
+  ).toHaveAttribute("href", "/project-workspace")
 })
 
 test("Superadmin Project Management is department-first and opens read-only scoped workspaces", async ({
@@ -891,23 +1027,36 @@ test("Superadmin workspace details stay read-only and reset to the summary view"
   await expect(panel).toContainText("Department Head")
   await expect(panel).toContainText("Project Assignee")
   await expect(panel).toContainText("1 of 2 tasks complete")
-  await panel.getByRole("button", { name: projectTitle }).click()
-  await expect(panel.getByRole("heading", { name: projectTitle })).toBeVisible()
-  await expect(panel.getByText("Project details", { exact: true })).toHaveCount(
+  const projectTrigger = panel.getByRole("button", { name: projectTitle })
+  await projectTrigger.click()
+  const projectSubview = panel.getByRole("region", { name: projectTitle })
+  await expect(
+    projectSubview.getByRole("heading", { name: projectTitle }),
+  ).toBeVisible()
+  await expect(projectTrigger).toHaveCount(0)
+  await expect(
+    projectSubview.getByText("Project details", { exact: true }),
+  ).toHaveCount(0)
+  await expect(
+    projectSubview.getByText("In progress", { exact: true }),
+  ).toBeVisible()
+  await expect(projectSubview).toContainText("Project description")
+  await expect(projectSubview).toContainText("Project lead")
+  await expect(projectSubview).toContainText(
+    "1 completed · 1 incomplete · 2 total",
+  )
+  await expect(
+    projectSubview.getByText("In progress", { exact: true }),
+  ).toHaveCount(1)
+  await expect(projectSubview.getByText("Status", { exact: true })).toHaveCount(
     0,
   )
-  await expect(panel.getByText("In progress", { exact: true })).toBeVisible()
-  await expect(panel).toContainText("Project description")
-  await expect(panel).toContainText("Project lead")
-  await expect(panel).toContainText("1 completed · 1 incomplete · 2 total")
-  await expect(panel.getByText("In progress", { exact: true })).toHaveCount(1)
-  await expect(panel.getByText("Status", { exact: true })).toHaveCount(0)
   await expect(
     panel.getByRole("heading", { name: "Project details" }),
   ).toHaveCount(0)
   await expect(panel).not.toContainText("Read-only project details.")
   await expect(
-    panel.getByText("Persisted workspace name", { exact: true }),
+    projectSubview.getByText("Persisted workspace name", { exact: true }),
   ).toBeVisible()
   await expect(
     panel.getByRole("heading", { name: "Project team" }),
@@ -948,7 +1097,8 @@ test("Superadmin workspace details stay read-only and reset to the summary view"
   await expect(
     panel.getByRole("heading", { name: "Persisted workspace name" }),
   ).toBeVisible()
-  await panel.getByRole("button", { name: projectTitle }).click()
+  await expect(projectTrigger).toBeFocused()
+  await projectTrigger.click()
   await panel
     .getByRole("button", { name: "Close project workspace details" })
     .click()
@@ -1203,6 +1353,23 @@ test("department heads see department project analytics and can open Management"
     page.getByText("Approve wireframes", { exact: true }),
   ).toBeVisible()
   await expect(page.getByText("Review content", { exact: true })).toBeVisible()
+  const upcoming = page.getByRole("region", { name: "Upcoming task deadlines" })
+  const overdue = page.getByRole("region", { name: "Overdue tasks" })
+  await expect(
+    upcoming.getByRole("row", { name: /Approve wireframes/ }),
+  ).toContainText("Brand refresh")
+  await expect(
+    upcoming.getByRole("row", { name: /Approve wireframes/ }),
+  ).toContainText("11/20/2026")
+  await expect(
+    upcoming.getByRole("row", { name: /Approve wireframes/ }),
+  ).toContainText("In progress")
+  await expect(
+    overdue.getByRole("row", { name: /Review content/ }),
+  ).toContainText("Not started")
+  await expect(
+    overdue.getByRole("row", { name: /Review content/ }),
+  ).toContainText("Overdue")
   const requestsBeforeRefresh = requestPaths.length
   const refreshedOverview = page.waitForResponse(
     (response) =>
@@ -1530,10 +1697,9 @@ test("ordinary Staff rows retain typed identity and directory state", async ({
     /\/project-workspace\/ungrouped-project%3Acollision-id\?.*search=Brand\+campaign.*status=IN_PROGRESS.*sort=most-active/,
   )
   await expect(page.getByRole("heading", { name: project.name })).toBeVisible()
-  expect(detailRequests).toEqual([
-    "group:collision-id",
-    "ungrouped-project:collision-id",
-  ])
+  expect(new Set(detailRequests)).toEqual(
+    new Set(["group:collision-id", "ungrouped-project:collision-id"]),
+  )
 })
 
 test("directory state survives typed detail and breadcrumb return navigation", async ({
@@ -1621,7 +1787,10 @@ test("directory state survives typed detail and breadcrumb return navigation", a
   await expect(
     page.getByRole("heading", { name: row.name, exact: true }),
   ).toBeVisible()
-  expect(detailRequests).toHaveLength(1)
+  await page.waitForLoadState("networkidle")
+  expect(new Set(detailRequests)).toEqual(
+    new Set(["/api/project-workspace/group:shared-id"]),
+  )
   await page
     .getByRole("navigation", { name: "Breadcrumb" })
     .getByRole("link", { name: "Project Workspace" })
@@ -1791,7 +1960,10 @@ test("workspace setup transitions a virtual project into a persisted group", asy
     page.getByRole("heading", { name: "Campaign project", exact: true }),
   ).toBeVisible()
   expect(createCount).toBe(1)
-  expect(detailRequests).toEqual(["/api/project-workspace/group:group-1"])
+  await page.waitForLoadState("networkidle")
+  expect(new Set(detailRequests)).toEqual(
+    new Set(["/api/project-workspace/group:group-1"]),
+  )
   await page
     .getByRole("navigation", { name: "Breadcrumb" })
     .getByRole("link", { name: "Project Workspace" })
@@ -2339,7 +2511,10 @@ test("workspace detail refreshes across tabs after staffing and team-lead change
   const firstBeforeStaffing = firstCounts.detail
   const secondBeforeStaffing = secondCounts.detail
 
-  await page.getByRole("tab", { name: "Team" }).click()
+  await page
+    .getByRole("complementary", { name: "Primary navigation" })
+    .getByRole("link", { name: "Team", exact: true })
+    .click()
   await page.getByRole("button", { name: "Assign staff" }).click()
   const staffing = page.getByRole("dialog", { name: "Manage project staff" })
   await staffing.getByRole("checkbox", { name: "Alex Designer" }).check()
@@ -2347,7 +2522,10 @@ test("workspace detail refreshes across tabs after staffing and team-lead change
   await expect(staffing).toHaveCount(0)
   await expect.poll(() => firstCounts.detail).toBe(firstBeforeStaffing + 1)
   await expect.poll(() => secondCounts.detail).toBe(secondBeforeStaffing + 1)
-  await secondPage.getByRole("tab", { name: "Team" }).click()
+  await secondPage
+    .getByRole("complementary", { name: "Primary navigation" })
+    .getByRole("link", { name: "Team", exact: true })
+    .click()
   await expect(secondPage.getByText("Alex Designer")).toBeVisible()
 
   const firstBeforeTeamLead = firstCounts.detail

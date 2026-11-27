@@ -1,5 +1,6 @@
 import { Globe2, ArrowUpRight } from "lucide-react"
 import Link from "next/link"
+import Image from "next/image"
 
 const footerClass = [
   "mt-22 [border-top:1px_solid_var(--landing-line)] bg-[color-mix(in_srgb,var(--landing-ink)_3%,var(--landing-paper))]",
@@ -58,15 +59,19 @@ const footerPages = [
   { label: "Contact", href: "/#contact" },
 ]
 
-export function LandingFooter() {
+export function LandingFooter({ flush = false }: { flush?: boolean }) {
   return (
-    <footer className={footerClass}>
+    <footer className={`${footerClass} ${flush ? "!mt-0" : ""}`}>
       <div className="max-w-[1360px] mx-auto [padding:64px_48px_28px] max-[1101px]:px-8 max-[761px]:[padding:42px_24px_26px]">
         <div className={footerColumnsClass}>
           <div className={footerBrandClass}>
-            <p className="text-(color:--landing-ink) text-[27px] font-semibold tracking-[-1.1px] leading-[1.3] max-[761px]:text-[25px]">
-              converyn
-            </p>
+            <Image
+              src="/auth/converyn-logo-w-text.svg"
+              alt="Converyn"
+              width={134}
+              height={67}
+              className="block h-[67px] w-[134px] object-contain"
+            />
             <p>
               Creative thinking. Connected expertise. Digital services that help
               bring your next idea into focus.

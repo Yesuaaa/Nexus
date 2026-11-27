@@ -82,7 +82,7 @@ function summarizeStatus(projects: WorkspaceProject[]): ProjectStatus {
 function projectWorkstream(
   project: WorkspaceProject,
   includePlan: boolean,
-  userId: string,
+  context: StaffContext,
 ) {
   const plan = readWorkPlan(project.workPlan)
   const tasks =
@@ -104,6 +104,32 @@ function projectWorkstream(
     completedTaskCount: tasks.filter(({ status }) => status === "DONE").length,
     plan: includePlan ? plan : undefined,
     milestones: project.milestones,
+    isTeamLead: project.staff.some(
+      ({ employee, isTeamLead }) =>
+        isTeamLead &&
+        employee.status === "ACTIVE" &&
+        employee.userId === context.id,
+    ),
+    hasTeamLead: project.staff.some(
+      ({ employee, isTeamLead }) => isTeamLead && employee.status === "ACTIVE",
+    ),
+    isDepartmentHead: Boolean(
+      project.request?.acceptedDepartmentId &&
+      context.headDepartmentIds.includes(project.request.acceptedDepartmentId),
+    ),
+    canReviewDeliverables:
+      project.staff.some(
+        ({ employee, isTeamLead }) =>
+          isTeamLead &&
+          employee.status === "ACTIVE" &&
+          employee.userId === context.id,
+      ) ||
+      Boolean(
+        project.request?.acceptedDepartmentId &&
+        context.headDepartmentIds.includes(
+          project.request.acceptedDepartmentId,
+        ),
+      ),
     staff: project.staff.map(({ employee, approvedAt, isTeamLead }) => {
       const { userId: _userId, ...safeEmployee } = employee
       void _userId
@@ -111,7 +137,7 @@ function projectWorkstream(
     }),
     canUploadDeliverables: project.staff.some(
       ({ employee }) =>
-        employee.userId === userId && employee.status === "ACTIVE",
+        employee.userId === context.id && employee.status === "ACTIVE",
     ),
   }
 }
@@ -189,8 +215,14 @@ export function workspaceRows(
           ({ status }) => !terminalProjectStatuses.includes(status),
         ),
       workstreams: groupProjects.map((project) => ({
-        ...projectWorkstream(project, includePlan, context.id),
+        ...projectWorkstream(project, includePlan, context),
         canAssign: Boolean(
+          project.request?.acceptedDepartmentId &&
+          context.headDepartmentIds.includes(
+            project.request.acceptedDepartmentId,
+          ),
+        ),
+        canReviewRequests: Boolean(
           project.request?.acceptedDepartmentId &&
           context.headDepartmentIds.includes(
             project.request.acceptedDepartmentId,

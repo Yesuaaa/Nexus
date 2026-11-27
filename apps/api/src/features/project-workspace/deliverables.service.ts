@@ -14,7 +14,11 @@ import {
   recordDeliverableEvent,
 } from "./deliverable-access.js"
 import { getProjectWorkspace } from "./workspace-details.service.js"
-import { terminalProjectStatuses } from "./workspace-access.js"
+import {
+  getStaffContext,
+  lockAndRevalidateProjectForEdit,
+  terminalProjectStatuses,
+} from "./workspace-access.js"
 
 export async function updateProjectDeliverable(
   userId: string,
@@ -139,14 +143,24 @@ export async function reviewProjectDeliverable(
     )
 
   await getPrisma()!.$transaction(async (tx) => {
-    const { project, request } = await getDeliverableAccess(
+    const initialContext = await getStaffContext(tx, userId)
+    await lockAndRevalidateProjectForEdit(
       tx,
       userId,
+      initialContext,
       workspaceId,
       projectId,
-      deliverableId,
-      true,
     )
+    const { project, request, isHead, isTeamLead, hasTeamLead } =
+      await getDeliverableAccess(
+        tx,
+        userId,
+        workspaceId,
+        projectId,
+        deliverableId,
+      )
+    if (!request?.workflow)
+      throw new ServiceRequestsError(409, "This project has no client workflow")
     await lockRows(tx, "Project", project.id)
     await lockRows(tx, "ProjectMilestone", deliverableId)
     const current = await tx.projectMilestone.findUniqueOrThrow({
@@ -158,14 +172,62 @@ export async function reviewProjectDeliverable(
         409,
         "Only submitted deliverables can be reviewed",
       )
+    const submission = await tx.projectDeliverableSubmission.findFirst({
+      where: {
+        milestoneId: deliverableId,
+        workflowFileId: current.workflowFileId,
+      },
+      select: {
+        id: true,
+        status: true,
+        submittedById: true,
+      },
+    })
+    if (!submission || !["IN_REVIEW", "ESCALATED"].includes(submission.status))
+      throw new ServiceRequestsError(
+        409,
+        "This deliverable submission is no longer awaiting review",
+      )
+    if (submission.submittedById === userId)
+      throw new ServiceRequestsError(
+        403,
+        "You cannot review your own submission",
+      )
+    const leadCanReview = isTeamLead && submission.status === "IN_REVIEW"
+    const headCanReview =
+      isHead &&
+      (submission.status === "ESCALATED" ||
+        (!hasTeamLead && submission.status === "IN_REVIEW"))
+    if (!leadCanReview && !headCanReview)
+      throw new ServiceRequestsError(
+        403,
+        hasTeamLead
+          ? "A Department Head can review only escalated submissions"
+          : "Only the assigned project lead or Department Head can review deliverables",
+      )
     const approved = decision === "approve"
+    const reviewedAt = new Date()
+    const submissionUpdated = await tx.projectDeliverableSubmission.updateMany({
+      where: { id: submission.id, status: submission.status },
+      data: {
+        status: approved ? "APPROVED" : "REJECTED",
+        reviewedById: userId,
+        reviewedAt,
+        feedback: approved ? null : reason,
+      },
+    })
+    if (!submissionUpdated.count)
+      throw new ServiceRequestsError(
+        409,
+        "This submission was reviewed by someone else. Refresh the project.",
+      )
     await tx.projectMilestone.update({
       where: { id: deliverableId },
       data: {
         deliveryStatus: approved ? "APPROVED" : "REJECTED",
         rejectionReason: approved ? null : reason,
         reviewedById: userId,
-        reviewedAt: new Date(),
+        reviewedAt,
       },
     })
     await tx.project.update({
@@ -184,8 +246,6 @@ export async function reviewProjectDeliverable(
         ? `Approved “${current.title}”.`
         : `Rejected “${current.title}”: ${reason}`,
     )
-    if (!request?.workflow)
-      throw new ServiceRequestsError(409, "This project has no client workflow")
     await writeProjectLog(
       tx,
       userId,
@@ -244,6 +304,14 @@ export async function sendProjectDeliverableToClient(
       where: { id: current.workflowFileId },
       data: { clientVisible: true },
     })
+    await tx.projectDeliverableSubmission.updateMany({
+      where: {
+        milestoneId: deliverableId,
+        workflowFileId: current.workflowFileId,
+        status: "APPROVED",
+      },
+      data: { status: "SENT_TO_CLIENT" },
+    })
     const sharedFile = await tx.workflowFile.findUniqueOrThrow({
       where: { id: current.workflowFileId },
       select: { name: true },
@@ -298,6 +366,73 @@ export async function sendProjectDeliverableToClient(
         ],
       },
       { id: deliverableId, label: current.title },
+    )
+  })
+  return getProjectWorkspace(userId, workspaceId)
+}
+
+export async function escalateProjectDeliverable(
+  userId: string,
+  workspaceId: string,
+  projectId: string,
+  deliverableId: string,
+) {
+  await getPrisma()!.$transaction(async (tx) => {
+    const initialContext = await getStaffContext(tx, userId)
+    await lockAndRevalidateProjectForEdit(
+      tx,
+      userId,
+      initialContext,
+      workspaceId,
+      projectId,
+    )
+    const { project, isTeamLead } = await getDeliverableAccess(
+      tx,
+      userId,
+      workspaceId,
+      projectId,
+      deliverableId,
+    )
+    if (!isTeamLead)
+      throw new ServiceRequestsError(
+        403,
+        "Only the assigned Team Lead can escalate deliverables",
+      )
+    await lockRows(tx, "Project", project.id)
+    await lockRows(tx, "ProjectMilestone", deliverableId)
+    const milestone = await tx.projectMilestone.findUniqueOrThrow({
+      where: { id: deliverableId },
+      select: { title: true, deliveryStatus: true, workflowFileId: true },
+    })
+    if (milestone.deliveryStatus !== "IN_REVIEW" || !milestone.workflowFileId)
+      throw new ServiceRequestsError(
+        409,
+        "Only a pending deliverable can be escalated",
+      )
+    const changed = await tx.projectDeliverableSubmission.updateMany({
+      where: {
+        milestoneId: deliverableId,
+        workflowFileId: milestone.workflowFileId,
+        status: "IN_REVIEW",
+      },
+      data: { status: "ESCALATED", escalatedAt: new Date() },
+    })
+    if (!changed.count)
+      throw new ServiceRequestsError(
+        409,
+        "This deliverable was already escalated or reviewed",
+      )
+    await tx.project.update({
+      where: { id: project.id },
+      data: { updatedAt: new Date() },
+    })
+    await recordDeliverableEvent(
+      tx,
+      project.requestId!,
+      deliverableId,
+      userId,
+      "PROJECT_DELIVERABLE_ESCALATED",
+      `Escalated “${milestone.title}” for Department Head review.`,
     )
   })
   return getProjectWorkspace(userId, workspaceId)

@@ -107,8 +107,10 @@ export async function uploadProjectDeliverable(
         409,
         "This deliverable is locked while it is being reviewed or after approval",
       )
-    if (current.workflowFileId)
-      await tx.workflowFile.delete({ where: { id: current.workflowFileId } })
+    const latestVersion = await tx.projectDeliverableSubmission.aggregate({
+      where: { milestoneId: deliverableId },
+      _max: { version: true },
+    })
     const file = await tx.workflowFile.create({
       data: {
         requestId: project.requestId!,
@@ -122,6 +124,16 @@ export async function uploadProjectDeliverable(
         clientVisible: false,
       },
       select: { id: true },
+    })
+    await tx.projectDeliverableSubmission.create({
+      data: {
+        milestoneId: deliverableId,
+        workflowFileId: file.id,
+        submittedById: userId,
+        version: (latestVersion._max.version ?? 0) + 1,
+        note: note || null,
+        status: "IN_REVIEW",
+      },
     })
     await tx.projectMilestone.update({
       where: { id: deliverableId },
@@ -214,9 +226,16 @@ export async function removeProjectDeliverableAttachment(
       )
     if (!current.workflowFileId)
       throw new ServiceRequestsError(409, "This deliverable has no attachment")
+    await tx.projectDeliverableSubmission.updateMany({
+      where: {
+        milestoneId: deliverableId,
+        workflowFileId: current.workflowFileId,
+        status: { in: ["IN_REVIEW", "ESCALATED"] },
+      },
+      data: { status: "WITHDRAWN" },
+    })
     const status =
       current.deliveryStatus === "REJECTED" ? "REJECTED" : "NOT_SUBMITTED"
-    await tx.workflowFile.delete({ where: { id: current.workflowFileId } })
     await tx.projectMilestone.update({
       where: { id: deliverableId },
       data: {
@@ -276,5 +295,34 @@ export async function downloadProjectDeliverable(
     })
     if (!file) throw new ServiceRequestsError(404, "No attachment is available")
     return file
+  })
+}
+
+export async function downloadProjectDeliverableSubmission(
+  userId: string,
+  workspaceId: string,
+  projectId: string,
+  deliverableId: string,
+  submissionId: string,
+) {
+  return getPrisma()!.$transaction(async (tx) => {
+    await getDeliverableAccess(
+      tx,
+      userId,
+      workspaceId,
+      projectId,
+      deliverableId,
+    )
+    const submission = await tx.projectDeliverableSubmission.findFirst({
+      where: { id: submissionId, milestoneId: deliverableId },
+      select: {
+        workflowFile: {
+          select: { name: true, mimeType: true, size: true, data: true },
+        },
+      },
+    })
+    if (!submission?.workflowFile)
+      throw new ServiceRequestsError(404, "Deliverable version not found")
+    return submission.workflowFile
   })
 }

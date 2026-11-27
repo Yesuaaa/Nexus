@@ -1,3 +1,4 @@
+import { hasValidCalendarDay } from "../../shared/calendar-date.js"
 import type { AttendanceScheduleMode } from "../../generated/prisma/client.js"
 import { isPlainObject } from "../../shared/validation.js"
 
@@ -42,13 +43,8 @@ export function attendanceTimestamp(value: unknown): Date {
     )
   )
     throw new RangeError("Provide a complete timestamp with an offset or Z")
-  const calendarDay = new Date(`${value.slice(0, 10)}T00:00:00Z`)
   const instant = new Date(value)
-  if (
-    !Number.isFinite(calendarDay.getTime()) ||
-    calendarDay.toISOString().slice(0, 10) !== value.slice(0, 10) ||
-    !Number.isFinite(instant.getTime())
-  )
+  if (!hasValidCalendarDay(value) || !Number.isFinite(instant.getTime()))
     throw new RangeError("Invalid attendance timestamp")
   return instant
 }

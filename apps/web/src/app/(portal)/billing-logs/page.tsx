@@ -32,6 +32,7 @@ import { downloadWorkflowFile } from "@/features/request-workflow/api/workflow-a
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 import { errorMessage } from "@/lib/error-message"
 import { useAsyncResource } from "@/lib/use-async-resource"
+import { ClientInvoices } from "@/features/billing/components/client-invoices"
 
 type BillingPayment = {
   id: string
@@ -176,6 +177,7 @@ export default function BillingLogsPage() {
         title="Billing Logs"
         description="See what’s due and review payments for your booked services."
       />
+      <ClientInvoices />
 
       {error ? (
         <Alert variant="text" className="mt-6 text-sm">

@@ -590,7 +590,7 @@ test.describe("Client service requests", () => {
       id: `catalog-${index}`,
       name: `Catalog Service ${index + 1}`,
       description: "Business support",
-      iconKey: "sparkles",
+      iconKey: index < 8 ? "code" : "advertising",
       imageUrl: null,
       imageAltText: null,
       clientRequirements: [],
@@ -635,9 +635,11 @@ test.describe("Client service requests", () => {
       page.getByRole("button", { name: /^Explore Catalog Service/ }),
     ).toHaveCount(2)
     await page
-      .getByRole("combobox", { name: "Filter services by department" })
+      .getByRole("combobox", { name: "Filter services by category" })
       .click()
-    await page.getByRole("option", { name: "Engineering", exact: true }).click()
+    await page
+      .getByRole("option", { name: "Web & Development", exact: true })
+      .click()
     await expect(
       page.getByRole("button", { name: "Page 1", exact: true }),
     ).toHaveAttribute("aria-current", "page")

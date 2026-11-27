@@ -4,9 +4,21 @@ import Image from "next/image"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
-import { gsap } from "gsap"
+import { useCardImageReveal } from "@/components/ui/use-card-image-reveal"
 import { useHoverLabel } from "@/components/ui/use-hover-label"
 import { SearchField } from "@/components/ui/search-field"
+import { HistoryBackLink } from "@/components/ui/history-back-link"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { focusRing } from "@/components/layout/styles"
+import { cn } from "@/lib/utils"
+import { serviceIconOptions } from "@/features/services/components/service-icon"
+import { ProjectsRevealMotion } from "@/features/projects/components/projects-hero-motion"
 import {
   ArrowUpRight,
   ArrowLeft,
@@ -107,48 +119,17 @@ function PublicServiceCard({
   index: number
 }) {
   const cardRef = useRef<HTMLElement>(null)
-  const revealRef = useRef<HTMLSpanElement>(null)
+  const { revealRef, showReveal, hideReveal } = useCardImageReveal(cardRef, 1)
   const [imageFailed, setImageFailed] = useState(false)
   const { labelRef, show, restore } = useHoverLabel(service.name)
 
-  useEffect(() => {
-    const reveal = revealRef.current
-    return () => gsap.killTweensOf(reveal)
-  }, [])
-
-  function showReveal(clientX?: number, clientY?: number) {
-    const card = cardRef.current
-    const reveal = revealRef.current
-    if (!card || !reveal) return
-    const bounds = card.getBoundingClientRect()
-    const x = (clientX ?? bounds.left + bounds.width / 2) - bounds.left
-    const y = (clientY ?? bounds.top + bounds.height / 2) - bounds.top
-    const reduced = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches
-    gsap.killTweensOf(reveal)
-    gsap.set(reveal, { clipPath: `circle(0px at ${x}px ${y}px)`, scale: 1 })
-    gsap.to(reveal, {
-      clipPath: `circle(${Math.hypot(bounds.width, bounds.height)}px at ${x}px ${y}px)`,
-      scale: 1,
-      duration: reduced ? 0 : 0.55,
-      ease: "power3.out",
-    })
+  function showCard(clientX?: number, clientY?: number) {
+    showReveal(clientX, clientY)
     show()
   }
 
-  function hideReveal() {
-    const reveal = revealRef.current
-    if (!reveal) return
-    gsap.killTweensOf(reveal)
-    gsap.to(reveal, {
-      clipPath: "circle(0px at 50% 50%)",
-      scale: 1,
-      duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? 0
-        : 0.4,
-      ease: "power3.inOut",
-    })
+  function hideCard() {
+    hideReveal()
     restore()
   }
 
@@ -157,19 +138,19 @@ function PublicServiceCard({
       ref={cardRef}
       className="group relative aspect-[7/9] w-full overflow-hidden rounded-[10px] bg-[#203f8c] text-white"
       data-has-image={!!service.imageUrl && !imageFailed}
-      onMouseEnter={(event) => showReveal(event.clientX, event.clientY)}
+      onMouseEnter={(event) => showCard(event.clientX, event.clientY)}
       onMouseLeave={(event) => {
-        if (!event.currentTarget.contains(document.activeElement)) hideReveal()
+        if (!event.currentTarget.contains(document.activeElement)) hideCard()
       }}
       onFocusCapture={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) showReveal()
+        if (!event.currentTarget.contains(event.relatedTarget)) showCard()
       }}
       onBlurCapture={(event) => {
         if (
           !event.currentTarget.contains(event.relatedTarget) &&
           !event.currentTarget.matches(":hover")
         )
-          hideReveal()
+          hideCard()
       }}
     >
       <span
@@ -230,10 +211,11 @@ function PublicServiceCard({
 
 const catalogPath = "/explore/services"
 
-function catalogHref(query: string, page = 1) {
+function catalogHref(query: string, page = 1, category = "") {
   const params = new URLSearchParams()
   if (query) params.set("q", query)
   if (page > 1) params.set("page", String(page))
+  if (category) params.set("category", category)
   return params.size ? `${catalogPath}?${params}` : catalogPath
 }
 
@@ -241,13 +223,31 @@ export function PublicServicesPage() {
   const router = useRouter()
   const params = useSearchParams()
   const query = (params.get("q") ?? "").trim().slice(0, 120)
+  const category = serviceIconOptions.some(
+    (option) => option.value === params.get("category"),
+  )
+    ? (params.get("category") ?? "")
+    : ""
+  const [search, setSearch] = useState(query)
+  const [previousQuery, setPreviousQuery] = useState(query)
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  if (previousQuery !== query) {
+    setPreviousQuery(query)
+    setSearch(query)
+  }
+  useEffect(
+    () => () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current)
+    },
+    [],
+  )
   const requestedPage = params.get("page") ?? ""
   const page = /^[1-9][0-9]{0,4}$/.test(requestedPage)
     ? Number(requestedPage)
     : 1
   const resource = useAsyncResource(
-    (signal) => listPublicServices(query, page, signal),
-    [query, page],
+    (signal) => listPublicServices(query, page, signal, category),
+    [query, page, category],
     {
       fallbackError: "We couldn't load services. Please try again.",
     },
@@ -256,59 +256,82 @@ export function PublicServicesPage() {
 
   return (
     <>
-      <div className={styles.intro}>
-        <h1>
-          FIND YOUR NEXT
-          <br />
-          <span className="!text-[#203f8c]">STARTING POINT.</span>
-        </h1>
-        <p>
-          Explore our services, discover what fits, and share what you have in
-          mind. A conversation comes before any commitment.
-        </p>
-      </div>
+      <ProjectsRevealMotion duration={0.15}>
+        <div
+          className={`${styles.intro} motion-safe:[[data-public-reveal=pending]_&]:opacity-0`}
+          data-projects-reveal
+        >
+          <h1>
+            FIND YOUR NEXT
+            <br />
+            <span className="!text-[#203f8c]">STARTING POINT.</span>
+          </h1>
+          <p>
+            Explore our services, discover what fits, and share what you have in
+            mind. A conversation comes before any commitment.
+          </p>
+        </div>
+      </ProjectsRevealMotion>
       <div
         aria-hidden="true"
         className="relative left-1/2 mb-5 h-px w-screen -translate-x-1/2 bg-[#d7d6d2]"
       />
-      <form
-        action={catalogPath}
-        className="flex items-center gap-3 max-[540px]:flex-wrap"
+      <div
         role="search"
-        onSubmit={(event) => {
-          event.preventDefault()
-          const search = new FormData(event.currentTarget).get("q")
-          if (typeof search === "string")
-            router.push(catalogHref(search.trim()), { scroll: false })
-        }}
+        className="grid grid-cols-[minmax(0,1fr)_224px] gap-3 max-[700px]:grid-cols-1"
       >
         <SearchField
-          key={query}
+          size="large"
           id="service-search"
           name="q"
           label="Search services"
-          fullWidth
-          containerClassName="!w-full !min-w-0 !flex-1 max-[1050px]:!w-full"
+          containerClassName="!shadow-none focus-within:!bg-background"
+          className="focus-visible:!outline-none"
           maxLength={120}
-          placeholder="Search services by name or description"
-          defaultValue={query}
+          placeholder="Search services..."
+          value={search}
+          onChange={(event) => {
+            const value = event.target.value
+            setSearch(value)
+            if (searchTimer.current) clearTimeout(searchTimer.current)
+            searchTimer.current = setTimeout(() => {
+              router.push(catalogHref(value.trim(), 1, category), {
+                scroll: false,
+              })
+              searchTimer.current = null
+            }, 300)
+          }}
         />
-        <button
-          type="submit"
-          className={`${styles.primary} !min-h-[34px] !px-4 !py-2`}
+        <Select
+          value={category || "all"}
+          onValueChange={(value) => {
+            if (searchTimer.current) clearTimeout(searchTimer.current)
+            searchTimer.current = null
+            router.push(
+              catalogHref(search.trim(), 1, value === "all" ? "" : value),
+              { scroll: false },
+            )
+          }}
         >
-          Search
-        </button>
-        {(query || page > 1) && (
-          <Link
-            href={catalogPath}
-            scroll={false}
-            className={`${styles.secondary} !min-h-[34px] !px-4 !py-2`}
+          <SelectTrigger
+            className={cn(
+              "h-12 rounded-xl border-[#dce3ee] bg-background px-4 text-sm font-semibold text-[#17233a] shadow-[0_1px_2px_rgb(31_55_94_/_4%)]",
+              focusRing,
+            )}
+            aria-label="Filter services by category"
           >
-            Clear
-          </Link>
-        )}
-      </form>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Categories</SelectItem>
+            {serviceIconOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
       {resource.loading ? (
         <PublicState loading message="Finding services for you…" />
       ) : resource.error ? (
@@ -316,8 +339,8 @@ export function PublicServicesPage() {
       ) : !resource.data?.services.length ? (
         <PublicState
           message={
-            query
-              ? "No services match your search. Try a different term."
+            query || category
+              ? "No services match your search or category. Try another filter."
               : "New services are on their way. Please check back soon."
           }
         />
@@ -340,7 +363,7 @@ export function PublicServicesPage() {
           <nav className={styles.pagination} aria-label="Service pages">
             {page > 1 && (
               <Link
-                href={catalogHref(query, page - 1)}
+                href={catalogHref(query, page - 1, category)}
                 scroll={false}
                 className={styles.secondary}
               >
@@ -353,7 +376,7 @@ export function PublicServicesPage() {
             </span>
             {page < pages && (
               <Link
-                href={catalogHref(query, page + 1)}
+                href={catalogHref(query, page + 1, category)}
                 scroll={false}
                 className={styles.secondary}
               >
@@ -376,19 +399,11 @@ export function PublicServiceDetails({
   const router = useRouter()
   return (
     <>
-      <Link
+      <HistoryBackLink
         href={catalogPath}
         className={styles.back}
         data-service-back-link
-        onNavigate={(event) => {
-          if (window.history.length <= 1) return
-          event.preventDefault()
-          router.back()
-        }}
-      >
-        <ArrowLeft size={16} />
-        Go Back
-      </Link>
+      />
       {!service ? (
         <div className={styles.state} role="alert">
           <p>Service details are temporarily unavailable.</p>

@@ -202,17 +202,29 @@ export function SidePanelHeader({
           </SheetDescription>
         </div>
       </div>
-      <SheetClose asChild>
-        <button
-          type="button"
-          className={cn(panelIconButton, "border-0 bg-transparent")}
-          aria-label={closeLabel}
-          disabled={closeDisabled}
-        >
-          <CloseIcon width="16" height="16" />
-        </button>
-      </SheetClose>
+      <SidePanelClose label={closeLabel} disabled={closeDisabled} />
     </header>
+  )
+}
+
+export function SidePanelClose({
+  label,
+  disabled,
+}: {
+  label: string
+  disabled?: boolean
+}) {
+  return (
+    <SheetClose asChild>
+      <button
+        type="button"
+        className={cn(panelIconButton, "border-0 bg-transparent")}
+        aria-label={label}
+        disabled={disabled}
+      >
+        <CloseIcon width="16" height="16" />
+      </button>
+    </SheetClose>
   )
 }
 

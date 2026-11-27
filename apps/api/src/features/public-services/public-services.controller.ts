@@ -8,7 +8,11 @@ export const publicServicesRouter = Router()
 publicServicesRouter.use(authRateLimit(90))
 publicServicesRouter.get("/services", async (request, response) => {
   response.json(
-    await publicServicesService.list(request.query.q, request.query.page),
+    await publicServicesService.list(
+      request.query.q,
+      request.query.page,
+      request.query.category,
+    ),
   )
 })
 publicServicesRouter.get("/services/:id", async (request, response) => {
@@ -43,6 +47,7 @@ serviceInquiriesRouter.get(
       await publicServicesService.listInquiries(
         request.query.page,
         request.query.status,
+        request.query.q,
       ),
     )
   },

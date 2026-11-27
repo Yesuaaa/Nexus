@@ -502,7 +502,7 @@ test.describe("Authentication and session regression", () => {
         page.getByRole("heading", { name: /CREATIVE IDEAS/ }),
       ).toBeVisible()
       await page
-        .getByRole("link", { name: "Explore services", exact: true })
+        .getByRole("link", { name: "Explore Services", exact: true })
         .click()
       await expect(page).toHaveURL("/explore/services")
     } finally {

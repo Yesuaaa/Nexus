@@ -10,7 +10,7 @@ import {
   type AriaRole,
   type ReactNode,
 } from "react"
-import { motion, useReducedMotion } from "framer-motion"
+import { motion, useReducedMotion } from "motion/react"
 
 export type AccountRowMotionPhase = "steady" | "enter" | "exit"
 
@@ -234,6 +234,8 @@ type AnimatedSlotGridBodyProps<T> = {
   emptyContent: ReactNode
   emptyHeight?: number
   defaultRowHeight?: number
+  /** Use natural row heights for responsive rows when animation is disabled. */
+  autoRowHeight?: boolean
   className?: string
   ariaBusy?: boolean
   bodyRole?: AriaRole
@@ -252,12 +254,14 @@ export function AnimatedSlotGridBody<T>({
   emptyContent,
   emptyHeight = 170,
   defaultRowHeight = 58,
+  autoRowHeight = false,
   className,
   ariaBusy = false,
   onRowsSettled,
   bodyRole = "rowgroup",
   rowRole = "row",
 }: AnimatedSlotGridBodyProps<T>) {
+  const useAutoHeight = autoRowHeight && !animateRows
   const reduceMotion = useReducedMotion() ?? false
   const [rowSlots, setRowSlots] = useState<AnimatedRowSlot<T>[]>(() =>
     settledAnimatedRows(items),
@@ -306,6 +310,7 @@ export function AnimatedSlotGridBody<T>({
   )
 
   useLayoutEffect(() => {
+    if (useAutoHeight) return
     const firstRow = bodyRef.current?.querySelector<HTMLElement>(
       "[data-slot-grid-row]",
     )
@@ -320,7 +325,7 @@ export function AnimatedSlotGridBody<T>({
     const observer = new ResizeObserver(updateHeight)
     observer.observe(firstRow)
     return () => observer.disconnect()
-  }, [animateRows, items, rowSlots])
+  }, [animateRows, items, rowSlots, useAutoHeight])
 
   useLayoutEffect(() => {
     if (!animateRows) onRowsSettled?.()
@@ -432,7 +437,7 @@ export function AnimatedSlotGridBody<T>({
       aria-busy={ariaBusy || (animateRows && isAnimating)}
       className={className}
       style={{
-        height: bodyHeight,
+        height: useAutoHeight && visibleRowCount > 0 ? undefined : bodyHeight,
         transition:
           animateRows && animateBodyHeight
             ? "height " +
@@ -503,7 +508,7 @@ export function AnimatedSlotGridBody<T>({
             <div
               key={getKey(item)}
               className="relative"
-              style={{ height: rowHeight }}
+              style={useAutoHeight ? undefined : { height: rowHeight }}
             >
               <div
                 data-slot-grid-row

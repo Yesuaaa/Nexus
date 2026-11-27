@@ -24,6 +24,18 @@ export const serviceLogEvents = {
   CAPACITY_UPDATED: "workload",
   STAFF_ALLOCATED: "workload",
   STAFF_REMOVED: "workload",
+  INVOICE_PAYMENT_RECORDED: "workflow",
+  INVOICE_PAYMENT_ALLOCATED: "workflow",
+  INVOICE_CANCELLED: "workflow",
+  INVOICE_ISSUED: "workflow",
+  INVOICE_CREATED: "workflow",
+  INVOICE_EDITED: "workflow",
+  EXPENSE_CREATED: "workflow",
+  EXPENSE_EDITED: "workflow",
+  EXPENSE_DELETED: "workflow",
+  BILLING_SETTINGS_UPDATED: "workflow",
+  PAYMENT_METHOD_CREATED: "workflow",
+  PAYMENT_METHOD_DELETED: "workflow",
 } as const
 export type ServiceLogEvent = keyof typeof serviceLogEvents
 export const loggedWorkflowActions = [

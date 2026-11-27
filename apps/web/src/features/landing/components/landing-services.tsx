@@ -3,7 +3,7 @@
 import { useRef, useState, type CSSProperties, type PointerEvent } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { motion, useReducedMotion } from "framer-motion"
+import { motion, useReducedMotion } from "motion/react"
 import { ArrowUpRight, Sparkles } from "lucide-react"
 import { useAsyncResource } from "@/lib/use-async-resource"
 import { listPublicServices } from "@/features/public-services/api/public-services-api"
@@ -127,7 +127,7 @@ export function LandingServices() {
       >
         <div className="mb-3 flex items-center justify-between gap-4">
           <p className="text-sm font-semibold tracking-[0.12em] text-[#203f8c]">
-            1. SERVICES
+            [ SERVICES ]
           </p>
           <Link
             href="/explore/services"

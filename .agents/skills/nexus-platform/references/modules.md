@@ -86,6 +86,8 @@ Support authorized future modules and changed requirements. Extend registration,
 
 ## Public service discovery and guest inquiries
 
+Administration also owns public portfolio publishing and its one-to-five-image detail galleries. See [Project Showcase](../../../../docs/features/project-showcase.md) for access, ordering, layouts, and publication rules.
+
 Public service details are server rendered from the public API. The public inquiry action carries the selected service through registration or sign-in into the existing client request flow. The separate guest inquiry endpoint remains available for existing callers, and the public pages do not show a guest form.
 
 The public Services module is implemented in source under API features/public-services and web features/public-services, with public routes at /explore/services and an authenticated administrative inbox at /service-inquiries. A new independent ServiceInquiry entity stores visitor correspondence; it is not ServiceRequest or a booking. Dedicated read/manage permissions are granted only to ADMIN and SUPERADMIN. Service Management and portal navigation link to the inquiry inbox.

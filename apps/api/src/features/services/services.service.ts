@@ -13,6 +13,8 @@ import {
   getServiceImageStorage,
   ServiceImageStorageError,
   serviceImagePublicUrl,
+  uploadLocalServiceImage,
+  removeLocalServiceImage,
 } from "./service-image-storage.js"
 import { servicesRepository } from "./services.repository.js"
 import {
@@ -77,7 +79,11 @@ async function uploadImage(dataUrl: string) {
       maxWidth: 2560,
       maxHeight: 2560,
     })
-    return await getServiceImageStorage().uploadWebp(normalized.data)
+    return process.env.SERVICE_IMAGE_STORAGE === "local"
+      ? await uploadLocalServiceImage(
+          `data:image/webp;base64,${normalized.data.toString("base64")}`,
+        )
+      : await getServiceImageStorage().uploadWebp(normalized.data)
   } catch (error) {
     if (error instanceof ImageNormalizationError) {
       throw new ServicesError(400, error.message)
@@ -92,7 +98,8 @@ async function uploadImage(dataUrl: string) {
 async function removeImageBestEffort(path: string | null) {
   if (!path) return
   try {
-    await getServiceImageStorage().remove(path)
+    if (path.startsWith("local-services/")) await removeLocalServiceImage(path)
+    else await getServiceImageStorage().remove(path)
   } catch (error) {
     console.error(`Failed to remove obsolete service image ${path}`, error)
   }

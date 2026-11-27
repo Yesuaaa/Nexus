@@ -69,3 +69,87 @@ export function CompositionBar({
     </div>
   )
 }
+
+/** A compact two-series monthly comparison for operational overview pages. */
+export function MonthlyComparison({
+  rows,
+  series,
+}: {
+  rows: { label: string; first: number; second: number }[]
+  series: [string, string]
+}) {
+  const max = Math.max(1, ...rows.flatMap((row) => [row.first, row.second]))
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#65718a]">
+        <span className="flex items-center gap-1.5">
+          <span aria-hidden="true" className="size-2 rounded-sm bg-[#284f9e]" />
+          {series[0]}
+        </span>
+        {series[1] && (
+          <span className="flex items-center gap-1.5">
+            <span
+              aria-hidden="true"
+              className="size-2 rounded-sm bg-[#a7bcdf]"
+            />
+            {series[1]}
+          </span>
+        )}
+      </div>
+      <div
+        className="relative flex h-40 gap-2"
+        role="img"
+        aria-label={rows
+          .map(
+            (row) =>
+              `${row.label}: ${series[0]} ${row.first}, ${series[1]} ${row.second}`,
+          )
+          .join("; ")}
+      >
+        <div
+          aria-hidden="true"
+          className="flex h-[calc(100%-20px)] flex-col justify-between text-[10px] tabular-nums text-[#65718a]"
+        >
+          <span>
+            {new Intl.NumberFormat("en-PH", {
+              notation: "compact",
+              maximumFractionDigits: 1,
+            }).format(max)}
+          </span>
+          <span>0</span>
+        </div>
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-6 top-0 bottom-5 flex flex-col justify-between"
+        >
+          <span className="border-t border-[#edf1f6]" />
+          <span className="border-t border-dashed border-[#edf1f6]" />
+          <span className="border-t border-[#dfe6eb]" />
+        </div>
+        {rows.map((row) => (
+          <div
+            key={row.label}
+            className="relative flex h-full min-w-0 flex-1 flex-col justify-end gap-2"
+          >
+            <div className="flex h-full items-end justify-center gap-1">
+              <span
+                className="w-3 rounded-t bg-[#284f9e]"
+                style={{ height: `${(row.first / max) * 100}%` }}
+              />
+              <span
+                className="w-3 rounded-t bg-[#a7bcdf]"
+                style={{ height: `${(row.second / max) * 100}%` }}
+              />
+            </div>
+            <span
+              title={row.label}
+              className="truncate text-center text-[10px] text-[#65718a]"
+            >
+              {row.label}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}

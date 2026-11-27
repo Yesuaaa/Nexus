@@ -11,6 +11,26 @@ import {
 configureRegressionTest()
 test.skip(live, "Workspace selector regressions use isolated API fixtures")
 
+test("breadcrumb Home returns to the appropriate portal landing page", async ({
+  page,
+}) => {
+  await restoreSession(page, "SUPERADMIN")
+  await page.goto("/services")
+  await page
+    .getByRole("navigation", { name: "Breadcrumb" })
+    .getByRole("link", { name: "Home" })
+    .click()
+  await expect(page).toHaveURL(/\/module$/)
+
+  await restoreSession(page, "USER")
+  await page.goto("/services")
+  await page
+    .getByRole("navigation", { name: "Breadcrumb" })
+    .getByRole("link", { name: "Home" })
+    .click()
+  await expect(page).toHaveURL(/\/dashboard$/)
+})
+
 async function expectLauncher(page: Page) {
   await expect(
     page.getByRole("main", { name: "Workspace selector" }),
@@ -57,6 +77,7 @@ const scenarios = [
       ["Service Operations", "/services"],
       ["People & HR", "/employees"],
       ["Workforce Compliance", "/attendance/overview"],
+      ["Billing & Finance", "/billing-finance/overview"],
     ],
   },
   {
@@ -68,6 +89,7 @@ const scenarios = [
       ["People & HR", "/employees"],
       ["Workforce Compliance", "/attendance/time-logs/overview"],
       ["Administration", "/accounts"],
+      ["Billing & Finance", "/billing-finance/overview"],
     ],
   },
 ] as const
@@ -85,7 +107,9 @@ for (const width of [390, 715, 1440]) {
       name: "Open Service Operations workspace",
       exact: true,
     })
-    const last = carousel.getByLabel("Billing & Finance module coming soon")
+    const last = carousel.getByRole("link", {
+      name: "Open Billing & Finance workspace",
+    })
 
     // Focus distant cards, as keyboard navigation does. Native scrolling of a
     // clipped track must not compete with the carousel's own positioning.
@@ -137,7 +161,7 @@ for (const scenario of scenarios) {
     })
     await expect(cards).toHaveCount(scenario.expected.length)
     await expect(page.locator('[aria-roledescription="carousel"]')).toHaveCount(
-      scenario.expected.length + 1 > 5 ? 1 : 0,
+      scenario.expected.length > 5 ? 1 : 0,
     )
 
     for (const [title, href] of scenario.expected) {
@@ -151,12 +175,12 @@ for (const scenario of scenarios) {
 
     await expect(
       page.getByRole("heading", { name: "Billing & Finance", exact: true }),
-    ).toBeVisible()
+    ).toHaveCount(scenario.role === "STAFF" ? 0 : 1)
     await expect(page.getByText("Scheduling", { exact: true })).toHaveCount(0)
   })
 }
 
-test("an account without module permissions sees a safe empty state", async ({
+test("Superadmin retains billing access without generic module permissions", async ({
   page,
 }) => {
   await restoreSession(page, "SUPERADMIN", { account: { permissions: [] } })
@@ -164,14 +188,8 @@ test("an account without module permissions sees a safe empty state", async ({
   await expectLauncher(page)
 
   await expect(
-    page.getByRole("heading", {
-      name: "No workspaces available",
-      exact: true,
-    }),
+    page.getByRole("link", { name: "Open Billing & Finance workspace" }),
   ).toBeVisible()
-  await expect(
-    page.getByRole("link", { name: /^Open .+ workspace$/ }),
-  ).toHaveCount(0)
 })
 
 for (const width of [1440, 390]) {

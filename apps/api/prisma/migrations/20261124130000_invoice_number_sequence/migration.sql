@@ -1,0 +1,1 @@
+CREATE SEQUENCE "BillingInvoiceNumberSequence" AS BIGINT START WITH 1;

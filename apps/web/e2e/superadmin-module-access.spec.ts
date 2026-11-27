@@ -373,7 +373,7 @@ test("unknown and unavailable module routes disclose no administrative entry", a
   page,
 }) => {
   await restoreSession(page, "SUPERADMIN")
-  for (const id of ["unknown-module", "billing-finance"]) {
+  for (const id of ["unknown-module"]) {
     await page.goto(`/module/${id}`)
     await expect(
       page.getByRole("main", { name: "Administrative workspace" }),

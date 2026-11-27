@@ -5,7 +5,7 @@ import {
 } from "../../shared/image-normalization.js"
 
 const maxImageBytes = 2 * 1024 * 1024
-const serviceIconKeys = [
+export const serviceIconKeys = [
   "social",
   "advertising",
   "business",

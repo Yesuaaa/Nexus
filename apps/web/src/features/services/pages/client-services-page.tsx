@@ -34,6 +34,7 @@ import {
 } from "../api/client-services-api"
 import { Button } from "@/components/ui/button"
 import { SearchField } from "@/components/ui/search-field"
+import { serviceIconOptions } from "../components/service-icon"
 import { ServiceCard } from "../components/service-card"
 import {
   createProjectRequirementsDraft,
@@ -102,7 +103,7 @@ export function ClientServicesPage({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [search, setSearch] = useState("")
-  const [departmentId, setDepartmentId] = useState("all")
+  const [category, setCategory] = useState("all")
   const [page, setPage] = useState(1)
   const [selectedService, setSelectedService] = useState<Service | null>(null)
   const [detailState, setDetailState] = useState<{
@@ -273,24 +274,10 @@ export function ClientServicesPage({
     submittedRequest,
   ])
 
-  const departments = useMemo(() => {
-    const uniqueDepartments = new Map<string, Service["departments"][number]>()
-    services.forEach((service) => {
-      service.departments.forEach((department) => {
-        uniqueDepartments.set(department.id, department)
-      })
-    })
-    return [...uniqueDepartments.values()].sort((left, right) =>
-      left.name.localeCompare(right.name),
-    )
-  }, [services])
-
   const filteredServices = useMemo(() => {
     const query = search.trim().toLocaleLowerCase()
     return services.filter((service) => {
-      const matchesDepartment =
-        departmentId === "all" ||
-        service.departments.some((department) => department.id === departmentId)
+      const matchesCategory = category === "all" || service.iconKey === category
       const matchesSearch =
         query.length === 0 ||
         service.name.toLocaleLowerCase().includes(query) ||
@@ -298,9 +285,9 @@ export function ClientServicesPage({
         service.departments.some((department) =>
           department.name.toLocaleLowerCase().includes(query),
         )
-      return matchesDepartment && matchesSearch
+      return matchesCategory && matchesSearch
     })
-  }, [departmentId, search, services])
+  }, [category, search, services])
 
   const pageCount = Math.max(1, Math.ceil(filteredServices.length / pageSize))
   const requestedService = services.find(
@@ -320,8 +307,8 @@ export function ClientServicesPage({
     setPage(1)
   }
 
-  function updateDepartment(value: string) {
-    setDepartmentId(value)
+  function updateCategory(value: string) {
+    setCategory(value)
     setPage(1)
   }
 
@@ -651,25 +638,23 @@ export function ClientServicesPage({
               value={search}
               onChange={(event) => updateSearch(event.target.value)}
               placeholder="Search services..."
-              containerClassName="focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[#294a9b]"
+              containerClassName="focus-within:!bg-background"
             />
-            <Select value={departmentId} onValueChange={updateDepartment}>
+            <Select value={category} onValueChange={updateCategory}>
               <SelectTrigger
                 className={cn(
                   "h-12 rounded-xl border-[#dce3ee] bg-background px-4 text-sm font-semibold text-[#17233a] shadow-[0_1px_2px_rgb(31_55_94_/_4%)]",
                   focusRing,
                 )}
-                aria-label="Filter services by department"
+                aria-label="Filter services by category"
               >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">
-                  All services ({services.length})
-                </SelectItem>
-                {departments.map((department) => (
-                  <SelectItem key={department.id} value={department.id}>
-                    {department.name}
+                <SelectItem value="all">All Categories</SelectItem>
+                {serviceIconOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
                   </SelectItem>
                 ))}
               </SelectContent>

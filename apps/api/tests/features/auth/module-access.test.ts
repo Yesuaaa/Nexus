@@ -42,6 +42,7 @@ test(
         "people-hr",
         "attendance-monitoring",
         "administration",
+        "billing-finance",
       ],
     )
     for (const module of modules)
@@ -57,7 +58,6 @@ test(
     )
     for (const id of [
       "unknown",
-      "billing-finance",
       "my-payroll",
       "constructor",
       "toString",
@@ -92,6 +92,10 @@ test(
       await prisma.user.update({ where: { id: account.id }, data: { role } })
       assert.equal((await request("/modules")).status, 403)
       assert.equal((await request("/modules/project-management")).status, 403)
+      assert.equal(
+        (await request("/modules/billing-finance")).status,
+        role === Role.ADMIN ? 200 : 403,
+      )
       const payrollResponse = await request("/modules/payroll")
       assert.equal(payrollResponse.status, payrollStatus)
       if (payrollResponse.ok) {

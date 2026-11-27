@@ -2,6 +2,7 @@
 import { useDatePreferences } from "@/features/settings/providers/preferences-provider"
 
 import Link from "next/link"
+import { ChevronRight } from "lucide-react"
 import { focusRing } from "@/components/layout/styles"
 import { cn } from "@/lib/utils"
 import { messagePreview } from "../model/conversation-groups"
@@ -89,7 +90,7 @@ export function ProjectConversationListItem({
   )
 }
 
-function ConversationRow({
+export function ConversationRow({
   id,
   href,
   name,
@@ -101,6 +102,8 @@ function ConversationRow({
   unreadCount,
   selected,
   railCollapsed,
+  compact = false,
+  timeLabel,
 }: {
   id: string
   href: string
@@ -111,19 +114,26 @@ function ConversationRow({
   preview: string
   updatedAt: string
   unreadCount: number
-  selected: boolean
-  railCollapsed: boolean
+  selected?: boolean
+  railCollapsed?: boolean
+  compact?: boolean
+  timeLabel?: string
 }) {
   const { formatDate } = useDatePreferences()
   return (
-    <div className="relative mb-2" data-conversation-id={id}>
+    <div
+      className={cn("relative min-w-0", !compact && "mb-2")}
+      data-conversation-id={id}
+    >
       <Link
         href={href}
         scroll={false}
         aria-current={selected ? "page" : undefined}
         aria-label={label}
         className={cn(
-          "flex items-center gap-3 overflow-hidden rounded-2xl px-3 py-3 no-underline transition-colors",
+          "flex min-w-0 items-center gap-3 overflow-hidden rounded-2xl px-3 py-3 no-underline transition-colors",
+          compact && "rounded-lg border border-border px-3 py-2.5",
+          compact && unreadCount > 0 && "border-[#dce5fa] bg-[#f4f7fd]",
           focusRing,
           selected
             ? "bg-[#203f8c] text-white hover:bg-[#172f70] hover:text-white"
@@ -133,7 +143,11 @@ function ConversationRow({
         )}
       >
         <span className="relative shrink-0">
-          <Avatar name={name} imageUrl={imageUrl} />
+          <Avatar
+            name={name}
+            imageUrl={imageUrl}
+            size={compact ? "sm" : "default"}
+          />
           {Boolean(unreadCount) && railCollapsed && (
             <span
               aria-hidden="true"
@@ -160,7 +174,7 @@ function ConversationRow({
                 selected ? "text-white/70" : "text-[#52627a]",
               )}
             >
-              {formatDate(updatedAt)}
+              {timeLabel ?? formatDate(updatedAt)}
             </time>
           </span>
           <span
@@ -175,7 +189,11 @@ function ConversationRow({
             <span
               className={cn(
                 "min-w-0 flex-1 truncate text-xs leading-4",
-                selected ? "text-white/70" : "text-[#8791a2]",
+                selected
+                  ? "text-white/70"
+                  : compact
+                    ? "text-[#52627a]"
+                    : "text-[#8791a2]",
               )}
             >
               {preview}
@@ -195,6 +213,13 @@ function ConversationRow({
             )}
           </span>
         </span>
+        {compact && (
+          <ChevronRight
+            size={14}
+            className="shrink-0 text-[#203f8c]"
+            aria-hidden="true"
+          />
+        )}
       </Link>
     </div>
   )

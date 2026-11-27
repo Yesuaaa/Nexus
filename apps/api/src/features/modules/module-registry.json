@@ -33,7 +33,7 @@
   },
   "administration": {
     "title": "Administration",
-    "description": "Manage user accounts, roles, and access controls.",
+    "description": "Manage user accounts, access controls, and the public project showcase.",
     "implemented": true,
     "administrativePath": "/accounts",
     "icon": "administration",
@@ -41,9 +41,9 @@
   },
   "billing-finance": {
     "title": "Billing & Finance",
-    "description": "Billing and finance tools are coming soon.",
-    "implemented": false,
-    "administrativePath": null,
+    "description": "Manage invoicing and financial activity.",
+    "implemented": true,
+    "administrativePath": "/billing-finance/overview",
     "icon": "finance",
     "color": "#667085"
   },

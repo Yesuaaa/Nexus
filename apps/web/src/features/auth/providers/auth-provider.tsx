@@ -57,10 +57,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const landing = pathname === "/" ? page : null
     const isPublicNavigation = Boolean(link.closest("header, footer"))
     const publicServicesPage =
-      (/^\/explore\/(?:services|projects)(?:\/|$)/.test(pathname) ||
-        pathname === "/about") &&
+      /^\/explore\/(?:services|projects)(?:\/|$)/.test(pathname) &&
       (isPublicNavigation ||
         link.hasAttribute("data-service-card-link") ||
+        link.hasAttribute("data-project-card-link") ||
+        link.hasAttribute("data-project-back-link") ||
         link.hasAttribute("data-service-inquiry-link") ||
         link.hasAttribute("data-service-back-link"))
         ? page
@@ -139,6 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     svg.append(mask)
     overlay.append(svg)
     document.body.append(overlay)
+    document.documentElement.dataset.publicReveal = "pending"
     let animation: gsap.core.Tween | undefined
     const timeout = window.setTimeout(() => cleanup(), 10000)
     const progress = { value: 0 }
@@ -160,6 +162,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       overlay.remove()
       app.inert = false
       moduleReveal.current = null
+      delete document.documentElement.dataset.publicReveal
+      window.dispatchEvent(new Event("public-reveal-complete"))
     }
     const start = () => {
       if (animation) return

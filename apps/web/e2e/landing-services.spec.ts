@@ -252,8 +252,12 @@ test("Go Back restores the service search and page", async ({ page }) => {
   })
   await page.goto("/explore/services")
   await page.getByRole("searchbox", { name: "Search services" }).fill("Test")
-  await page.getByRole("button", { name: "Search", exact: true }).click()
   await expect(page).toHaveURL("/explore/services?q=Test")
+  await page
+    .getByRole("combobox", { name: "Filter services by category" })
+    .click()
+  await page.getByRole("option", { name: "Web & Development" }).click()
+  await expect(page).toHaveURL("/explore/services?q=Test&category=code")
   await page.getByRole("link", { name: "Next" }).click()
   await expect(page.getByText("Page 2 of 2")).toBeVisible()
   await page
@@ -262,10 +266,13 @@ test("Go Back restores the service search and page", async ({ page }) => {
   await expect(page.locator("#module-reveal-mask")).toHaveCount(0)
   await page.getByRole("link", { name: "Go Back" }).click()
   await expect(page.locator("#module-reveal-mask")).toBeAttached()
-  await expect(page).toHaveURL("/explore/services?q=Test&page=2")
+  await expect(page).toHaveURL("/explore/services?q=Test&page=2&category=code")
   await expect(page.locator("#module-reveal-mask")).toHaveCount(0)
   await expect(
     page.getByRole("searchbox", { name: "Search services" }),
   ).toHaveValue("Test")
+  await expect(
+    page.getByRole("combobox", { name: "Filter services by category" }),
+  ).toContainText("Web & Development")
   await expect(page.getByText("Page 2 of 2")).toBeVisible()
 })

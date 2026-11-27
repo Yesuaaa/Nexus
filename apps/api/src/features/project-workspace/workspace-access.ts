@@ -305,5 +305,7 @@ export async function lockAndRevalidateProjectForEdit(
       409,
       "Project ownership changed. Reload before editing again.",
     )
+  if (terminalProjectStatuses.includes(project.status))
+    throw new ServiceRequestsError(409, "Archived projects cannot be edited")
   return { context, project, acceptedDepartmentId }
 }

@@ -26,11 +26,13 @@ export function TaskDetailsPanel({
   stream,
   onClose,
   onEdit,
+  editDisabled = false,
 }: {
   task: ProjectTask
   stream: ProjectWorkspaceWorkstream
   onClose: () => void
   onEdit: () => void
+  editDisabled?: boolean
 }) {
   const panel = useSidePanel(onClose)
   const phase = stream.plan?.phases.find((item) =>
@@ -102,6 +104,7 @@ export function TaskDetailsPanel({
       <SidePanelFooter className="justify-between">
         <SidePanelButton
           variant="secondary"
+          disabled={editDisabled}
           onClick={() => panel.close(onEdit)}
         >
           <Pencil size={14} aria-hidden="true" />

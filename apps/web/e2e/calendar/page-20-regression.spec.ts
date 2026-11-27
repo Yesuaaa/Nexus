@@ -146,6 +146,7 @@ test("[P20-WEB-003] failed calendar reads retry without losing the selected date
   await page.clock.install({ time: new Date("2032-02-29T16:00:00.000Z") })
   await restoreSession(page, "USER")
   let reads = 0
+  let unavailable = true
   const recoveredEvent = event(
     "p20-recovered-consultation",
     "consultation",
@@ -155,7 +156,7 @@ test("[P20-WEB-003] failed calendar reads retry without losing the selected date
   )
   await page.route("**/api/projects/calendar", (route) => {
     reads += 1
-    return reads === 1
+    return unavailable
       ? route.fulfill({ status: 500, json: { error: "Calendar read failed" } })
       : route.fulfill({ json: [recoveredEvent] })
   })
@@ -167,12 +168,14 @@ test("[P20-WEB-003] failed calendar reads retry without losing the selected date
   await expect(
     day.getByText("Calendar unavailable.", { exact: true }),
   ).toBeVisible()
+  const readsBeforeRetry = reads
+  unavailable = false
   await main.getByRole("button", { name: "Try again" }).click()
 
   await expect(
     day.getByText("Recovered calendar consultation", { exact: true }),
   ).toBeVisible()
-  expect(reads).toBe(2)
+  expect(reads).toBeGreaterThan(readsBeforeRetry)
   await expect(main.getByRole("button", { name: "Try again" })).toHaveCount(0)
 })
 

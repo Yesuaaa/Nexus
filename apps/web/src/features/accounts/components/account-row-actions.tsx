@@ -1,7 +1,16 @@
 import {
+  RowActionLabel,
   RowActionsMenu,
   type RowActionMenuItem,
 } from "@/components/ui/row-actions-menu"
+import {
+  KeyRound,
+  Pencil,
+  Power,
+  PowerOff,
+  RotateCcw,
+  Trash2,
+} from "lucide-react"
 import type { Account } from "@/features/auth/model/types"
 
 type AccountRowAction = "edit" | "status" | "delete" | "password"
@@ -33,21 +42,38 @@ export function AccountRowActions({
 
   const items: RowActionMenuItem<AccountRowAction>[] = []
   if (!trashView && onEdit)
-    items.push({ action: "edit", label: "Edit account" })
+    items.push({
+      action: "edit",
+      label: <RowActionLabel icon={Pencil}>Edit account</RowActionLabel>,
+    })
   if (!trashView && onChangePassword)
-    items.push({ action: "password", label: "Change password" })
+    items.push({
+      action: "password",
+      label: <RowActionLabel icon={KeyRound}>Change password</RowActionLabel>,
+    })
   if (canChangeStatus)
     items.push({
       action: "status",
-      label: `${action} account`,
+      label: (
+        <RowActionLabel
+          icon={trashView ? RotateCcw : account.isActive ? PowerOff : Power}
+        >
+          {action} account
+        </RowActionLabel>
+      ),
+      separatorBefore: true,
       className: account.isActive
         ? "text-[#c33945] hover:bg-[#fff0f1] focus:bg-[#fff0f1] focus:text-[#c33945] focus-visible:bg-[#fff0f1]"
-        : undefined,
+        : "text-[#247044] hover:bg-[#edf8f1] focus:bg-[#edf8f1] focus:text-[#247044] focus-visible:bg-[#edf8f1]",
     })
   if (canChangeStatus && (trashView || !account.isActive))
     items.push({
       action: "delete",
-      label: trashView ? "Delete Permanently" : "Move to trash",
+      label: (
+        <RowActionLabel icon={Trash2}>
+          {trashView ? "Delete Permanently" : "Move to trash"}
+        </RowActionLabel>
+      ),
       className:
         "text-[#c33945] hover:bg-[#fff0f1] focus:bg-[#fff0f1] focus:text-[#c33945] focus-visible:bg-[#fff0f1]",
     })

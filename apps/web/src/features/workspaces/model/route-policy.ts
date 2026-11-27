@@ -14,6 +14,7 @@ import {
   canAccessEmployeeManagement,
   canAccessMessages,
   canAccessPayroll,
+  canAccessBilling,
   canAccessMyPayroll,
   canInspectBusinessConversations,
   canAccessProjects,
@@ -77,6 +78,7 @@ export type RoutePolicyId =
   | "dashboard"
   | "module"
   | "accounts"
+  | "project-showcase"
   | "messages"
   | "messages-oversight"
   | "projects-deliverable"
@@ -148,7 +150,11 @@ export function administrativeModulePolicies(
         ? module.workspaceParent
         : id) as WorkspaceModuleId,
       canAccess:
-        id === "payroll" ? canAccessPayroll : canAccessAdministrativeModules,
+        id === "payroll"
+          ? canAccessPayroll
+          : id === "billing-finance"
+            ? canAccessBilling
+            : canAccessAdministrativeModules,
       ...(module.administrativePath === null || id === "service-operations"
         ? {
             navigation: {
@@ -168,6 +174,18 @@ export function administrativeModulePolicies(
 }
 
 export const routePolicies: readonly RoutePolicy[] = [
+  {
+    id: "module-billing-pages",
+    match: { kind: "prefix", path: "/billing-finance" },
+    moduleId: "billing-finance",
+    canAccess: canAccessBilling,
+    navigation: {
+      href: "/billing-finance/overview",
+      label: "Overview",
+      location: "main",
+      order: 1,
+    },
+  },
   {
     id: "project-management-logs",
     match: { kind: "exact", path: "/module/project-management/logs" },
@@ -496,6 +514,19 @@ export const routePolicies: readonly RoutePolicy[] = [
       label: "Account Management",
       location: "main",
       order: 10,
+    },
+  },
+  {
+    id: "project-showcase",
+    match: { kind: "exact", path: "/project-showcase" },
+    moduleId: "administration",
+    canAccess: (account) =>
+      hasPermission(account, Permissions.ADMINISTRATION_MANAGE_ALL),
+    navigation: {
+      href: "/project-showcase",
+      label: "Project Showcase",
+      location: "main",
+      order: 20,
     },
   },
   {

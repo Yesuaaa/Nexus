@@ -12,11 +12,13 @@ import { trustedProxyAddresses } from "./features/auth/session-location.js"
 import { requireAuth } from "./features/auth/auth.middleware.js"
 import { authRateLimit } from "./features/auth/auth.limiter.js"
 import express from "express"
+import { localServiceImageDirectory } from "./features/services/service-image-storage.js"
 import { authRouter } from "./features/auth/auth.controller.js"
 import { departmentsRouter } from "./features/departments/departments.controller.js"
 import { employeesRouter } from "./features/employees/employees.controller.js"
 import { staffPayrollRouter } from "./features/payroll/payroll-documents.controller.js"
 import { payrollRouter } from "./features/payroll/payroll.controller.js"
+import { billingRouter } from "./features/billing/billing.controller.js"
 import {
   createHealthRouter,
   requireReadyDatabase,
@@ -32,6 +34,10 @@ import { internalConversationsRouter } from "./features/internal-conversations/i
 import type { ConversationRealtime } from "./features/request-conversations/request-conversations.realtime.js"
 import { requestWorkflowRouter } from "./features/request-workflow/workflow.controller.js"
 import { projectsRouter } from "./features/projects/projects.controller.js"
+import {
+  projectShowcaseRouter,
+  publicProjectShowcaseRouter,
+} from "./features/project-showcase/project-showcase.controller.js"
 import { projectWorkspaceRouter } from "./features/project-workspace/project-workspace.controller.js"
 import { projectManagementRouter } from "./features/admin-project-management/project-management.controller.js"
 import { projectConversationsRouter } from "./features/project-conversations/project-conversations.controller.js"
@@ -59,6 +65,14 @@ export function createApp(
   app.disable("x-powered-by")
   app.use(securityHeaders)
   app.use(cors({ origin: process.env.WEB_ORIGIN || "http://localhost:5173" }))
+  app.use(
+    "/api/service-images",
+    express.static(localServiceImageDirectory, {
+      fallthrough: false,
+      dotfiles: "deny",
+      index: false,
+    }),
+  )
   app.use("/api", noStore)
   app.use("/api", createHealthRouter(options.isShuttingDown))
   if (options.requireReadyDatabase) {
@@ -68,6 +82,8 @@ export function createApp(
     )
   }
   app.use(devErrorInterceptor)
+  app.use("/api/public/projects", publicProjectShowcaseRouter)
+  app.use("/api/project-showcase", projectShowcaseRouter)
   app.use("/api/public", publicServicesRouter)
   app.use("/api/service-inquiries", serviceInquiriesRouter)
   app.use(serviceLogContext)
@@ -126,6 +142,7 @@ export function createApp(
   app.use("/api/departments", departmentsRouter)
   app.use("/api/employees", employeesRouter)
   app.use("/api/payroll", payrollRouter)
+  app.use("/api/billing", billingRouter)
   app.use("/api/staff/my-payroll", staffPayrollRouter)
   app.use("/api/clients", clientsRouter)
   app.use("/api/request-inbox", requestInboxRouter)

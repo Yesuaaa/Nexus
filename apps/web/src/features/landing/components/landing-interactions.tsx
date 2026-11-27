@@ -3,7 +3,8 @@
 import Link from "next/link"
 import { ArrowUpRight, ChevronDown, Menu, X } from "lucide-react"
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { useInView, useReducedMotion } from "framer-motion"
+import { animate, useInView, useReducedMotion } from "motion/react"
+import type { AnimationPlaybackControls } from "motion/react"
 
 const headerClass =
   "sticky top-0 z-40 bg-(--landing-paper)/45 backdrop-blur-[1.5px] [border-bottom:1px_solid_var(--landing-line)]"
@@ -107,12 +108,12 @@ const marqueeItemClass = [
 ].join(" ")
 
 const faqTriggerClass = [
-  "flex items-center justify-between gap-5.5 w-full min-h-21.5 py-5 [border:0] bg-transparent text-(color:--landing-ink) [font-family:inherit] text-[15px] leading-[1.6] text-left cursor-pointer",
+  "flex items-center justify-between gap-5 w-full min-h-14 py-4 [border:0] bg-transparent text-(color:--landing-ink) [font-family:inherit] text-[15px] font-semibold leading-[1.4] text-left cursor-pointer",
   "focus-visible:[outline:2px_solid_var(--landing-blue)] focus-visible:outline-offset-[3px]",
   "[&_svg]:shrink-0 [&_svg]:text-(color:--landing-muted) [&_svg]:[transition:transform_200ms_ease-out,color_200ms_ease-out]",
   '[&[aria-expanded="true"]_svg]:[transform:rotate(180deg)] [&[aria-expanded="true"]_svg]:text-(color:--landing-blue)',
   "max-[851px]:text-[14px]",
-  "max-[761px]:min-h-20.75 max-[761px]:text-[15px]",
+  "max-[761px]:min-h-14 max-[761px]:text-[15px]",
   "motion-reduce:[&_svg]:transition-none!",
 ].join(" ")
 
@@ -123,12 +124,11 @@ const faqAnswerClass = [
 ].join(" ")
 
 const faqAnswerTextClass = [
-  "[padding:0_38px_26px_0] text-[14px] leading-[1.9] text-(color:--landing-muted) opacity-0 [transform:translateY(-5px)] [transition:opacity_200ms_ease-out,transform_200ms_ease-out]",
+  "[padding:0_38px_18px_0] text-[15px] leading-[1.5] text-(color:--landing-muted) opacity-0 [transform:translateY(-5px)] [transition:opacity_200ms_ease-out,transform_200ms_ease-out]",
   "motion-reduce:transition-none!",
 ].join(" ")
 
 const navigation = [
-  { label: "About", href: "/about" },
   { label: "Services", href: "/explore/services" },
   { label: "Projects", href: "/explore/projects" },
 ]
@@ -361,20 +361,27 @@ export function LandingMotion({
     )
       return
 
-    const animations = new Set<Animation>()
+    const animations = new Set<AnimationPlaybackControls>()
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
           if (!entry.isIntersecting) continue
-          const animation = entry.target.animate(
-            [
-              { opacity: 0.35, transform: "translateY(26px)" },
-              { opacity: 1, transform: "translateY(0)" },
-            ],
-            { duration: 750, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+          const animation = animate(
+            entry.target,
+            {
+              opacity: [0.35, 1],
+              transform: ["translateY(26px)", "translateY(0)"],
+            },
+            {
+              duration: 0.75,
+              ease: [0.22, 1, 0.36, 1],
+              onComplete: () => {
+                animation.cancel()
+                animations.delete(animation)
+              },
+            },
           )
           animations.add(animation)
-          animation.onfinish = () => animations.delete(animation)
           observer.unobserve(entry.target)
         }
       },
@@ -491,26 +498,33 @@ const expertise = [
   "Customer experience",
 ]
 
-export function ServiceMarquee() {
+export function ServiceMarquee({
+  heading = "The right expertise. A connected approach.",
+  description = "From a first impression to a lasting connection, bring your ideas into focus with creative and digital services that work together.",
+  items = expertise,
+  label = "Creative and digital expertise",
+  headingId = "converyn-expertise-heading",
+}: {
+  heading?: string
+  description?: string
+  items?: readonly string[]
+  label?: string
+  headingId?: string
+}) {
   return (
     <section
       className="[padding:48px_0_54px] [border-block:1px_solid_var(--landing-line)] max-[761px]:[padding-block:36px_38px]"
-      aria-labelledby="converyn-expertise-heading"
+      aria-labelledby={headingId}
     >
       <div className={marqueeHeadingClass}>
-        <p id="converyn-expertise-heading">
-          The right expertise. A connected approach.
-        </p>
-        <p className={marqueeDescriptionClass}>
-          From a first impression to a lasting connection, bring your ideas into
-          focus with creative and digital services that work together.
-        </p>
+        <p id={headingId}>{heading}</p>
+        <p className={marqueeDescriptionClass}>{description}</p>
       </div>
       <div
         className={marqueeClass}
         tabIndex={0}
         role="group"
-        aria-label="Creative and digital expertise"
+        aria-label={label}
       >
         <div className="flex w-[max-content] animate-[landing-service-marquee_50s_linear_infinite]">
           {[0, 1].map((copy) => (
@@ -521,7 +535,7 @@ export function ServiceMarquee() {
               key={copy}
               aria-hidden={copy === 1 ? true : undefined}
             >
-              {expertise.map((service) => (
+              {items.map((service) => (
                 <span className={marqueeItemClass} key={service}>
                   {service}
                 </span>
@@ -543,7 +557,7 @@ export function LandingFaq({ items }: { items: readonly LandingFaqItem[] }) {
   const [openQuestion, setOpenQuestion] = useState<string | null>(null)
 
   return (
-    <div className="[border-top:1px_solid_var(--landing-line)]" data-reveal>
+    <div data-reveal>
       {items.map((item, index) => {
         const open = openQuestion === item.question
         const answerId = `landing-faq-answer-${index + 1}`

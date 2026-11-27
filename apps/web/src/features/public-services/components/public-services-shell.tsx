@@ -14,9 +14,15 @@ const sora = localFont({
   display: "swap",
 })
 
-export function PublicServicesShell({ children }: { children: ReactNode }) {
+export function PublicServicesShell({
+  children,
+  hideFrame = false,
+}: {
+  children: ReactNode
+  hideFrame?: boolean
+}) {
   return (
-    <LandingMotion>
+    <LandingMotion className={hideFrame ? "before:hidden" : ""}>
       <LandingSmoothScroll />
       <a href="#public-main" className={styles.skipLink}>
         Skip to content

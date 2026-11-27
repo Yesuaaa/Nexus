@@ -462,6 +462,7 @@ test("navigation is generated from the same policies without changing role visib
     ],
     ADMIN: [
       "Module",
+      "Overview",
       "Department Management",
       "Employee Management",
       "Attendance",
@@ -476,6 +477,7 @@ test("navigation is generated from the same policies without changing role visib
     ],
     SUPERADMIN: [
       "Module",
+      "Overview",
       "Request Overview",
       "Account Management",
       "Department Management",

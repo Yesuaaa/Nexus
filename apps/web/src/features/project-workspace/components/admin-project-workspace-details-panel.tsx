@@ -1,10 +1,17 @@
 "use client"
 
-import { useState } from "react"
-import { ArrowLeft, ChevronRight } from "lucide-react"
+import {
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+} from "react"
+import { ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
 import { MemberIdentity } from "@/components/ui/member-identity"
+import { PanelSubview } from "@/components/ui/panel-subview"
 import { Pill } from "@/components/ui/pill"
 import { ProgressMeter } from "@/components/ui/stat-strip"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -60,7 +67,7 @@ function WorkspaceSummary({
   onSelectProject,
 }: {
   workspace: AdminProjectManagementWorkspaceDetails
-  onSelectProject: (id: string) => void
+  onSelectProject: (id: string, trigger: HTMLButtonElement) => void
 }) {
   const clients = workspace.clients
     .map(({ fullName }) => fullName || "Client")
@@ -69,7 +76,7 @@ function WorkspaceSummary({
   return (
     <>
       <SidePanelSection title="Workspace summary">
-        <DetailList layout="stacked">
+        <DetailList>
           <DetailItem label="Department">
             {workspace.department.name}
           </DetailItem>
@@ -146,7 +153,9 @@ function WorkspaceSummary({
               <li key={project.id}>
                 <ProjectListButton
                   project={project}
-                  onClick={() => onSelectProject(project.id)}
+                  onClick={(event) =>
+                    onSelectProject(project.id, event.currentTarget)
+                  }
                 />
               </li>
             ))}
@@ -164,7 +173,7 @@ function ProjectListButton({
   onClick,
 }: {
   project: AdminProjectWorkspaceProject
-  onClick: () => void
+  onClick: (event: MouseEvent<HTMLButtonElement>) => void
 }) {
   const leadNames = project.leads.map(({ fullName }) => fullName).join(", ")
   const progress = project.progress
@@ -224,15 +233,12 @@ function ProjectDetails({
           {project.description}
         </p>
       )}
-      <DetailList layout="stacked">
+      <DetailList>
         <DetailItem label="Client">
           {project.client.fullName || "Client"}
         </DetailItem>
         <DetailItem label="Department">{project.department.name}</DetailItem>
-        <DetailItem
-          label="Project lead"
-          className="col-span-2 max-[450px]:col-span-1"
-        >
+        <DetailItem label="Project lead">
           {project.leads.length ? (
             <ul className="m-0 grid list-none gap-2 p-0">
               {project.leads.map((lead) => (
@@ -249,12 +255,7 @@ function ProjectDetails({
           )}
         </DetailItem>
         {project.workspace?.name && project.workspace.name !== project.name && (
-          <DetailItem
-            label="Workspace"
-            className="col-span-2 max-[450px]:col-span-1"
-          >
-            {project.workspace.name}
-          </DetailItem>
+          <DetailItem label="Workspace">{project.workspace.name}</DetailItem>
         )}
       </DetailList>
 
@@ -279,7 +280,7 @@ function ProjectDetails({
       </SidePanelSection>
 
       <SidePanelSection title="Timeline">
-        <DetailList layout="stacked">
+        <DetailList>
           {timeline.map(({ label, value }) => (
             <DetailItem key={label} label={label}>
               {value || "Not recorded"}
@@ -361,6 +362,9 @@ export function AdminProjectWorkspaceDetailsPanel({
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     null,
   )
+  const projectSubviewId = useId()
+  const projectTrigger = useRef<HTMLButtonElement | null>(null)
+  const projectBody = useRef<HTMLDivElement | null>(null)
   const resource = useAsyncResource(
     (signal) =>
       getAdminProjectManagementWorkspaceDetails(departmentId, identity, signal),
@@ -372,46 +376,34 @@ export function AdminProjectWorkspaceDetailsPanel({
     ({ id }) => id === selectedProjectId,
   )
   const loading = resource.loading && !workspace
-  const projectStatus = selectedProject ? (
-    <Pill tone={statusTone(selectedProject.status)}>
-      {statusLabel(selectedProject.status)}
-    </Pill>
-  ) : undefined
+  const projectOpen = Boolean(selectedProject)
+  useLayoutEffect(() => {
+    if (projectOpen) projectBody.current?.focus({ preventScroll: true })
+    else if (projectTrigger.current) {
+      projectTrigger.current.focus({ preventScroll: true })
+      projectTrigger.current = null
+    }
+  }, [projectOpen])
 
   return (
     <SidePanel open={panel.open} onOpenChange={panel.onOpenChange}>
       <SidePanelHeader
         title={
-          selectedProject?.name ??
           workspace?.name ??
           (loading ? "Loading workspace" : "Workspace details")
         }
         titleClassName="whitespace-normal break-words"
         description={
-          selectedProject
-            ? `Project details for ${selectedProject.name}`
-            : workspace
-              ? `Workspace summary for ${workspace.name}`
-              : "Workspace summary"
+          workspace
+            ? `Workspace summary for ${workspace.name}`
+            : "Workspace summary"
         }
         hideDescription
-        leading={
-          selectedProject ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="touch"
-              aria-label="Back to workspace summary"
-              onClick={() => setSelectedProjectId(null)}
-            >
-              <ArrowLeft size={14} aria-hidden="true" />
-            </Button>
-          ) : undefined
-        }
-        meta={projectStatus}
+        inert={projectOpen}
+        aria-hidden={projectOpen || undefined}
         closeLabel="Close project workspace details"
       />
-      <SidePanelBody className="gap-4">
+      <SidePanelBody inert={projectOpen} aria-hidden={projectOpen || undefined}>
         {loading ? (
           <WorkspaceDetailsLoading />
         ) : resource.error && !workspace ? (
@@ -420,26 +412,47 @@ export function AdminProjectWorkspaceDetailsPanel({
             onRetry={() => setRevision((current) => current + 1)}
           />
         ) : workspace ? (
-          selectedProject ? (
-            <ProjectDetails
-              project={selectedProject}
-              activity={workspace.activity}
-            />
-          ) : (
-            <WorkspaceSummary
-              workspace={workspace}
-              onSelectProject={setSelectedProjectId}
-            />
-          )
+          <WorkspaceSummary
+            workspace={workspace}
+            onSelectProject={(id, trigger) => {
+              projectTrigger.current = trigger
+              setSelectedProjectId(id)
+            }}
+          />
         ) : (
           <EmptyState title="Project workspace unavailable" size="sm" />
         )}
       </SidePanelBody>
-      {!selectedProject && (
-        <SidePanelFooter>
-          <SidePanelButton onClick={() => panel.close()}>Done</SidePanelButton>
-        </SidePanelFooter>
-      )}
+      <SidePanelFooter
+        inert={projectOpen}
+        aria-hidden={projectOpen || undefined}
+      >
+        <SidePanelButton onClick={() => panel.close()}>Done</SidePanelButton>
+      </SidePanelFooter>
+      <PanelSubview
+        open={projectOpen}
+        id={projectSubviewId}
+        title={selectedProject?.name}
+        meta={
+          selectedProject && (
+            <Pill tone={statusTone(selectedProject.status)}>
+              {statusLabel(selectedProject.status)}
+            </Pill>
+          )
+        }
+        backLabel="Back to workspace summary"
+        closeLabel="Close project workspace details"
+        onBack={() => setSelectedProjectId(null)}
+      >
+        {workspace && selectedProject && (
+          <SidePanelBody ref={projectBody} tabIndex={-1}>
+            <ProjectDetails
+              project={selectedProject}
+              activity={workspace.activity}
+            />
+          </SidePanelBody>
+        )}
+      </PanelSubview>
     </SidePanel>
   )
 }

@@ -98,9 +98,10 @@ function replay(
 }
 
 export const publicServicesRepository = {
-  async list(query: string, page: number) {
+  async list(query: string, page: number, category?: string) {
     const where: Prisma.ServiceWhereInput = {
       isActive: true,
+      ...(category ? { iconKey: category } : {}),
       ...(query
         ? {
             OR: [
@@ -196,19 +197,43 @@ export const publicServicesRepository = {
     }
   },
 
-  async listInquiries(page: number, status?: InquiryStatus) {
-    const where: Prisma.ServiceInquiryWhereInput = status ? { status } : {}
-    const [inquiries, total] = await db().$transaction([
-      db().serviceInquiry.findMany({
-        where,
-        select: reviewSelect,
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        skip: (page - 1) * 25,
-        take: 25,
-      }),
-      db().serviceInquiry.count({ where }),
-    ])
-    return { inquiries, total, page, pageSize: 25 }
+  async listInquiries(page: number, status?: InquiryStatus, query = "") {
+    const where: Prisma.ServiceInquiryWhereInput = {
+      ...(status ? { status } : {}),
+      ...(query
+        ? {
+            OR: [
+              { fullName: { contains: query, mode: "insensitive" } },
+              { email: { contains: query, mode: "insensitive" } },
+              { subject: { contains: query, mode: "insensitive" } },
+              { service: { name: { contains: query, mode: "insensitive" } } },
+            ],
+          }
+        : {}),
+    }
+    const [inquiries, total, pending, contacted, closed, spam] =
+      await db().$transaction([
+        db().serviceInquiry.findMany({
+          where,
+          select: reviewSelect,
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          skip: (page - 1) * 10,
+          take: 10,
+        }),
+        db().serviceInquiry.count({ where }),
+        db().serviceInquiry.count({ where: { status: "PENDING" } }),
+        db().serviceInquiry.count({ where: { status: "CONTACTED" } }),
+        db().serviceInquiry.count({ where: { status: "CLOSED" } }),
+        db().serviceInquiry.count({ where: { status: "SPAM" } }),
+      ])
+    const counts = {
+      total: pending + contacted + closed + spam,
+      PENDING: pending,
+      CONTACTED: contacted,
+      CLOSED: closed,
+      SPAM: spam,
+    }
+    return { inquiries, total, page, pageSize: 10, counts }
   },
 
   async review(

@@ -26,6 +26,8 @@ import { FilterSelect, filterGridClass } from "@/components/ui/filter-select"
 import { watchVisibleRefresh } from "@/lib/visible-refresh"
 import {
   calendarConflicts,
+  calendarTimeLabel,
+  calendarTimeZone,
   calendarEventDate,
   calendarEventStatus,
   type CalendarEvent,
@@ -42,19 +44,13 @@ const eventTypes = {
   leave: { label: "Approved leave", color: "#b45309" },
 }
 
-const timezone = "Asia/Manila"
+const timezone = calendarTimeZone
 const dateKey = new Intl.DateTimeFormat("sv-SE", { timeZone: timezone })
 const dayLabel = new Intl.DateTimeFormat("en-US", {
   weekday: "long",
   month: "long",
   day: "numeric",
   timeZone: "UTC",
-})
-const timeLabel = new Intl.DateTimeFormat("en-PH", {
-  hour: "numeric",
-  minute: "2-digit",
-  hour12: true,
-  timeZone: timezone,
 })
 const monthLabel = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -511,7 +507,7 @@ export function CalendarPage() {
                   const time = event.allDay
                     ? "All day"
                     : event.endsAt
-                      ? timeLabel.formatRange(
+                      ? calendarTimeLabel.formatRange(
                           new Date(event.startsAt),
                           new Date(event.endsAt),
                         )
@@ -615,7 +611,9 @@ export function CalendarPage() {
                             ? "All day"
                             : event.deadline
                               ? "Due this day"
-                              : timeLabel.format(new Date(event.startsAt))}
+                              : calendarTimeLabel.format(
+                                  new Date(event.startsAt),
+                                )}
                           {" · "}
                           {event.context}
                         </p>

@@ -1,11 +1,12 @@
 "use client"
 
 import { useCallback, useEffect, useRef } from "react"
-import { gsap } from "gsap"
+import { animate } from "motion"
+import type { AnimationPlaybackControls } from "motion/react"
 
 export function useHoverLabel(defaultText: string, targetText = "EXPlore") {
   const labelRef = useRef<HTMLSpanElement>(null)
-  const tweenRef = useRef<gsap.core.Tween | null>(null)
+  const animationRef = useRef<AnimationPlaybackControls | null>(null)
 
   const show = useCallback(() => {
     const label = labelRef.current
@@ -14,33 +15,31 @@ export function useHoverLabel(defaultText: string, targetText = "EXPlore") {
     const reduceMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches
-    tweenRef.current?.kill()
+    animationRef.current?.stop()
 
     if (reduceMotion) {
       label.textContent = targetText
       return
     }
 
-    const progress = { characters: 0 }
     label.textContent = ""
-    tweenRef.current = gsap.to(progress, {
-      characters: targetText.length,
+    animationRef.current = animate(0, targetText.length, {
       duration: 0.5,
-      ease: "none",
-      onUpdate: () => {
-        label.textContent = targetText.slice(0, Math.ceil(progress.characters))
+      ease: "linear",
+      onUpdate: (characters) => {
+        label.textContent = targetText.slice(0, Math.ceil(characters))
       },
     })
   }, [targetText])
 
   const restore = useCallback(() => {
-    tweenRef.current?.kill()
+    animationRef.current?.stop()
     if (labelRef.current) labelRef.current.textContent = defaultText
   }, [defaultText])
 
   useEffect(() => {
     return () => {
-      tweenRef.current?.kill()
+      animationRef.current?.stop()
     }
   }, [])
 

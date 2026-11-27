@@ -19,6 +19,8 @@ The public controller has its own explicit Prisma field selection. It exposes ac
 
 There is no department publication setting, so internal departments are deliberately not exposed. Public lists are paginated (12/page) and searches are trimmed and limited to 120 characters. Disabled/nonexistent services return 404 and cannot receive new inquiries.
 
+The public and signed-in service catalogs filter by the existing Icon Category. Public category filtering is applied by the API before pagination and is retained in the catalog URL. Icon Category is also used to select service artwork.
+
 ## API
 
 Browser requests are same-origin through Next's existing `/api` proxy. The server-rendered detail page reads the same public API through the configured `API_PROXY_TARGET`. Public endpoints require no Bearer token and have no cookie session.

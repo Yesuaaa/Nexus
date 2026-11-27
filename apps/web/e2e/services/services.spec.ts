@@ -517,6 +517,22 @@ test.describe("Service management", () => {
         .click()
       const dialog = page.getByRole("dialog")
       await dialog.getByLabel("Service Name").fill("Consulting")
+      const type = offering === "Pricing" ? "image/jpeg" : "image/png"
+      const base64 = await page.evaluate((mimeType) => {
+        const canvas = document.createElement("canvas")
+        canvas.width = 10
+        canvas.height = 10
+        canvas.getContext("2d")!.fillRect(0, 0, 10, 10)
+        return canvas.toDataURL(mimeType).split(",")[1]!
+      }, type)
+      await dialog.locator('input[type="file"]').setInputFiles({
+        name: offering === "Pricing" ? "cover.jpg" : "cover.png",
+        mimeType: type,
+        buffer: Buffer.from(base64, "base64"),
+      })
+      await expect(
+        dialog.locator('img[src^="data:image/webp;base64,"]'),
+      ).toBeVisible()
       await dialog
         .getByLabel("Description", { exact: false })
         .fill("Business consulting")
@@ -578,8 +594,8 @@ test.describe("Service management", () => {
         iconKey: "sparkles",
         departmentIds: ["dept-1"],
         isActive: true,
-        imageDataUrl: null,
-        imageAltText: null,
+        imageDataUrl: expect.stringMatching(/^data:image\/webp;base64,/),
+        imageAltText: "Consulting image",
         removeImage: false,
         clientRequirements: [],
         requiresConsultation: false,

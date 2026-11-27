@@ -1,7 +1,11 @@
 import type { Prisma } from "../../generated/prisma/client.js"
 import { activeStaff } from "../../shared/query/accounts.js"
 import { ServiceRequestsError } from "../service-requests/service-requests.service.js"
-import { getStaffContext, scopedProjectForEdit } from "./workspace-access.js"
+import {
+  getStaffContext,
+  scopedProjectForEdit,
+  type StaffContext,
+} from "./workspace-access.js"
 
 const projectDeliverableSelect = {
   id: true,
@@ -59,21 +63,28 @@ export async function getDeliverableAccess(
       403,
       "Only the department head can manage deliverables",
     )
-  const isAssignedStaff = isHead
-    ? true
-    : Boolean(
-        await tx.projectStaff.findFirst({
-          where: {
-            projectId: project.id,
-            employee: {
-              userId,
-              status: "ACTIVE",
-              user: activeStaff,
-            },
-          },
-          select: { id: true },
-        }),
-      )
+  const assignment = await tx.projectStaff.findFirst({
+    where: {
+      projectId: project.id,
+      employee: {
+        userId,
+        status: "ACTIVE",
+        user: activeStaff,
+      },
+    },
+    select: { id: true, isTeamLead: true },
+  })
+  const hasTeamLead = Boolean(
+    await tx.projectStaff.findFirst({
+      where: {
+        projectId: project.id,
+        isTeamLead: true,
+        employee: { status: "ACTIVE", user: activeStaff },
+      },
+      select: { id: true },
+    }),
+  )
+  const isAssignedStaff = isHead || Boolean(assignment)
   if (!isHead && !isAssignedStaff)
     throw new ServiceRequestsError(
       403,
@@ -85,7 +96,15 @@ export async function getDeliverableAccess(
   })
   if (!milestone)
     throw new ServiceRequestsError(404, "Project deliverable not found")
-  return { context, project, milestone, isHead, request }
+  return {
+    context,
+    project,
+    milestone,
+    isHead,
+    isTeamLead: assignment?.isTeamLead === true,
+    hasTeamLead,
+    request,
+  }
 }
 
 export function recordDeliverableEvent(
@@ -113,4 +132,42 @@ export function deliverableInput(input: unknown) {
   if (!input || typeof input !== "object" || Array.isArray(input))
     throw new ServiceRequestsError(400, "Enter deliverable details")
   return input as Record<string, unknown>
+}
+
+export async function projectWorkspaceReviewAccess(
+  tx: Prisma.TransactionClient,
+  context: StaffContext,
+  projectId: string,
+  acceptedDepartmentId: string | null,
+) {
+  const [assignment, activeLead] = await Promise.all([
+    tx.projectStaff.findFirst({
+      where: {
+        projectId,
+        employee: {
+          userId: context.id,
+          status: "ACTIVE",
+          user: activeStaff,
+        },
+      },
+      select: { id: true, isTeamLead: true },
+    }),
+    tx.projectStaff.findFirst({
+      where: {
+        projectId,
+        isTeamLead: true,
+        employee: { status: "ACTIVE", user: activeStaff },
+      },
+      select: { id: true },
+    }),
+  ])
+  return {
+    isAssignedStaff: Boolean(assignment),
+    isTeamLead: assignment?.isTeamLead === true,
+    hasTeamLead: Boolean(activeLead),
+    isDepartmentHead: Boolean(
+      acceptedDepartmentId &&
+      context.headDepartmentIds.includes(acceptedDepartmentId),
+    ),
+  }
 }

@@ -36,6 +36,14 @@ export type ProjectChangeRequest = {
   requestedBy: { fullName: string | null }
 }
 
+export type ClientProjectNote = {
+  id: string
+  content: string
+  submittedAt: string
+  reviewedAt: string | null
+  author: { fullName: string | null }
+}
+
 export type ProjectWorkspace = {
   id: string
   name: string
@@ -60,6 +68,7 @@ export type ProjectWorkspace = {
   progress?: { completed: number; total: number }
   deliverables?: ProjectDeliverable[]
   changeRequests?: ProjectChangeRequest[]
+  notes?: ClientProjectNote[]
   canReviewChanges?: boolean
 }
 
@@ -74,6 +83,8 @@ export type ClientProjectSummary = {
   completedTasks: number
   taskCount: number
   deliverableCount: number
+  memberCount?: number
+  memberInitials?: string[]
 }
 
 export const getProject = (id: string, signal?: AbortSignal) =>

@@ -2,6 +2,8 @@ import { createHash } from "node:crypto"
 import { serviceImagePublicUrl } from "../services/service-image-storage.js"
 import { safeHttpsUrl } from "../../shared/validation.js"
 import { publicServicesRepository } from "./public-services.repository.js"
+import { serviceIconKeys } from "../services/services.schema.js"
+import { HttpError } from "../../shared/http-error.js"
 import {
   idInput,
   pageInput,
@@ -23,7 +25,9 @@ function present(
   })
   return {
     ...publicData,
-    imageUrl: safeHttpsUrl(serviceImagePublicUrl(imagePath)),
+    imageUrl: imagePath?.startsWith("local-services/")
+      ? serviceImagePublicUrl(imagePath)
+      : safeHttpsUrl(serviceImagePublicUrl(imagePath)),
     pricing: pricingTemplate?.isPublic ? price(pricingTemplate) : null,
     packages: packages.map(
       ({
@@ -49,10 +53,17 @@ function present(
 }
 
 export const publicServicesService = {
-  async list(query: unknown, page: unknown) {
+  async list(query: unknown, page: unknown, category: unknown) {
+    if (
+      category !== undefined &&
+      (typeof category !== "string" ||
+        !serviceIconKeys.some((key) => key === category))
+    )
+      throw new HttpError(400, "Choose a valid service category.")
     const result = await publicServicesRepository.list(
       searchInput(query),
       pageInput(page),
+      category as string | undefined,
     )
     return { ...result, services: result.services.map(present) }
   },
@@ -80,12 +91,13 @@ export const publicServicesService = {
       fingerprint,
     })
   },
-  async listInquiries(page: unknown, status: unknown) {
+  async listInquiries(page: unknown, status: unknown, query?: unknown) {
     return publicServicesRepository.listInquiries(
       pageInput(page),
       status === undefined || status === "ALL"
         ? undefined
         : statusInput(status),
+      searchInput(query),
     )
   },
   async review(id: unknown, actorId: string, body: unknown) {

@@ -45,6 +45,11 @@ export function ModuleEntryPage({ moduleId }: { moduleId: string }) {
             Retry
           </Button>
         </div>
+      ) : module && moduleId === "project-management" ? (
+        <AdministrativeProjectsOverview
+          title={module.title}
+          description={module.description}
+        />
       ) : module ? (
         <>
           <PageHeader
@@ -53,9 +58,7 @@ export function ModuleEntryPage({ moduleId }: { moduleId: string }) {
             description={pageDescription}
           />
           <div className="mt-5">
-            {moduleId === "project-management" ? (
-              <AdministrativeProjectsOverview />
-            ) : moduleId === "service-operations" ? (
+            {moduleId === "service-operations" ? (
               <AdministrativeRequestsPage />
             ) : (
               <EmptyState

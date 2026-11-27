@@ -1,0 +1,11 @@
+# Project Showcase
+
+Superadmins can open **Administration → Project Showcase** to add and edit public portfolio entries. New entries start as drafts unless publication is selected. Clear publication to remove an entry from the projects page, homepage, and its direct public detail URL. Drag rows or use the move controls to set their public order; projects higher in the list appear first. The homepage shows up to three entries that are both published and featured. Concurrent changes require refreshing the list before reordering again.
+
+The public pages use the title, client, service, optional year, description, cover image, and fictional label entered here. Images can be uploaded as JPG, PNG, or WebP files up to 2 MB. JPG and PNG images are converted to WebP in the browser, and the resulting WebP must also be no larger than 2 MB. Images use the existing service image storage. Changing the page address changes the public detail URL. An editor with an out-of-date copy must reload before saving over someone else's changes.
+
+The showcase stores public portfolio content separately from operational projects and permissions. The authenticated `/api/project-showcase` endpoints require the existing Administration management permission. The public `/api/public/projects` endpoints select only published entries and public fields. Migration `20261127120000_project_showcase` carries over the four existing fictional entries and the original three homepage selections.
+
+Use the **Images** tab to choose one to five images and preview the available grids for that count. Select a preview slot to upload or replace its image. The cover stays in the first slot and is the only image used on project cards. The selected grid and additional images appear on the public detail page. Reducing the number of images removes the omitted slots from the saved gallery. Migration `20261127130000_project_showcase_gallery` preserves existing covers and gives them the wide single-image layout.
+
+The Archive view holds removed showcase entries. Archiving unpublishes the entry, restoration returns it as a draft, and permanent deletion is limited to archived entries. Uploaded image files remain in storage because they may be shared by other entries. Migration 20261127140000_project_showcase_archive adds archive state.

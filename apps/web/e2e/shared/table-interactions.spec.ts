@@ -147,13 +147,7 @@ for (const width of [1440, 390]) {
     await page.route("**/api/project-workspace/group%3Aalpha", (route) =>
       route.fulfill({ json: alpha }),
     )
-    await page.goto("/dashboard")
-    await page
-      .getByRole("link", {
-        name: "Open Project Management workspace",
-        exact: true,
-      })
-      .click()
+    await page.goto("/project-workspace")
     await expect(page).toHaveURL(/\/project-workspace$/)
     await expect(
       page.getByRole("region", { name: "Project list" }).getByRole("table"),
@@ -196,30 +190,59 @@ for (const width of [1440, 390]) {
     const projectTable = page
       .getByRole("region", { name: "Project list" })
       .getByRole("table")
-    await page.clock.install()
-    await page.clock.pauseAt(new Date())
+    const pauseTime = Date.now()
+    await page.clock.install({ time: pauseTime - 60_000 })
+    await page.clock.pauseAt(pauseTime)
+    async function settleProjectSearch(query: string | null) {
+      await expect
+        .poll(async () => {
+          await page.clock.runFor(200)
+          return new URL(page.url()).searchParams.get("search")
+        })
+        .toBe(query)
+    }
     await search.fill("Beta")
     await expect(projectTable).toHaveAttribute("aria-busy", "true")
     await expect(projectTable.getByRole("status")).toHaveText(
       "Loading projects…",
     )
-    await page.clock.runFor(200)
+    await settleProjectSearch("Beta")
     await expect(rows).toHaveCount(1)
     await expect(rows).toContainText("Beta Project")
     await search.fill("missing")
-    await page.clock.runFor(200)
-    await expect(rows).toHaveCount(0)
+    await settleProjectSearch("missing")
+    await expect(
+      page.getByText("No projects match those filters"),
+    ).toBeVisible()
     await search.fill("")
-    await page.clock.runFor(200)
+    await settleProjectSearch(null)
     await expect(rows).toHaveCount(2)
     await page
       .getByRole("region", { name: "Project list" })
       .getByRole("link", { name: "Alpha Project", exact: true })
       .click()
-    await page.getByRole("tab", { name: "Work", exact: true }).click()
+    await expect(
+      page.getByRole("heading", { name: "Alpha Project", exact: true }),
+    ).toBeVisible()
+    async function openProjectSection(name: string) {
+      if (width < 768)
+        await page.getByRole("button", { name: "Open navigation menu" }).click()
+      await page
+        .getByRole("complementary", { name: "Primary navigation" })
+        .getByRole("link", { name, exact: true })
+        .click()
+    }
+    await openProjectSection("Work")
+    const taskTable = page.getByRole("table", { name: "Design tasks" })
+    await expect(taskTable).toBeVisible()
     await expect(rows).toHaveCount(2)
     await expect(rows.first()).toContainText("Alpha Task")
-    await page.getByRole("tab", { name: "Team", exact: true }).click()
+    expect(
+      await taskTable.evaluate(
+        (table) => table.scrollWidth <= table.clientWidth,
+      ),
+    ).toBe(true)
+    await openProjectSection("Team")
     await expect(rows).toHaveCount(2)
     const staffSearch = page.getByRole("searchbox", {
       name: "Search assigned staff",
@@ -227,6 +250,11 @@ for (const width of [1440, 390]) {
     const teamTable = page
       .getByRole("region", { name: "Project team" })
       .getByRole("table")
+    expect(
+      await teamTable.evaluate(
+        (table) => table.scrollWidth <= table.clientWidth,
+      ),
+    ).toBe(true)
     await staffSearch.fill("Beta")
     await expect(teamTable).toHaveAttribute("aria-busy", "true")
     await expect(teamTable.getByRole("status")).toHaveText(
@@ -237,11 +265,13 @@ for (const width of [1440, 390]) {
     await expect(rows).toContainText("Beta Staff")
     await staffSearch.fill("missing")
     await page.clock.runFor(200)
-    await expect(rows).toHaveCount(0)
+    await expect(
+      teamTable.getByText("No staff match these filters."),
+    ).toBeVisible()
     await staffSearch.fill("")
     await page.clock.runFor(200)
     await expect(rows).toHaveCount(2)
-    await page.getByRole("tab", { name: "Deliverables", exact: true }).click()
+    await openProjectSection("Deliverables")
     const deliverableSearch = page.getByRole("searchbox", {
       name: "Search deliverables",
     })
@@ -249,6 +279,11 @@ for (const width of [1440, 390]) {
       name: "Project deliverables",
     })
     await expect(rows).toHaveCount(2)
+    expect(
+      await deliverableTable.evaluate(
+        (table) => table.scrollWidth <= table.clientWidth,
+      ),
+    ).toBe(true)
     await deliverableSearch.fill("Beta")
     await expect(deliverableTable).toHaveAttribute("aria-busy", "true")
     await expect(deliverableTable.getByRole("status")).toHaveText(
@@ -259,7 +294,9 @@ for (const width of [1440, 390]) {
     await expect(rows).toContainText("Beta Deliverable")
     await deliverableSearch.fill("missing")
     await page.clock.runFor(200)
-    await expect(rows).toHaveCount(0)
+    await expect(
+      deliverableTable.getByText("No deliverables match those filters."),
+    ).toBeVisible()
     await deliverableSearch.fill("")
     await page.clock.runFor(200)
     await expect(rows).toHaveCount(2)
