@@ -90,16 +90,27 @@ test("service input validates images, reusable pricing, and packages", () => {
   assert.equal(result.value?.keyBenefits[0]?.title, "Launch with confidence")
 })
 
-test("service input rejects non-WebP images", () => {
-  const result = validateServiceInput({
+test("service input accepts supported image envelopes and rejects other formats", () => {
+  for (const subtype of ["jpeg", "png", "webp"]) {
+    const result = validateServiceInput({
+      name: "Website Development",
+      description: "Custom websites for clients.",
+      departmentIds: ["dept-1"],
+      isActive: true,
+      imageDataUrl: `data:image/${subtype};base64,${Buffer.from("image").toString("base64")}`,
+      imageAltText: "A responsive website on a laptop",
+    })
+    assert.equal(result.error, undefined, subtype)
+  }
+  const unsupported = validateServiceInput({
     name: "Website Development",
     description: "Custom websites for clients.",
     departmentIds: ["dept-1"],
     isActive: true,
-    imageDataUrl: `data:image/png;base64,${Buffer.from("image").toString("base64")}`,
+    imageDataUrl: `data:image/gif;base64,${Buffer.from("image").toString("base64")}`,
     imageAltText: "A responsive website on a laptop",
   })
-  assert.match(result.error ?? "", /WebP/)
+  assert.match(unsupported.error ?? "", /JPEG, PNG, or WebP/)
 })
 
 test("pricing rules reject invalid amounts and recurring intervals", () => {

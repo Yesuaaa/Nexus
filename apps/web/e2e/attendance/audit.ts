@@ -116,11 +116,20 @@ export function auditTests() {
       expect(response.status()).toBe(200)
       const main = page.getByRole("main", { name: "Attendance workspace" })
       const figures = main.getByLabel("Time log figures")
+      const selector = main.getByRole("combobox", {
+        name: "Time logs department",
+      })
       await expect(figures).toHaveAttribute("aria-busy", "false")
       await expect(
         main.getByRole("button", { name: "Retry", exact: true }),
       ).toBeVisible()
       if (failed === "departments") {
+        // PG-014-F001-A009-T002
+        await selector.click()
+        await expect(page.getByRole("option")).toHaveText([
+          "All permitted departments",
+        ])
+        await page.keyboard.press("Escape")
         const data = await response.json()
         await expect(
           figures
@@ -129,6 +138,15 @@ export function auditTests() {
             .getByRole("definition"),
         ).toHaveText(String(data.checkIns.total))
       } else {
+        // PG-014-F001-A010-T002
+        await expect(
+          main.getByText("Record summaries unavailable."),
+        ).toBeVisible()
+        await expect(
+          main
+            .getByRole("region", { name: "Coverage" })
+            .getByRole("definition"),
+        ).toHaveText(["—", "—", "—", "—"])
         await expect(
           figures.getByRole("definition").filter({ hasText: "—" }),
         ).toHaveCount(4)
@@ -137,7 +155,24 @@ export function auditTests() {
         ).toBeEnabled()
       }
       await page.unroute(pattern)
+      const retryReads: string[] = []
+      const trackRead = (request: import("@playwright/test").Request) => {
+        const pathname = new URL(request.url()).pathname
+        if (
+          ["/api/attendance/overview", "/api/attendance/departments"].includes(
+            pathname,
+          )
+        )
+          retryReads.push(pathname)
+      }
+      page.on("request", trackRead)
+      const retried = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === "/api/attendance/" + failed,
+      )
       await main.getByRole("button", { name: "Retry", exact: true }).click()
+      const retryResponse = await retried
+      expect(retryResponse.status()).toBe(200)
       await expect(
         main.getByRole("button", { name: "Retry", exact: true }),
       ).toHaveCount(0)
@@ -146,6 +181,26 @@ export function auditTests() {
         figures.getByRole("definition").filter({ hasText: "—" }),
       ).toHaveCount(0)
       await assertNoPageOverflow(page)
+      page.off("request", trackRead)
+      expect(retryReads).toEqual(["/api/attendance/" + failed])
+      if (failed === "departments") {
+        const { departments } = (await retryResponse.json()) as {
+          departments: { name: string }[]
+        }
+        await selector.click()
+        await expect(page.getByRole("option")).toHaveText([
+          "All permitted departments",
+          ...departments.map(({ name }) => name),
+        ])
+        await page.keyboard.press("Escape")
+      } else {
+        const query = new URL(retryResponse.url()).searchParams
+        expect(Object.fromEntries(query)).toEqual({
+          from: await main.getByLabel("Attendance from date").inputValue(),
+          to: await main.getByLabel("Attendance through date").inputValue(),
+          departmentId: "",
+        })
+      }
     }
   })
 

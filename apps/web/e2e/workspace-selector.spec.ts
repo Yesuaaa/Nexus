@@ -198,7 +198,28 @@ for (const width of [1440, 390]) {
   }) => {
     await page.setViewportSize({ width, height: 844 })
     await restoreSession(page, "USER")
+    const publicServicesResponsePromise = page.waitForResponse((response) => {
+      const request = response.request()
+      const url = new URL(response.url())
+      return (
+        url.pathname === "/api/public/services" && request.method() === "GET"
+      )
+    })
     await page.goto("/")
+    const publicServicesResponse = await publicServicesResponsePromise
+    expect(new URL(publicServicesResponse.url()).search).toBe("?q=&page=1")
+    expect(publicServicesResponse.status()).toBe(200)
+    expect(
+      publicServicesResponse.request().headers().authorization,
+    ).toBeUndefined()
+    expect(new URL(page.url()).pathname).toBe("/")
+    await expect(
+      page.getByRole("link", { name: "Explore services", exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByText("No services are available right now.", { exact: true }),
+    ).toBeVisible()
+    await page.goto("/dashboard")
     await expect(page).toHaveURL(/\/dashboard$/)
     await page.goto("/module")
     await expect(page).toHaveURL(/\/dashboard$/)
@@ -317,7 +338,7 @@ for (const width of [390, 768, 1440]) {
       ).toBe(true)
       expect(await storedTokens(page)).toEqual(["test-session", "test-refresh"])
       await page
-        .getByRole("button", { name: "Open account menu", exact: true })
+        .getByRole("button", { name: "Account menu", exact: true })
         .click()
       await page.getByRole("menuitem", { name: "Log out", exact: true }).click()
       await expect(page).toHaveURL(

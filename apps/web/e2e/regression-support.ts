@@ -6,6 +6,7 @@ import {
 } from "../src/features/auth/model/permissions"
 import type { Department } from "../src/features/departments/api/departments-api"
 import type { Employee } from "../src/features/employees/api/employees-api"
+import type { ServiceListing } from "../src/features/public-services/model/types"
 import type {
   PricingTemplate,
   PricingConfigurationInput,
@@ -391,6 +392,17 @@ export async function mockApi(
           expiresIn: 900,
         },
       })
+      return
+    }
+
+    if (pathname === "/api/public/services" && method === "GET") {
+      const listing: ServiceListing = {
+        services: [],
+        total: 0,
+        page: 1,
+        pageSize: 12,
+      }
+      await route.fulfill({ json: listing })
       return
     }
 

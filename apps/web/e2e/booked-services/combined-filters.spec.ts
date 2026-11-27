@@ -93,7 +93,7 @@ test("combined search and status filters reset pagination and clear together", a
   await main
     .getByRole("combobox", { name: "Filter bookings by status", exact: true })
     .click()
-  await page.getByRole("option", { name: "Under review", exact: true }).click()
+  await page.getByRole("option", { name: "Under Review", exact: true }).click()
   await expect(
     main.getByText("Showing 1–6 of 6", { exact: true }),
   ).toBeVisible()

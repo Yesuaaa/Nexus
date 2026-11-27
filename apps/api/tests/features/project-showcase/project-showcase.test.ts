@@ -63,13 +63,15 @@ test(
   async (t) => {
     const uploads: string[] = []
     const removed: string[] = []
+    async function uploadImage() {
+      const path = `project-showcase/image-${uploads.length}.webp`
+      uploads.push(path)
+      return path
+    }
     const { prisma, base } = await startPgliteApp(t, {
       imageStorage: {
-        upload: async () => {
-          const path = `project-showcase/image-${uploads.length}.webp`
-          uploads.push(path)
-          return path
-        },
+        upload: uploadImage,
+        uploadWebp: uploadImage,
         publicUrl: (path) =>
           `https://demo.supabase.co/storage/v1/object/public/${path}`,
         remove: async (path) => {

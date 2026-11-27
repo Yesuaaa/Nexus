@@ -32,14 +32,26 @@ for (const role of ["STAFF", "ADMIN", "SUPERADMIN", "USER"] as const) {
       await page.addInitScript(() =>
         sessionStorage.setItem("nexus.auth.token", "test-session"),
       )
+      const calendarReads: string[] = []
+      const writes: string[] = []
+      page.on("request", (request) => {
+        if (
+          new URL(request.url()).pathname.startsWith("/api/") &&
+          !["GET", "HEAD"].includes(request.method())
+        )
+          writes.push(request.method() + " " + new URL(request.url()).pathname)
+      })
+      let additionalEvents: CalendarEvent[] = []
       await page.route("**/api/**", async (route) => {
         const url = new URL(route.request().url())
         if (url.pathname === "/api/auth/me")
           return route.fulfill({ json: { user: accountFor(role) } })
         if (url.pathname === "/api/projects/calendar") {
+          calendarReads.push(url.search)
           if (role === "USER")
             return route.fulfill({
               json: [
+                ...additionalEvents,
                 {
                   ...task,
                   type: "milestone",
@@ -59,8 +71,11 @@ for (const role of ["STAFF", "ADMIN", "SUPERADMIN", "USER"] as const) {
             json: {
               events:
                 url.searchParams.get("scope") === "team"
-                  ? [task, team]
-                  : [{ ...task, href: role === "STAFF" ? task.href : null }],
+                  ? [task, team, ...additionalEvents]
+                  : [
+                      { ...task, href: role === "STAFF" ? task.href : null },
+                      ...additionalEvents,
+                    ],
               canViewTeam: role === "STAFF",
               organization: role !== "STAFF",
             },
@@ -143,6 +158,149 @@ for (const role of ["STAFF", "ADMIN", "SUPERADMIN", "USER"] as const) {
           () => document.documentElement.scrollWidth <= window.innerWidth,
         ),
       ).toBe(true)
+      // PG-018-F001-A005-T001: preserve the chosen day across view changes.
+      await main.getByRole("button", { name: "Previous month" }).click()
+      await expect(
+        main.getByRole("grid", { name: "January 2030" }),
+      ).toBeVisible()
+      await main.getByRole("button", { name: "Previous month" }).click()
+      await expect(
+        main.getByRole("grid", { name: "December 2029" }),
+      ).toBeVisible()
+      await expect(day).toBeVisible()
+      await main.getByRole("button", { name: "Next month" }).click()
+      await expect(
+        main.getByRole("grid", { name: "January 2030" }),
+      ).toBeVisible()
+      await main.getByRole("button", { name: "Today", exact: true }).click()
+      await expect(
+        main.getByRole("grid", { name: "February 2030" }),
+      ).toBeVisible()
+      if (role === "USER")
+        expect(calendarReads.every((query) => query === "")).toBe(true)
+      else
+        await expect
+          .poll(() => calendarReads)
+          .toEqual(
+            expect.arrayContaining([
+              "?scope=" +
+                (role === "STAFF" ? "team" : "mine") +
+                "&month=2029-12",
+              "?scope=" +
+                (role === "STAFF" ? "team" : "mine") +
+                "&month=2030-02",
+            ]),
+          )
+      if (role === "ADMIN" || role === "SUPERADMIN") {
+        // PG-018-F001-A014-T001: department and staff are an AND, not a union.
+        additionalEvents = [
+          {
+            ...task,
+            id: "other-dept",
+            title: "Other department task",
+            department: { id: "other", name: "Other" },
+            staffMembers: [{ id: "actor", name: "Staff" }],
+            href: null,
+          },
+          {
+            ...task,
+            id: "other-staff",
+            title: "Other staff task",
+            staffMembers: [{ id: "other-actor", name: "Other staff" }],
+            href: null,
+          },
+        ]
+        await page.evaluate(() => window.dispatchEvent(new Event("focus")))
+        await expect(
+          day.getByText("Other department task", { exact: true }),
+        ).toBeVisible()
+        await main
+          .getByRole("combobox", { name: "Departments", exact: true })
+          .click()
+        await page.getByRole("option", { name: "Design", exact: true }).click()
+        await main.getByRole("combobox", { name: "Staff", exact: true }).click()
+        await page.getByRole("option", { name: "Staff", exact: true }).click()
+        await expect(
+          day.getByText("Prepare designs", { exact: true }),
+        ).toBeVisible()
+        await expect(
+          day.getByText("Other department task", { exact: true }),
+        ).toHaveCount(0)
+        await expect(
+          day.getByText("Other staff task", { exact: true }),
+        ).toHaveCount(0)
+      }
+      if (role !== "USER") {
+        // PG-018-F001-A015-T001: clear all four filters, retain scope/day.
+        await main
+          .getByRole("combobox", { name: "Projects", exact: true })
+          .click()
+        await page
+          .getByRole("option", { name: "Brand project", exact: true })
+          .click()
+        await main
+          .getByRole("combobox", { name: "Event types", exact: true })
+          .click()
+        await page
+          .getByRole("option", { name: "Task deadline", exact: true })
+          .click()
+        const readsBeforeClear = calendarReads.length
+        await main.getByRole("button", { name: "Clear filters" }).click()
+        for (const [label, value] of [
+          ["Event types", "All event types"],
+          ["Projects", "All projects"],
+          ...(role === "STAFF"
+            ? []
+            : [
+                ["Departments", "All departments"],
+                ["Staff", "All staff"],
+              ]),
+        ])
+          await expect(
+            main.getByRole("combobox", { name: label, exact: true }),
+          ).toContainText(value)
+        if (role === "STAFF")
+          await expect(
+            main.getByRole("combobox", { name: "Calendar scope" }),
+          ).toContainText("My team")
+        await expect(day).toBeVisible()
+        expect(calendarReads.length).toBe(readsBeforeClear)
+      }
+      // PG-018-F001-A010-T001: keyboard navigation follows encoded source href.
+      if (role === "USER" || role === "STAFF") {
+        const destination =
+          role === "USER"
+            ? "/projects/project-1"
+            : "/project-workspace/ungrouped-project%3Aproject-1"
+        await page.route(
+          (url) => url.pathname === destination || url.pathname === "/services",
+          (route) =>
+            route.fulfill({
+              contentType: "text/html",
+              body: "<!doctype html><html><body><main>Calendar navigation destination fixture</main></body></html>",
+            }),
+        )
+        const link = day.getByRole("link", {
+          name:
+            role === "USER"
+              ? "View Shared deliverable"
+              : "View Prepare designs",
+        })
+        await link.focus()
+        await expect(link).toBeFocused()
+        await page.keyboard.press("Enter")
+        await expect(page).toHaveURL(
+          new RegExp(destination.replaceAll("?", "\\?")),
+        )
+        if (role === "USER") {
+          await page.goto("/calendar")
+          const book = main.getByRole("link", { name: "Book a consultation" })
+          await book.focus()
+          await page.keyboard.press("Enter")
+          await expect(page).toHaveURL(/\/services$/)
+        }
+      }
+      expect(writes).toEqual([])
     })
   }
 }

@@ -248,6 +248,23 @@ export async function fixedPriceAndNotifications(
         }
       }
       const before = await list()
+      // PG-020-F001-A007-T003: exact public projection, retaining all original assertions.
+      for (const item of before.notifications) {
+        assert.deepEqual(
+          Object.keys(item).sort(),
+          [
+            "id",
+            "requestId",
+            "createdAt",
+            "readAt",
+            "attendanceAdjustmentId",
+            "leaveRequestId",
+            "summary",
+            "type",
+            "entityId",
+          ].sort(),
+        )
+      }
       assert.deepEqual(
         before.notifications.map(({ id }) => id),
         noticeIds.slice(6, 46).reverse(),

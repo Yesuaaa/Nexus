@@ -20,6 +20,11 @@ type Payload = {
   }
 }
 
+const tinyImageDataUrls = {
+  jpeg: "data:image/jpeg;base64,/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAEAAgDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAj/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAwT/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCbAFAH/9k=",
+  webp: "data:image/webp;base64,UklGRi4AAABXRUJQVlA4ICIAAABwAQCdASoCAAIAAUAmJZQCdAFAAAD+/DeBV/fU6D4r4AAA",
+}
+
 test(
   "employee records and department membership stay consistent",
   { timeout: 120_000 },
@@ -29,6 +34,11 @@ test(
     const { prisma, origin } = await startPgliteApp(t, {
       imageStorage: {
         async upload() {
+          throw new Error("Service images must use normalized WebP storage")
+        },
+        async uploadWebp(data) {
+          assert.equal(data.subarray(0, 4).toString(), "RIFF")
+          assert.equal(data.subarray(8, 12).toString(), "WEBP")
           uploadedImageSequence += 1
           const path = `services/test-${uploadedImageSequence}.webp`
           storedServiceImages.add(path)
@@ -216,7 +226,7 @@ test(
           description: "Offline integration fixture",
           departmentIds: ["product", "operations"],
           isActive: true,
-          imageDataUrl: `data:image/webp;base64,${Buffer.from("service-image").toString("base64")}`,
+          imageDataUrl: tinyImageDataUrls.jpeg,
           imageAltText: "Security service illustration",
           removeImage: false,
           pricingTemplate: {
@@ -297,9 +307,10 @@ test(
         const createdPackage = service.packages[0]
         assert.ok(createdPackage)
         assert.equal((await request("/services", "POST", input)).status, 409)
+        assert.equal(storedServiceImages.has("services/test-2.webp"), false)
         const replacement = await request(`/services/${service.id}`, "PUT", {
           ...input,
-          imageDataUrl: `data:image/webp;base64,${Buffer.from("replacement-image").toString("base64")}`,
+          imageDataUrl: tinyImageDataUrls.webp,
           pricingTemplate: null,
           pricingTemplateId: service.pricingTemplate.id,
           packages: input.packages.map((servicePackage) => ({

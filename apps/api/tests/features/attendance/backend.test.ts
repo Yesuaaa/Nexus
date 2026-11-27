@@ -768,16 +768,98 @@ test(
           }),
           session,
         )
+        // PG-015-F001-A017-T002
+        const pause = await prisma.attendanceBreak.create({
+          data: {
+            sessionId: session.id,
+            startedAt: new Date("2026-11-21T09:30:00+08:00"),
+            isPaid: false,
+          },
+        })
+        async function reject(endedAt: string, status: number) {
+          const auditCount = await prisma.attendanceAudit.count()
+          const before = await prisma.attendanceBreak.findUnique({
+            where: { id: pause.id },
+          })
+          assert.equal(
+            (await request(superadmin, route, { endedAt, note })).status,
+            status,
+          )
+          assert.deepEqual(
+            await prisma.attendanceWorkSession.findUnique({
+              where: { id: session.id },
+            }),
+            session,
+          )
+          assert.deepEqual(
+            await prisma.attendanceBreak.findUnique({
+              where: { id: pause.id },
+            }),
+            before,
+          )
+          assert.equal(await prisma.attendanceAudit.count(), auditCount)
+        }
+        await reject("2026-11-21T09:00:00+08:00", 409)
+        await reject("2026-11-21T09:30:00+08:00", 409)
+        await reject("2026-11-21T12:01:00+08:00", 400)
+        await prisma.attendanceBreak.update({
+          where: { id: pause.id },
+          data: { endedAt: new Date(end) },
+        })
+        await reject("2026-11-21T09:59:00+08:00", 409)
         assert.equal(
           (await request(superadmin, route, { endedAt: end, note })).status,
           200,
         )
         assert.equal(await canReconcile(superadmin), false)
+        const closed = await prisma.attendanceWorkSession.findUnique({
+          where: { id: session.id },
+        })
+        const afterCloseAudit = await prisma.attendanceAudit.count()
+        assert.equal(
+          (await request(superadmin, route, { endedAt: end, note })).status,
+          409,
+        )
+        assert.deepEqual(
+          await prisma.attendanceWorkSession.findUnique({
+            where: { id: session.id },
+          }),
+          closed,
+        )
+        assert.equal(await prisma.attendanceAudit.count(), afterCloseAudit)
         const audit = await prisma.attendanceAudit.findFirstOrThrow({
           where: { entityId: session.id, action: "UPDATE" },
         })
         assert.equal(audit.actorId, superadmin.user.id)
         assert.equal(audit.reason, note)
+
+        const active = await prisma.attendanceWorkSession.create({
+          data: {
+            employeeId,
+            startedAt: new Date("2026-11-21T11:00:00+08:00"),
+          },
+        })
+        const activeAuditCount = await prisma.attendanceAudit.count()
+        assert.equal(
+          (
+            await request(
+              superadmin,
+              `/employees/${employeeId}/sessions/${active.id}/reconcile`,
+              {
+                endedAt: "2026-11-21T11:30:00+08:00",
+                note,
+              },
+            )
+          ).status,
+          409,
+        )
+        assert.deepEqual(
+          await prisma.attendanceWorkSession.findUnique({
+            where: { id: active.id },
+          }),
+          active,
+        )
+        assert.equal(await prisma.attendanceAudit.count(), activeAuditCount)
       },
     )
   },

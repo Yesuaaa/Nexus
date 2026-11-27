@@ -48,6 +48,7 @@ export async function removeLocalServiceImage(
 
 export type ServiceImageStorage = {
   upload(dataUrl: string, directory?: string): Promise<string>
+  uploadWebp(data: Buffer, directory?: string): Promise<string>
   remove(path: string): Promise<void>
   publicUrl(path: string): string
 }
@@ -101,6 +102,16 @@ function supabaseStorage({
   })
   let bucketReady: Promise<void> | undefined
 
+  function imagePath(directory: string, extension: string) {
+    if (
+      !/^[A-Za-z0-9_/-]{1,180}$/.test(directory) ||
+      directory.includes("..")
+    ) {
+      throw new ServiceImageStorageError("Invalid image directory")
+    }
+    return `${directory}/${randomUUID()}.${extension}`
+  }
+
   async function ensureBucket() {
     if (bucketReady) return bucketReady
     bucketReady = (async () => {
@@ -139,12 +150,7 @@ function supabaseStorage({
         throw new ServiceImageStorageError("Service image data is invalid")
       }
       const subtype = match[1] as keyof typeof extensions
-      if (
-        !/^[A-Za-z0-9_/-]{1,180}$/.test(directory) ||
-        directory.includes("..")
-      )
-        throw new ServiceImageStorageError("Invalid image directory")
-      const path = `${directory}/${randomUUID()}.${extensions[subtype]}`
+      const path = imagePath(directory, extensions[subtype])
       await ensureBucket()
       const { error } = await client.storage
         .from(bucket)
@@ -153,6 +159,31 @@ function supabaseStorage({
           contentType: `image/${subtype}`,
           upsert: false,
         })
+      if (error) {
+        console.error("Supabase service image upload failed", error)
+        throw new ServiceImageStorageError(
+          "The service image could not be uploaded. Please try again.",
+        )
+      }
+      return path
+    },
+
+    async uploadWebp(data, directory = "services") {
+      if (
+        !data.length ||
+        data.length > maxImageBytes ||
+        data.subarray(0, 4).toString() !== "RIFF" ||
+        data.subarray(8, 12).toString() !== "WEBP"
+      ) {
+        throw new ServiceImageStorageError("Service image data is invalid")
+      }
+      const path = imagePath(directory, "webp")
+      await ensureBucket()
+      const { error } = await client.storage.from(bucket).upload(path, data, {
+        cacheControl: "31536000",
+        contentType: "image/webp",
+        upsert: false,
+      })
       if (error) {
         console.error("Supabase service image upload failed", error)
         throw new ServiceImageStorageError(

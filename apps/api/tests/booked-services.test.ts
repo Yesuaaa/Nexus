@@ -126,6 +126,39 @@ test(
           otherBody.serviceRequests.map((item) => item.id),
           [foreignBooking.id],
         )
+
+        // PG-017-F001-A016-T002: preserve the distinct-date checks above.
+        const tiedIds = ["pg017-tie-a", "pg017-tie-b"]
+        try {
+          for (const id of [...tiedIds].reverse())
+            await prisma.serviceRequest.create({
+              data: {
+                id,
+                clientId: client.record.id,
+                serviceId: service.id,
+                title: "PG017 tied booking",
+                createdAt: new Date("2026-12-01T00:00:00Z"),
+              },
+            })
+          const tied = await get(
+            "/service-requests?search=PG017%20tied",
+            client,
+          )
+          assert.equal(tied.status, 200)
+          const rows = (await tied.json()) as {
+            serviceRequests: { id: string }[]
+            total: number
+          }
+          assert.equal(rows.total, 2)
+          assert.deepEqual(
+            rows.serviceRequests.map(({ id }) => id),
+            tiedIds,
+          )
+        } finally {
+          await prisma.serviceRequest.deleteMany({
+            where: { id: { in: tiedIds } },
+          })
+        }
       },
     )
 
@@ -185,6 +218,18 @@ test(
           query,
         )
       assert.equal((await get("/service-requests/bad.id", client)).status, 400)
+
+      // PG-017-F001-A015-T002: accepted boundaries complement existing denials.
+      for (const query of [
+        `search=${"x".repeat(100)}`,
+        "page=1",
+        "page=100000",
+      ])
+        assert.equal(
+          (await get(`/service-requests?${query}`, client)).status,
+          200,
+          query,
+        )
     })
 
     await t.test(

@@ -111,6 +111,38 @@ test("[NEX-018] client reviews billing due and history with proof preview and do
   expect((await download).suggestedFilename()).toBe("proof.png")
   await expect(dialog.getByRole("alert")).toHaveCount(0)
   expect(fileReads).toBe(3)
+  // PG-016-F001-A003-T001: due order uses approval date, including missing dates.
+  await page.keyboard.press("Escape")
+  await page.route("**/api/request-workflows/billing", (route) =>
+    route.fulfill({
+      json: [
+        {
+          ...payment,
+          id: "later",
+          serviceName: "Later due",
+          approvedAt: "2026-11-12T08:00:00Z",
+        },
+        {
+          ...payment,
+          id: "earlier",
+          serviceName: "Earlier due",
+          approvedAt: "2026-11-01T08:00:00Z",
+        },
+        {
+          ...payment,
+          id: "missing-date",
+          serviceName: "Unspecified acceptance",
+          approvedAt: null,
+        },
+      ],
+    }),
+  )
+  await page.reload()
+  const dueRows = page.locator('section[aria-labelledby="billing-due"] li')
+  await expect(dueRows).toHaveCount(3)
+  await expect(dueRows.nth(0)).toContainText("Unspecified acceptance")
+  await expect(dueRows.nth(1)).toContainText("Earlier due")
+  await expect(dueRows.nth(2)).toContainText("Later due")
 })
 
 test("[NEX-018] billing loading empty and error states recover on reload", async ({

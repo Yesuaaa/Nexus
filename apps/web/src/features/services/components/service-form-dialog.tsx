@@ -316,10 +316,10 @@ export function ServiceFormDialog({
     if (!file) return
     if (
       !imageTypes.includes(file.type) ||
-      !file.size ||
+      file.size === 0 ||
       file.size > maxImageBytes
     ) {
-      showError("Choose a JPG, PNG, or WebP image up to 2 MB")
+      showError("Choose a JPEG, PNG, or WebP image up to 2 MB")
       if (imageInputRef.current) imageInputRef.current.value = ""
       return
     }
@@ -678,8 +678,8 @@ export function ServiceFormDialog({
                       </button>
                     )}
                     <p className="m-0 text-[10px] leading-relaxed text-[#8290a5]">
-                      JPG, PNG, or WebP up to 2 MB. JPG and PNG are converted to
-                      WebP.
+                      JPEG, PNG, or WebP up to 2 MB. JPEG and PNG are converted
+                      to WebP.
                     </p>
                   </div>
                   <div className="grid content-start gap-4">

@@ -37,12 +37,12 @@ test("booking row status refreshes manually and after reconnection without polli
 }) => {
   const state = await mockBookings(page, { bookings: [bookingFixture(1)] })
   await page.goto("/booked-services")
-  await expect(page.getByText("Submitted", { exact: true })).toBeVisible()
+  await expect(page.getByText("Pending", { exact: true })).toBeVisible()
   state.bookings[0]!.status = "UNDER_REVIEW"
   await page.waitForTimeout(6_000)
-  await expect(page.getByText("Submitted", { exact: true })).toBeVisible()
+  await expect(page.getByText("Pending", { exact: true })).toBeVisible()
   await page.getByRole("button", { name: "Refresh", exact: true }).click()
-  await expect(page.getByText("Under review", { exact: true })).toBeVisible({
+  await expect(page.getByText("Under Review", { exact: true })).toBeVisible({
     timeout: 10_000,
   })
   state.listError = true
@@ -58,7 +58,7 @@ test("booking row status refreshes manually and after reconnection without polli
       .getByRole("table", { name: "Booked services", exact: true })
       .getByRole("alert"),
   ).toHaveCount(0)
-  await expect(page.getByText("Under review", { exact: true })).toBeVisible()
+  await expect(page.getByText("Under Review", { exact: true })).toBeVisible()
   state.listError = false
   state.bookings[0]!.status = "CANCELLED"
   await page.evaluate(() => window.dispatchEvent(new Event("online")))
@@ -227,10 +227,28 @@ for (const width of [1440, 390]) {
     await expect(
       table.getByRole("button", { name: /^View booking / }),
     ).toHaveCount(10)
-    await expect(table.getByText("Submitted", { exact: true })).toBeVisible()
-    await expect(table.getByText("Under review", { exact: true })).toBeVisible()
+    await expect(table.getByText("Pending", { exact: true })).toBeVisible()
     await expect(
-      table.getByText("Awaiting information", { exact: true }),
+      table
+        .getByRole("row")
+        .filter({
+          has: page.getByRole("button", {
+            name: "View booking request-2",
+            exact: true,
+          }),
+        })
+        .getByText("Under Review", { exact: true }),
+    ).toBeVisible()
+    await expect(
+      table
+        .getByRole("row")
+        .filter({
+          has: page.getByRole("button", {
+            name: "View booking request-3",
+            exact: true,
+          }),
+        })
+        .getByText("Under Review", { exact: true }),
     ).toBeVisible()
     await expect(
       main.getByText("Showing 1–10 of 11", { exact: true }),
@@ -293,7 +311,7 @@ for (const width of [1440, 390]) {
       .getByRole("combobox", { name: "Filter bookings by status", exact: true })
       .click()
     await page
-      .getByRole("option", { name: "Under review", exact: true })
+      .getByRole("option", { name: "Under Review", exact: true })
       .click()
     await expect(
       table.getByRole("button", { name: /^View booking / }),
@@ -333,7 +351,7 @@ for (const width of [1440, 390]) {
     page,
   }) => {
     await page.setViewportSize({ width, height: 1000 })
-    await mockBookings(page)
+    const state = await mockBookings(page)
     await page.goto("/booked-services")
     const opener = page.getByRole("button", {
       name: "View booking request-1",
@@ -370,7 +388,7 @@ for (const width of [1440, 390]) {
     await expect(
       drawer.getByText("Please use our existing brand guide.", { exact: true }),
     ).toBeVisible()
-    await expect(drawer.getByText("Submitted", { exact: true })).toBeVisible()
+    await expect(drawer.getByText("Pending", { exact: true })).toBeVisible()
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -384,6 +402,32 @@ for (const width of [1440, 390]) {
       .click()
     await expect(drawer).toHaveCount(0)
     await expect(opener).toBeFocused()
+
+    // PG-017-F001-A010-T001: keyboard activation and Escape retain the opener.
+    await opener.focus()
+    await page.keyboard.press("Enter")
+    await expect(drawer).toBeVisible()
+    await page.keyboard.press("Escape")
+    await expect(drawer).toHaveCount(0)
+    await expect(opener).toBeFocused()
+
+    // PG-017-F001-A016-T003: long content still fits both existing widths.
+    const longName = "Long booked service name ".repeat(24).trim()
+    const longBrief = "A detailed synthetic project brief.\n".repeat(60).trim()
+    state.bookings[0]!.service.name = longName
+    state.bookings[0]!.projectGoals = longBrief
+    await opener.click()
+    await expect(
+      drawer.getByRole("heading", { name: longName, exact: true }),
+    ).toBeVisible()
+    await expect(drawer.getByText(longBrief, { exact: true })).toBeVisible()
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true)
+    await page.keyboard.press("Escape")
+    await expect(drawer).toHaveCount(0)
   })
 }
 
