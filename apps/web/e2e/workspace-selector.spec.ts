@@ -11,6 +11,26 @@ import {
 configureRegressionTest()
 test.skip(live, "Workspace selector regressions use isolated API fixtures")
 
+test("breadcrumb Home returns to the appropriate portal landing page", async ({
+  page,
+}) => {
+  await restoreSession(page, "SUPERADMIN")
+  await page.goto("/services")
+  await page
+    .getByRole("navigation", { name: "Breadcrumb" })
+    .getByRole("link", { name: "Home" })
+    .click()
+  await expect(page).toHaveURL(/\/module$/)
+
+  await restoreSession(page, "USER")
+  await page.goto("/services")
+  await page
+    .getByRole("navigation", { name: "Breadcrumb" })
+    .getByRole("link", { name: "Home" })
+    .click()
+  await expect(page).toHaveURL(/\/dashboard$/)
+})
+
 async function expectLauncher(page: Page) {
   await expect(
     page.getByRole("main", { name: "Workspace selector" }),

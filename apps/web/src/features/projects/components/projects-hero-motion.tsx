@@ -60,7 +60,6 @@ export function ProjectsRevealMotion({
       const observer = new IntersectionObserver(
         (entries) => {
           for (const entry of entries) {
-            if (!entry.isIntersecting) entered.delete(entry.target)
             if (
               preference.matches ||
               entry.intersectionRatio < 0.15 ||
@@ -71,9 +70,7 @@ export function ProjectsRevealMotion({
             const target = entry.target
             entered.add(target)
             observer.unobserve(target)
-            play(target, () => {
-              if (!preference.matches) observer.observe(target)
-            })
+            play(target)
           }
         },
         { threshold: [0, 0.15] },

@@ -2,7 +2,6 @@ import Link from "next/link"
 import localFont from "next/font/local"
 import { ArrowUpRight } from "lucide-react"
 import {
-  ContactHeading,
   LandingFaq,
   LandingHeader,
   LandingMotion,
@@ -17,6 +16,8 @@ import { LandingServices } from "./landing-services"
 import { LandingSmoothScroll } from "./landing-smooth-scroll"
 import { LandingLoader } from "./landing-loader"
 import { ProjectsRevealMotion } from "@/features/projects/components/projects-hero-motion"
+import { ProjectScrollImage } from "@/features/projects/components/project-scroll-image"
+import type { ShowcaseCard } from "@/features/projects/model/showcase-projects"
 
 const sora = localFont({
   src: "../../../../public/font/Sora/Sora-VariableFont_wght.ttf",
@@ -65,7 +66,7 @@ const buttonPrimaryClass = [
   "max-[1101px]:gap-4 max-[1101px]:text-[12px] max-[1101px]:px-4.5",
 ].join(" ")
 
-const buttonSecondaryClass = [
+export const buttonSecondaryClass = [
   "relative isolate min-h-13 inline-flex items-center justify-center gap-6 [padding:14px_22px] [border:1px_solid_var(--landing-ink)] rounded-[4px] text-[13px] font-medium [transition:background_500ms_ease-in-out,color_500ms_ease-in-out] bg-transparent text-(color:--landing-ink)",
   "[&_svg]:shrink-0 [&_svg]:[transition:transform_500ms_ease-in-out]",
   "[&:hover_svg]:[transform:translateX(5px)]",
@@ -76,36 +77,12 @@ const buttonSecondaryClass = [
 ].join(" ")
 
 const faqClass = [
-  "relative z-10 max-w-[1360px] m-auto [padding:120px_48px] grid grid-cols-[0.9fr_1.1fr] items-start gap-22.5",
-  "[&_h2]:max-w-[330px]",
+  "relative z-10 max-w-[1360px] m-auto [padding:72px_48px] grid grid-cols-[0.9fr_1.1fr] items-start gap-22.5",
+  "[&_h2]:max-w-[330px] [&_h2]:text-[clamp(30px,3vw,42px)] [&_h2]:leading-[1.1] [&_h2]:tracking-[-1.5px]",
   "max-[1101px]:px-8",
   "max-[851px]:gap-12.5",
   "max-[761px]:grid-cols-1 max-[761px]:[padding:80px_24px] max-[761px]:gap-8.75",
   "max-[761px]:[&_h2]:max-w-[none]",
-].join(" ")
-
-const contactClass = [
-  "relative isolate overflow-hidden [padding:72px_65px] flex items-center justify-between gap-11.25 bg-(--landing-ink) text-(color:--landing-paper) rounded-[6px]",
-  "[&_h2]:text-[clamp(34px,3.7vw,50px)] [&_h2]:leading-[1] [&_h2]:tracking-[-2px]",
-  "[&_h2_>_span]:text-(color:--landing-blue)",
-  "[&_p]:mt-6 [&_p]:text-[color-mix(in_srgb,var(--landing-paper)_72%,var(--landing-ink))] [&_p]:text-[14px] [&_p]:leading-[1.8]",
-  "max-[1101px]:[padding:60px_42px]",
-  "max-[851px]:[padding:55px_38px] max-[851px]:gap-7.5",
-  "max-[851px]:[&_h2]:text-[42px]",
-  "max-[761px]:flex-col max-[761px]:items-start max-[761px]:gap-8.75 max-[761px]:[padding:48px_28px]",
-  "max-[761px]:[&_h2]:text-[clamp(38px,8vw,52px)] max-[761px]:[&_h2]:tracking-[-2px]",
-  "max-[761px]:[&_p]:mt-5.5 max-[761px]:[&_p]:text-[14px]",
-].join(" ")
-
-const buttonLightClass = [
-  "relative isolate min-h-13 inline-flex items-center justify-center gap-6 [padding:14px_22px] [border:1px_solid_var(--landing-ink)] rounded-[4px] text-[13px] font-medium [transition:background_500ms_ease-in-out,color_500ms_ease-in-out] shrink-0 bg-(--landing-paper) text-(color:--landing-ink) [border-color:var(--landing-paper)]",
-  "[&_svg]:shrink-0 [&_svg]:[transition:transform_500ms_ease-in-out]",
-  "[&:hover_svg]:[transform:translateX(5px)]",
-  "[&:focus-visible_svg]:[transform:translateX(5px)]",
-  "hover:bg-[#203f8c] hover:text-white hover:border-[#203f8c]",
-  "focus-visible:bg-[#203f8c] focus-visible:text-white focus-visible:border-[#203f8c]",
-  "max-[1101px]:gap-4 max-[1101px]:text-[12px] max-[1101px]:px-4.5",
-  "max-[761px]:text-[13px]",
 ].join(" ")
 
 const questions = [
@@ -126,7 +103,7 @@ const questions = [
   },
 ]
 
-export function LandingPage() {
+export function LandingPage({ projects }: { projects: ShowcaseCard[] }) {
   return (
     <LandingLoader>
       <LandingMotion
@@ -194,50 +171,103 @@ export function LandingPage() {
 
           <div className="relative z-10 bg-(--landing-paper)">
             <div className="relative isolate overflow-hidden">
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0"
-              >
-                <HeroHalftone background />
-              </div>
-              <section
-                id="faq"
-                className={faqClass}
-                aria-labelledby="faq-heading"
-              >
-                <h2 id="faq-heading" data-reveal className="!max-w-none">
-                  <span className="block whitespace-nowrap !text-inherit">
-                    A LITTLE MORE
-                  </span>
-                  <span className="block !text-[#203f8c]">CLARITY.</span>
-                </h2>
-                <LandingFaq items={questions} />
-              </section>
-            </div>
-
-            <div className="mx-auto max-w-[1360px] px-12 max-[1101px]:px-8 max-[761px]:px-6">
-              <section
-                id="contact"
-                className={contactClass}
-                aria-labelledby="contact-heading"
-                data-reveal
-              >
-                <div className="relative z-10">
-                  <ContactHeading />
-                </div>
-                <Link
-                  href="/register"
-                  className={`${buttonLightClass} relative z-10`}
+              {projects.length > 0 && (
+                <section
+                  id="projects"
+                  aria-labelledby="home-projects-heading"
+                  className="relative z-10 mx-auto flex min-h-[100vh] max-w-[1360px] flex-col justify-center px-12 pt-36 pb-24 max-[1101px]:px-8 max-[761px]:px-6 max-[761px]:pt-24 max-[761px]:pb-16"
                 >
-                  Start a conversation
-                  <ArrowUpRight size={20} aria-hidden="true" />
-                </Link>
-              </section>
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-y-0 right-12 left-12 grid grid-cols-3 divide-x divide-(--landing-line) max-[1101px]:right-8 max-[1101px]:left-8 max-[761px]:hidden"
+                  >
+                    <div />
+                    <div />
+                    <div />
+                  </div>
+                  <div className="text-center">
+                    <h2
+                      id="home-projects-heading"
+                      className="!text-[clamp(36px,5vw,68px)] !leading-[1.1] !tracking-[-0.05em] !text-[#203f8c]"
+                    >
+                      <span className="relative">Selected projects</span>
+                    </h2>
+                    {projects.every((project) => project.fictional) && (
+                      <p className="relative mt-3 text-sm text-(color:--landing-muted)">
+                        Fictional projects for illustration.
+                      </p>
+                    )}
+                  </div>
+                  <ProjectsRevealMotion triggerOnScroll>
+                    <div className="relative mt-16 grid grid-cols-3 divide-x divide-(--landing-line) max-[761px]:mt-10 max-[761px]:grid-cols-1 max-[761px]:divide-x-0">
+                      {projects.map((project) => (
+                        <article
+                          key={project.name}
+                          className="relative px-4 py-4 first:pl-0 last:pr-0 max-[761px]:px-0"
+                        >
+                          <div data-projects-reveal>
+                            <div className="relative aspect-square overflow-hidden bg-[#203f8c]">
+                              <ProjectScrollImage src={project.image} />
+                              <div className="absolute inset-0 bg-black/20" />
+                              <p className="absolute top-5 left-5 text-xs font-semibold uppercase text-white">
+                                {project.type}
+                              </p>
+                            </div>
+                            <h3 className="mt-4 !text-xl !font-semibold !tracking-[-0.03em]">
+                              <Link
+                                href={`/explore/projects/${project.slug}`}
+                                className="after:absolute after:inset-0 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#203f8c]"
+                              >
+                                {project.name}
+                              </Link>
+                            </h3>
+                            {project.fictional && (
+                              <p className="mt-1 text-sm text-(color:--landing-muted)">
+                                Fictional example
+                              </p>
+                            )}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </ProjectsRevealMotion>
+                  <div className="mt-16 text-center max-[761px]:mt-10">
+                    <Link
+                      href="/explore/projects"
+                      className={buttonSecondaryClass}
+                    >
+                      View all projects{" "}
+                      <ArrowUpRight size={20} aria-hidden="true" />
+                    </Link>
+                  </div>
+                </section>
+              )}
+              <div className="bg-[#e8edf0]">
+                <section
+                  id="faq"
+                  className={`${faqClass} relative before:pointer-events-none before:absolute before:top-0 before:left-1/2 before:w-screen before:-translate-x-1/2 before:border-t before:border-(--landing-line)`}
+                  aria-labelledby="faq-heading"
+                >
+                  <div data-reveal>
+                    <h2
+                      id="faq-heading"
+                      className="!max-w-none !text-[#203f8c]"
+                    >
+                      FAQ&apos;S
+                    </h2>
+                    <p className="mt-3 max-w-[360px] text-[16px] font-medium leading-[1.5] text-(color:--landing-muted)">
+                      Answers to some of the most asked questions about Converyn
+                      and our services.
+                    </p>
+                  </div>
+                  <LandingFaq items={questions} />
+                </section>
+              </div>
             </div>
           </div>
         </main>
 
-        <LandingFooter />
+        <LandingFooter flush />
       </LandingMotion>
     </LandingLoader>
   )

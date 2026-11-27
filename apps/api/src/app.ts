@@ -34,6 +34,10 @@ import { internalConversationsRouter } from "./features/internal-conversations/i
 import type { ConversationRealtime } from "./features/request-conversations/request-conversations.realtime.js"
 import { requestWorkflowRouter } from "./features/request-workflow/workflow.controller.js"
 import { projectsRouter } from "./features/projects/projects.controller.js"
+import {
+  projectShowcaseRouter,
+  publicProjectShowcaseRouter,
+} from "./features/project-showcase/project-showcase.controller.js"
 import { projectWorkspaceRouter } from "./features/project-workspace/project-workspace.controller.js"
 import { projectManagementRouter } from "./features/admin-project-management/project-management.controller.js"
 import { projectConversationsRouter } from "./features/project-conversations/project-conversations.controller.js"
@@ -78,6 +82,8 @@ export function createApp(
     )
   }
   app.use(devErrorInterceptor)
+  app.use("/api/public/projects", publicProjectShowcaseRouter)
+  app.use("/api/project-showcase", projectShowcaseRouter)
   app.use("/api/public", publicServicesRouter)
   app.use("/api/service-inquiries", serviceInquiriesRouter)
   app.use(serviceLogContext)

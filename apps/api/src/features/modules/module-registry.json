@@ -33,7 +33,7 @@
   },
   "administration": {
     "title": "Administration",
-    "description": "Manage user accounts, roles, and access controls.",
+    "description": "Manage user accounts, access controls, and the public project showcase.",
     "implemented": true,
     "administrativePath": "/accounts",
     "icon": "administration",

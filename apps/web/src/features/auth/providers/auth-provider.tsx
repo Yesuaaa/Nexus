@@ -60,6 +60,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       /^\/explore\/(?:services|projects)(?:\/|$)/.test(pathname) &&
       (isPublicNavigation ||
         link.hasAttribute("data-service-card-link") ||
+        link.hasAttribute("data-project-card-link") ||
+        link.hasAttribute("data-project-back-link") ||
         link.hasAttribute("data-service-inquiry-link") ||
         link.hasAttribute("data-service-back-link"))
         ? page

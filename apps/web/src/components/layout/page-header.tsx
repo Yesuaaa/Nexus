@@ -3,6 +3,23 @@ import { focusRing } from "@/components/layout/styles"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
+export function PageHeaderPlusIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M7 2.5v9M2.5 7h9" />
+    </svg>
+  )
+}
+
 const descriptionTones = {
   /** Staff and admin pages. */
   admin: "text-[#738096]",

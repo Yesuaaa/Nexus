@@ -13,6 +13,7 @@ import {
   FolderKanban,
   Gauge,
   History,
+  Images,
   Inbox,
   MessageSquareText,
   MessagesSquare,
@@ -82,6 +83,7 @@ const accessLabels: Record<Account["role"], string> = {
 const navigationIcons: Partial<Record<RoutePolicyId, NavIcon>> = {
   dashboard: DashboardIcon,
   accounts: AccountsIcon,
+  "project-showcase": Images,
   clients: Contact,
   departments: DepartmentIcon,
   services: ServiceIcon,

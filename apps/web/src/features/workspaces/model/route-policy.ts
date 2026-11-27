@@ -78,6 +78,7 @@ export type RoutePolicyId =
   | "dashboard"
   | "module"
   | "accounts"
+  | "project-showcase"
   | "messages"
   | "messages-oversight"
   | "projects-deliverable"
@@ -513,6 +514,19 @@ export const routePolicies: readonly RoutePolicy[] = [
       label: "Account Management",
       location: "main",
       order: 10,
+    },
+  },
+  {
+    id: "project-showcase",
+    match: { kind: "exact", path: "/project-showcase" },
+    moduleId: "administration",
+    canAccess: (account) =>
+      hasPermission(account, Permissions.ADMINISTRATION_MANAGE_ALL),
+    navigation: {
+      href: "/project-showcase",
+      label: "Project Showcase",
+      location: "main",
+      order: 20,
     },
   },
   {

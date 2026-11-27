@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react"
 import { useCardImageReveal } from "@/components/ui/use-card-image-reveal"
 import { useHoverLabel } from "@/components/ui/use-hover-label"
 import { SearchField } from "@/components/ui/search-field"
+import { HistoryBackLink } from "@/components/ui/history-back-link"
 import {
   Select,
   SelectContent,
@@ -398,19 +399,11 @@ export function PublicServiceDetails({
   const router = useRouter()
   return (
     <>
-      <Link
+      <HistoryBackLink
         href={catalogPath}
         className={styles.back}
         data-service-back-link
-        onNavigate={(event) => {
-          if (window.history.length <= 1) return
-          event.preventDefault()
-          router.back()
-        }}
-      >
-        <ArrowLeft size={16} />
-        Go Back
-      </Link>
+      />
       {!service ? (
         <div className={styles.state} role="alert">
           <p>Service details are temporarily unavailable.</p>

@@ -108,12 +108,12 @@ const marqueeItemClass = [
 ].join(" ")
 
 const faqTriggerClass = [
-  "flex items-center justify-between gap-5.5 w-full min-h-21.5 py-5 [border:0] bg-transparent text-(color:--landing-ink) [font-family:inherit] text-[15px] leading-[1.6] text-left cursor-pointer",
+  "flex items-center justify-between gap-5 w-full min-h-14 py-4 [border:0] bg-transparent text-(color:--landing-ink) [font-family:inherit] text-[15px] font-semibold leading-[1.4] text-left cursor-pointer",
   "focus-visible:[outline:2px_solid_var(--landing-blue)] focus-visible:outline-offset-[3px]",
   "[&_svg]:shrink-0 [&_svg]:text-(color:--landing-muted) [&_svg]:[transition:transform_200ms_ease-out,color_200ms_ease-out]",
   '[&[aria-expanded="true"]_svg]:[transform:rotate(180deg)] [&[aria-expanded="true"]_svg]:text-(color:--landing-blue)',
   "max-[851px]:text-[14px]",
-  "max-[761px]:min-h-20.75 max-[761px]:text-[15px]",
+  "max-[761px]:min-h-14 max-[761px]:text-[15px]",
   "motion-reduce:[&_svg]:transition-none!",
 ].join(" ")
 
@@ -124,7 +124,7 @@ const faqAnswerClass = [
 ].join(" ")
 
 const faqAnswerTextClass = [
-  "[padding:0_38px_26px_0] text-[14px] leading-[1.9] text-(color:--landing-muted) opacity-0 [transform:translateY(-5px)] [transition:opacity_200ms_ease-out,transform_200ms_ease-out]",
+  "[padding:0_38px_18px_0] text-[15px] leading-[1.5] text-(color:--landing-muted) opacity-0 [transform:translateY(-5px)] [transition:opacity_200ms_ease-out,transform_200ms_ease-out]",
   "motion-reduce:transition-none!",
 ].join(" ")
 
@@ -557,7 +557,7 @@ export function LandingFaq({ items }: { items: readonly LandingFaqItem[] }) {
   const [openQuestion, setOpenQuestion] = useState<string | null>(null)
 
   return (
-    <div className="[border-top:1px_solid_var(--landing-line)]" data-reveal>
+    <div data-reveal>
       {items.map((item, index) => {
         const open = openQuestion === item.question
         const answerId = `landing-faq-answer-${index + 1}`

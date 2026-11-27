@@ -56,6 +56,7 @@ import { ServiceIcon, serviceIconOptions } from "./service-icon"
 import { needsAmount, PriceFields } from "./service-price-fields"
 import { serviceActionsTriggerId } from "./service-row-actions"
 import { errorMessage } from "@/lib/error-message"
+import { imageAsWebp } from "@/lib/image-as-webp"
 import { RequiredMark } from "@/components/ui/required-mark"
 
 const fieldClass = formFieldClass
@@ -67,7 +68,7 @@ const cardClass = "grid gap-3 rounded-lg border border-[#e8ebef] p-3.5"
 // Shared popup style: no border/ring, soft navy-tinted shadow
 const menuContentClass =
   "z-[130] border-0 bg-white p-1 ring-0 shadow-[0_8px_24px_rgb(18_36_73_/_14%)]"
-const imageTypes = ["image/webp"]
+const imageTypes = ["image/jpeg", "image/png", "image/webp"]
 const maxImageBytes = 2 * 1024 * 1024
 const initialFormSteps = [
   { label: "Details", description: "Basic information and service image" },
@@ -249,6 +250,7 @@ export function ServiceFormDialog({
   const [currentStep, setCurrentStep] = useState(0)
   const [error, setError] = useState("")
   const [submitting, setSubmitting] = useState(false)
+  const [processingImage, setProcessingImage] = useState(false)
   const isEditing = Boolean(service)
   const formSteps = [
     ...initialFormSteps,
@@ -310,25 +312,44 @@ export function ServiceFormDialog({
     )
   }
 
-  function handleImage(file: File | undefined) {
+  async function handleImage(file: File | undefined) {
     if (!file) return
-    if (!imageTypes.includes(file.type) || file.size > maxImageBytes) {
-      showError("Choose a WebP image up to 2 MB")
+    if (
+      !imageTypes.includes(file.type) ||
+      !file.size ||
+      file.size > maxImageBytes
+    ) {
+      showError("Choose a JPG, PNG, or WebP image up to 2 MB")
       if (imageInputRef.current) imageInputRef.current.value = ""
       return
     }
-    const reader = new FileReader()
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setImageDataUrl(reader.result)
-        setImagePreviewUrl(reader.result)
-        setRemoveImage(false)
-        setImageAltText((current) => current || `${name || "Service"} image`)
-        setError("")
+    setProcessingImage(true)
+    try {
+      const image = await imageAsWebp(file)
+      if (!image.size || image.size > maxImageBytes) {
+        showError("The converted WebP image must be no larger than 2 MB")
+        return
       }
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () =>
+          typeof reader.result === "string"
+            ? resolve(reader.result)
+            : reject(new Error("Image could not be read"))
+        reader.onerror = () => reject(new Error("Image could not be read"))
+        reader.readAsDataURL(image)
+      })
+      setImageDataUrl(dataUrl)
+      setImagePreviewUrl(dataUrl)
+      setRemoveImage(false)
+      setImageAltText((current) => current || `${name || "Service"} image`)
+      setError("")
+    } catch {
+      showError("The selected image could not be converted or read")
+    } finally {
+      setProcessingImage(false)
+      if (imageInputRef.current) imageInputRef.current.value = ""
     }
-    reader.onerror = () => showError("The selected image could not be read")
-    reader.readAsDataURL(file)
   }
 
   function validateStep(step: number) {
@@ -410,7 +431,7 @@ export function ServiceFormDialog({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
-    if (submitting) return
+    if (submitting || processingImage) return
     if (currentStep < formSteps.length - 1) {
       goToNextStep()
       return
@@ -624,7 +645,8 @@ export function ServiceFormDialog({
                       ref={imageInputRef}
                       id="service-image"
                       type="file"
-                      accept="image/webp"
+                      accept="image/jpeg,image/png,image/webp"
+                      disabled={processingImage}
                       className="peer sr-only"
                       onChange={(event) => handleImage(event.target.files?.[0])}
                     />
@@ -632,6 +654,7 @@ export function ServiceFormDialog({
                       htmlFor="service-image"
                       className={cn(
                         secondaryButtonClass,
+                        "peer-disabled:pointer-events-none peer-disabled:opacity-50",
                         "peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[#294a9b]",
                       )}
                     >
@@ -640,6 +663,7 @@ export function ServiceFormDialog({
                     {imagePreviewUrl && (
                       <button
                         type="button"
+                        disabled={processingImage}
                         className={cn(removeButtonClass, "justify-center")}
                         onClick={() => {
                           setImageDataUrl(null)
@@ -654,7 +678,8 @@ export function ServiceFormDialog({
                       </button>
                     )}
                     <p className="m-0 text-[10px] leading-relaxed text-[#8290a5]">
-                      WebP only. Maximum 2 MB.
+                      JPG, PNG, or WebP up to 2 MB. JPG and PNG are converted to
+                      WebP.
                     </p>
                   </div>
                   <div className="grid content-start gap-4">
@@ -1382,7 +1407,9 @@ export function ServiceFormDialog({
             <SidePanelButton
               type="submit"
               className="gap-1"
-              disabled={submitting || departments.length === 0}
+              disabled={
+                submitting || processingImage || departments.length === 0
+              }
             >
               {currentStep < formSteps.length - 1 ? (
                 <>

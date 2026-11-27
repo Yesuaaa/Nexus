@@ -127,7 +127,7 @@ export function LandingServices() {
       >
         <div className="mb-3 flex items-center justify-between gap-4">
           <p className="text-sm font-semibold tracking-[0.12em] text-[#203f8c]">
-            1. SERVICES
+            [ SERVICES ]
           </p>
           <Link
             href="/explore/services"

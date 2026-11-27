@@ -3,6 +3,7 @@ import { ChevronDown } from "lucide-react"
 import { PublicServicesShell } from "@/features/public-services/components/public-services-shell"
 import { ProjectsRevealMotion } from "@/features/projects/components/projects-hero-motion"
 import { ProjectShowcaseCard } from "@/features/projects/components/project-showcase-card"
+import { listPublicProjects } from "@/features/projects/api/project-showcase.server"
 import {
   PinnedHero,
   ServiceMarquee,
@@ -10,32 +11,11 @@ import {
 
 export const metadata: Metadata = { title: "Projects | Converyn" }
 
-const sampleProjects = [
-  {
-    name: "Jollybee",
-    type: "Brand campaign",
-    image: "/landing/converyn-product-discover.webp",
-  },
-  {
-    name: "Mang Inasalan",
-    type: "Digital experience",
-    image: "/landing/converyn-product-create.webp",
-  },
-  {
-    name: "Chowkingdom",
-    type: "Visual storytelling",
-    image: "/landing/converyn-product-connect.webp",
-  },
-  {
-    name: "Sari-SM",
-    type: "Creative campaign",
-    image: "/landing/converyn-team-design.webp",
-  },
-]
-
-export default function PublicProjectsPage() {
+export default async function PublicProjectsPage() {
+  const projects = await listPublicProjects()
+  const clients = [...new Set(projects?.map((project) => project.client))]
   return (
-    <PublicServicesShell hideFrame>
+    <PublicServicesShell>
       <PinnedHero>
         <ProjectsRevealMotion duration={0.15}>
           <section
@@ -62,22 +42,17 @@ export default function PublicProjectsPage() {
         </ProjectsRevealMotion>
       </PinnedHero>
       <div className="relative z-10 bg-(--landing-paper)">
-        <div className="relative left-1/2 w-screen -translate-x-1/2 bg-(--landing-paper)">
-          <ServiceMarquee
-            headingId="projects-brands-heading"
-            heading="Brands brought to life together."
-            description="A glimpse at the kinds of brands we love collaborating with. These names are fictional examples."
-            label="Fictional example brands"
-            items={[
-              "Jollybee",
-              "Mang Inasalan",
-              "Chowkingdom",
-              "Goldilocks Bakeryan",
-              "Bench Press",
-              "Sari-SM",
-            ]}
-          />
-        </div>
+        {clients.length > 0 && (
+          <div className="relative left-1/2 w-screen -translate-x-1/2 bg-(--landing-paper)">
+            <ServiceMarquee
+              headingId="projects-brands-heading"
+              heading="Brands brought to life together."
+              description="Explore the brands represented in the project showcase."
+              label="Showcase brands"
+              items={clients}
+            />
+          </div>
+        )}
         <section
           aria-labelledby="selected-projects-heading"
           className="pt-8 pb-12"
@@ -91,29 +66,34 @@ export default function PublicProjectsPage() {
               >
                 Selected projects
               </h2>
-              <p
-                data-projects-reveal
-                className="mt-3 text-sm text-(color:--landing-muted)"
-              >
-                Fictional projects for illustration.
+            </div>
+            {projects?.length ? (
+              <div className="mt-7 grid grid-cols-2 items-start gap-4 max-[761px]:grid-cols-1">
+                {[0, 1].map((column) => (
+                  <div
+                    key={column}
+                    className="grid content-start gap-4 max-[761px]:contents"
+                  >
+                    {projects
+                      .filter((_, index) => index % 2 === column)
+                      .map((project, row) => (
+                        <ProjectShowcaseCard
+                          key={project.slug}
+                          project={project}
+                          number={row * 2 + column + 1}
+                          aspect={row % 2 === column ? "wide" : "tall"}
+                        />
+                      ))}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-(color:--landing-muted)">
+                {projects
+                  ? "No projects are currently showcased."
+                  : "Projects are temporarily unavailable."}
               </p>
-            </div>
-            <div className="mt-7 grid grid-cols-2 gap-4 max-[761px]:grid-cols-1">
-              {[0, 1].map((column) => (
-                <div key={column} className="grid content-start gap-4">
-                  {[sampleProjects[column], sampleProjects[column + 2]].map(
-                    (project, row) => (
-                      <ProjectShowcaseCard
-                        key={project.name}
-                        project={project}
-                        number={column + row * 2 + 1}
-                        aspect={column === row ? "wide" : "tall"}
-                      />
-                    ),
-                  )}
-                </div>
-              ))}
-            </div>
+            )}
           </ProjectsRevealMotion>
         </section>
       </div>

@@ -82,6 +82,7 @@ const routeLabels: Record<string, string> = {
   "project-workspace": "Project Workspace",
   "project-management": "Project Workspace",
   accounts: "Account Management",
+  "project-showcase": "Project Showcase",
   departments: "Department Management",
   employees: "Employee Management",
   services: "Service",
@@ -177,7 +178,7 @@ export function Breadcrumbs() {
       <ol className="flex min-w-0 list-none gap-[7px] p-0 whitespace-nowrap">
         <li className="flex min-w-0 items-center gap-[7px] text-[#8a9ab3]">
           <Link
-            href="/"
+            href={account.role === "USER" ? "/dashboard" : "/module"}
             className={`flex items-center gap-[5px] text-[#647a9c] no-underline hover:text-[#203a78] ${focusRing}`}
           >
             <HomeIcon className="size-[18px]" strokeWidth={1.75} />

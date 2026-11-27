@@ -85,6 +85,7 @@ services:
       - ./apps/web/postcss.config.mjs:/workspace/apps/web/postcss.config.mjs:ro
       - ./apps/web/tsconfig.json:/workspace/apps/web/tsconfig.json:ro
       - ./apps/api/src/features/modules/module-registry.json:/workspace/apps/api/src/features/modules/module-registry.json:ro
+      - ./apps/api/src/features/project-showcase/project-showcase-images.ts:/workspace/apps/api/src/features/project-showcase/project-showcase-images.ts:ro
     depends_on:
       api:
         condition: service_healthy
