@@ -1,0 +1,7 @@
+﻿# PG-027 Regression Preservation
+
+The implementation manifest reproduces the original eleven existing-sufficient mappings and their assertion semantics. The approved additive T010 leaves all original mock responses, actions, immediate pathname and storage assertions intact. It appends one group: await the client server-error toast and enabled submit, then verify /login and no established pair after settlement. No original variants or runner hooks changed.
+
+The retained browser selection exercised the original public auth and SSR checks, credential validation and exact request semantics, keyboard language, default landing, network retry, session check retry and expired-token clearing. All four existing-session role declarations ran with both original /login and /register paths. Their registration assertions are sibling compatibility. The retained Unit synthetic body-order scenarios stayed intact. Direct PGlite retained original validation, lifecycle and nested request contention assertions. No shared fixture or production code changed.
+
+PG-026 T017 remains shared historical independent PostgreSQL evidence at its originally executed boundary, with two blocked connections, strict 200/401, no selected family, unrelated family preserved, and former winner denied. The optional rejected rerun remains unexecuted. PG-026 T006, ABUSE-006 and both deferrals are preserved. The scoped ledger leaves all earlier evidence and PG-025 results intact.
