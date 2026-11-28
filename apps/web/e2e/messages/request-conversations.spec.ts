@@ -2173,7 +2173,7 @@ test("department heads keep clients with identical names in separate conversatio
     "/messages?scope=service&request=other-client",
   )
 })
-/* Legacy archive UI tests were removed because conversations remain available after booking completion or cancellation.
+// PG-028-F011-A001-T011 retains the approved archived read/delete oracle.
 for (const role of ["USER", "STAFF"] as const) {
   for (const width of [1440, 390]) {
     test(`${role} can read and delete archived service threads at ${width}px`, async ({
@@ -2282,6 +2282,7 @@ for (const role of ["USER", "STAFF"] as const) {
   }
 }
 
+/* Legacy archive UI tests were removed because conversations remain available after booking completion or cancellation.
 test("a closed service deep link opens its archived conversation", async ({
   page,
 }) => {

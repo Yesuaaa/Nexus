@@ -1,0 +1,16 @@
+﻿# PG-026 Regression Preservation
+
+Eight existing-sufficient records ran through their original declarations. No change to retained assertions, selectors, hooks, variants, storage expectations or user settings.
+
+| Stable case           | Original declaration                    | Preserved actual checks                                                                                                                                                          |
+| --------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PG-026-F001-A001-T001 | regression.spec.ts:414 role loop        | Three synthetic STAFF, ADMIN and SUPERADMIN registrations showed Workspace selector and exact /module landing sequence.                                                          |
+| PG-026-F002-A001-T002 | regression.spec.ts:447                  | Synthetic ADMIN success toast, sessionStorage-only token pair, logout and local clearing passed. Remote logout was mocked.                                                       |
+| PG-026-F003-A001-T003 | auth-portal.test.mjs:8                  | All explicit role/portal predicate checks passed.                                                                                                                                |
+| PG-026-F007-A001-T007 | auth-api.test.mjs:120                   | Mock login with USER followed by authenticated mock logout, expected error and absent local pair passed.                                                                         |
+| PG-026-F010-A001-T010 | auth-api.test.mjs:37 login registration | All malformed envelopes preserved both starting storage states and no writes. Valid response installed the expected pair.                                                        |
+| PG-026-F011-A001-T011 | auth-api.test.mjs:410                   | Retained stale profile/login/error body scenarios rejected old work and preserved the newer pair.                                                                                |
+| PG-026-F012-A001-T012 | login-validation.test.ts:30,128         | Retained malformed credential/JSON/size and exact supported input variants passed. Invalid input nested case added no session.                                                   |
+| PG-026-F015-A001-T015 | jwt-session.test.ts:65–224              | Retained PGlite refresh rotation/replay, nested [200,401] concurrency, logout and invalidation/expiry passed. HTTP concurrency does not establish separate backend transactions. |
+
+The original PGlite [200,401] assertion and former winner rejection remain distinct from T017's observed independent PostgreSQL backends. Shared support, production configuration, schema and migrations were unchanged. Browser test corrections stay in the new spec. T014 moved to a separate test file so its process-local source counter is fresh. Nine new registrations remain nine. The seven design reports and original adversarial register retain their entry contents. PG-025 16/2, the two contract records, historical content findings and earlier evidence remain governed by the unchanged historical ledger entries.

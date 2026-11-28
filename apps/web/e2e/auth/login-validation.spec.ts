@@ -191,4 +191,12 @@ test("a malformed successful login response cannot establish a session", async (
 
   await expect(page).toHaveURL(/\/login$/)
   expect(await storedTokens(page)).toEqual([null, null])
+  await expect(
+    page.getByText(getAuthCopy("en").serverError, { exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("button", { name: "Sign In", exact: true }),
+  ).toBeEnabled()
+  await expect(page).toHaveURL(/\/login$/)
+  expect(await storedTokens(page)).toEqual([null, null])
 })
